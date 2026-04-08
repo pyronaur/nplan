@@ -49,6 +49,20 @@ type PersistedPlannotatorState = {
 	savedState?: SavedPhaseState;
 };
 
+type NplanRuntimeRegistry = {
+	activeRuntimeToken: string | null;
+};
+
+const NPLAN_RUNTIME_REGISTRY_KEY = "__nplanRuntimeRegistry";
+
+function getRuntimeRegistry(): NplanRuntimeRegistry {
+	const globalRegistry = globalThis as typeof globalThis & {
+		[NPLAN_RUNTIME_REGISTRY_KEY]?: NplanRuntimeRegistry;
+	};
+	globalRegistry[NPLAN_RUNTIME_REGISTRY_KEY] ??= { activeRuntimeToken: null };
+	return globalRegistry[NPLAN_RUNTIME_REGISTRY_KEY];
+}
+
 function getPlanReviewAvailabilityWarning(options: { hasUI: boolean; hasPlanHtml: boolean }): string | null {
 	const { hasUI, hasPlanHtml } = options;
 	if (hasUI && hasPlanHtml) return null;
@@ -246,11 +260,27 @@ function getPlanningBashBlockReason(command: string): string | null {
 }
 
 export default function plannotator(pi: ExtensionAPI): void {
+	const runtimeRegistry = getRuntimeRegistry();
+	const runtimeToken = `${Date.now()}:${Math.random().toString(36).slice(2)}`;
 	let phase: Phase = "idle";
 	void registerPlannotatorEventListeners(pi);
 	let planFilePath = getDefaultPlanPath();
 	let savedState: SavedPhaseState | null = null;
 	let plannotatorConfig = {};
+
+	function activateRuntime(): void {
+		runtimeRegistry.activeRuntimeToken = runtimeToken;
+	}
+
+	function isActiveRuntime(): boolean {
+		return runtimeRegistry.activeRuntimeToken === runtimeToken;
+	}
+
+	function deactivateRuntime(): void {
+		if (isActiveRuntime()) {
+			runtimeRegistry.activeRuntimeToken = null;
+		}
+	}
 
 	pi.registerFlag("plan", {
 		description: "Start in plan mode (restricted exploration and planning)",
@@ -276,7 +306,22 @@ export default function plannotator(pi: ExtensionAPI): void {
 	}
 
 	function updateStatus(ctx: ExtensionContext): void {
+		if (phase === "planning") {
+			ctx.ui.setStatus("plannotator", ctx.ui.theme.fg("warning", "plan mode"));
+			return;
+		}
+
+		if (phase === "executing") {
+			ctx.ui.setStatus("plannotator", ctx.ui.theme.fg("accent", "implementation phase"));
+			return;
+		}
+
 		ctx.ui.setStatus("plannotator", undefined);
+	}
+
+	function updateHeader(ctx: ExtensionContext): void {
+		if (!ctx.hasUI) return;
+		ctx.ui.setHeader(undefined);
 	}
 
 	function updateWidget(ctx: ExtensionContext): void {
@@ -292,6 +337,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 	}
 
 	function persistState(): void {
+		if (!isActiveRuntime()) return;
 		pi.appendEntry("plannotator", { phase, planFilePath, savedState });
 	}
 
@@ -348,6 +394,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 		}
 
 		updateStatus(ctx);
+		updateHeader(ctx);
 		updateWidget(ctx);
 	}
 
@@ -368,6 +415,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 		await restoreSavedState(ctx);
 		savedState = null;
 		updateStatus(ctx);
+		updateHeader(ctx);
 		updateWidget(ctx);
 		persistState();
 		ctx.ui.notify("Plannotator: disabled. Full access restored.");
@@ -384,6 +432,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 	pi.registerCommand("plan", {
 		description: "Toggle plan mode",
 		handler: async (args, ctx) => {
+			activateRuntime();
 			if (phase !== "idle") {
 				await exitToIdle(ctx);
 				return;
@@ -404,6 +453,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 	pi.registerCommand("plan-status", {
 		description: "Show current plan status",
 		handler: async (_args, ctx) => {
+			activateRuntime();
 			ctx.ui.notify([`Phase: ${phase}`, `Plan file: ${planFilePath}`].join("\n"), "info");
 		},
 	});
@@ -411,6 +461,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 	pi.registerCommand("plan-file", {
 		description: "Change the global plan file",
 		handler: async (args, ctx) => {
+			activateRuntime();
 			let targetPath = resolvePlanInputForCommand(args);
 			if (!targetPath && ctx.hasUI) {
 				const input = await ctx.ui.input("Plan name", resolvePlanInputPromptValue(planFilePath));
@@ -445,6 +496,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 			),
 		}) as any,
 		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+			activateRuntime();
 			if (phase !== "planning") {
 				return {
 					content: [{ type: "text", text: "Error: Not in plan mode. Use /plan to enter planning mode first." }],
@@ -527,7 +579,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 	});
 
 	pi.on("tool_call", async (event, ctx) => {
-		if (phase !== "planning") return;
+		if (!isActiveRuntime() || phase !== "planning") return;
 
 		if (event.toolName === "write") {
 			const targetPath = resolve(ctx.cwd, event.input.path as string);
@@ -564,6 +616,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 	});
 
 	pi.on("before_agent_start", async (_event, ctx) => {
+		if (!isActiveRuntime()) return;
 		const profile = getPhaseProfile();
 		if (profile?.systemPrompt) {
 			const rendered = renderTemplate(
@@ -608,7 +661,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 	});
 
 	pi.on("context", async (event) => {
-		if (phase !== "idle") return;
+		if (!isActiveRuntime() || phase !== "idle") return;
 
 		return {
 			messages: event.messages.filter((m) => {
@@ -631,6 +684,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
+		activateRuntime();
 		const flagPlanFile = pi.getFlag("plan-file") as string;
 		if (flagPlanFile) {
 			planFilePath = resolveGlobalPlanPath(flagPlanFile);
@@ -681,7 +735,18 @@ export default function plannotator(pi: ExtensionAPI): void {
 		}
 
 		updateStatus(ctx);
+		updateHeader(ctx);
 		updateWidget(ctx);
 		persistState();
+	});
+
+	pi.on("session_shutdown", async (_event, ctx) => {
+		if (!isActiveRuntime()) return;
+		ctx.ui.setStatus("plannotator", undefined);
+		ctx.ui.setWidget("plannotator-progress", undefined);
+		if (ctx.hasUI) {
+			ctx.ui.setHeader(undefined);
+		}
+		deactivateRuntime();
 	});
 }

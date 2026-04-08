@@ -81,6 +81,13 @@ Current `nplan` behavior is intentionally different from upstream in a few place
   - `write` only to the active plan file
   - `edit` only to the active plan file
   - `bash` only for allowlisted read-only inspection / safe web-fetching commands
+- a minimal footer phase indicator is shown only while active:
+  - `plan mode`
+  - `implementation phase`
+  - cleared when idle
+- the startup header is not used for the persistent phase indicator
+- runtime activation is guarded so a newer loaded `nplan` instance supersedes stale older in-memory instances
+- `session_shutdown` explicitly clears the nplan header/status/widget UI so stale phase indicators do not survive reloads or session switches
 
 ## When a tiny upstream patch would be justified
 
