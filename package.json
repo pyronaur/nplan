@@ -1,0 +1,15 @@
+{
+  "name": "nplan",
+  "private": true,
+  "type": "module",
+  "description": "Local Pi wrapper around upstream Plannotator",
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "dependencies": {
+    "@mariozechner/pi-agent-core": "0.65.2",
+    "@mariozechner/pi-ai": "0.65.2",
+    "@mariozechner/pi-coding-agent": "0.65.2",
+    "@mariozechner/pi-tui": "0.65.2"
+  }
+}
