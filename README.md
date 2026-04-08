@@ -1,6 +1,6 @@
 # nplan
 
-Local Pi wrapper around upstream Plannotator.
+Local Pi fork of the Plannotator Pi extension shell.
 
 ## Goal
 
@@ -15,41 +15,23 @@ Keep upstream Plannotator's mature plan/review behavior and browser UI, but expo
 
 ## Architecture
 
-`nplan` does not fork upstream `apps/pi-extension/index.ts`.
+`nplan` now owns a local fork of the upstream extension shell file:
 
-Instead it:
+1. the upstream Plannotator repo is vendored as a git submodule at `vendor/plannotator`
+2. `index.ts` loads the local fork at `plannotator-fork.ts`
+3. `plannotator-fork.ts` stays structurally close to upstream `apps/pi-extension/index.ts`
+4. the fork continues to reuse vendored upstream support modules for config loading, event wiring, browser review, and tool scoping
 
-1. vendors the upstream Plannotator repo as a git submodule at `vendor/plannotator`
-2. imports `vendor/plannotator/apps/pi-extension/index.ts`
-3. wraps the incoming `ExtensionAPI` with a small shim
-4. lets upstream register almost everything normally through that shim
-
-The shim intercepts only a few extension API calls:
-
-- `registerCommand`
-  - remaps:
-    - `plannotator` -> `plan`
-    - `plannotator-status` -> `plan-status`
-    - `plannotator-set-file` -> `plan-file`
-  - suppresses:
-    - `plannotator-review`
-    - `plannotator-annotate`
-    - `plannotator-last`
-    - `plannotator-archive`
-- `registerShortcut`
-  - suppresses the upstream default shortcut for now
-- `registerFlag`
-  - changes the `plan-file` flag default to the global nplan path
-- `getFlag`
-  - resolves any `plan-file` input to `~/.n/pi/plans/{plan-name}.md`
+This keeps the owned behavior in one local file while avoiding a broader fork of the browser/server/runtime support code.
 
 A separate `plan-path.ts` module owns the current path policy so future project-slug integration has a clean home.
 
 ## Repo layout
 
-- `index.ts` — wrapper entrypoint
-- `shim.ts` — `ExtensionAPI` proxy/interceptor
+- `index.ts` — extension entrypoint
+- `plannotator-fork.ts` — local fork of the upstream extension shell
 - `plan-path.ts` — global plan-path policy
+- `shim.ts` — legacy wrapper-era code, not part of the active runtime path
 - `vendor/plannotator` — upstream git submodule
 
 ## Upstream build/update flow
@@ -84,17 +66,21 @@ Use either:
 - a local extensions path pointing at `~/Projects/Tools/Pi/nplan`
 - or a Pi package/extension entry that loads this repo directory directly
 
-The point is that Pi should load `nplan/index.ts`, which in turn loads upstream through the shim.
+Pi should load `nplan/index.ts`, which then loads `plannotator-fork.ts`.
 
-## Verified behavior
+## Behavioral notes
 
-Using a jiti-based registration test against the wrapper:
+Current `nplan` behavior is intentionally different from upstream in a few places:
 
-- only `plan`, `plan-status`, and `plan-file` were registered
-- upstream shortcut registration was suppressed
-- upstream `plannotator_submit_plan` was still registered
-- `session_start` resolved the configured plan file to `~/.n/pi/plans/...`
-- planning write restrictions used the remapped global plan path
+- only `plan`, `plan-status`, and `plan-file` are exposed
+- no default upstream shortcut is registered
+- plan files resolve to `~/.n/pi/plans/...`
+- todo / checklist / `[DONE:n]` tracking has been removed
+- planning state restore uses the current session branch, not the whole session tree
+- planning mode enforces:
+  - `write` only to the active plan file
+  - `edit` only to the active plan file
+  - `bash` only for allowlisted read-only inspection / safe web-fetching commands
 
 ## When a tiny upstream patch would be justified
 
