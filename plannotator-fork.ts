@@ -306,16 +306,6 @@ export default function plannotator(pi: ExtensionAPI): void {
 	}
 
 	function updateStatus(ctx: ExtensionContext): void {
-		if (phase === "planning") {
-			ctx.ui.setStatus("plannotator", ctx.ui.theme.fg("warning", "plan mode"));
-			return;
-		}
-
-		if (phase === "executing") {
-			ctx.ui.setStatus("plannotator", ctx.ui.theme.fg("accent", "implementation phase"));
-			return;
-		}
-
 		ctx.ui.setStatus("plannotator", undefined);
 	}
 
@@ -325,6 +315,16 @@ export default function plannotator(pi: ExtensionAPI): void {
 	}
 
 	function updateWidget(ctx: ExtensionContext): void {
+		if (phase === "planning") {
+			ctx.ui.setWidget("plannotator-progress", [ctx.ui.theme.fg("warning", "plan mode")]);
+			return;
+		}
+
+		if (phase === "executing") {
+			ctx.ui.setWidget("plannotator-progress", [ctx.ui.theme.fg("accent", "implementation phase")]);
+			return;
+		}
+
 		ctx.ui.setWidget("plannotator-progress", undefined);
 	}
 
