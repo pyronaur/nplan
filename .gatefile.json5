@@ -1,5 +1,8 @@
 {
 	$use: './node_modules/.bin',
+	$hooks: {
+		after: '@commit',
+	},
 
 	// Enable one gate at a time during the staged burn-down.
 	// Top-level runtime and test TypeScript formatting.
