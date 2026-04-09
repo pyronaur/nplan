@@ -17,7 +17,7 @@ export type SavedPhaseState = {
 export type PersistedPlanState = {
 	phase: Phase;
 	planFilePath?: string;
-	savedState?: SavedPhaseState;
+	savedState?: SavedPhaseState | null;
 };
 
 type PlanningBlockResult = { block: true; reason: string };
@@ -183,7 +183,10 @@ function isPersistedPlanState(value: unknown): value is PersistedPlanState {
 	if (value.planFilePath !== undefined && typeof value.planFilePath !== "string") {
 		return false;
 	}
-	if (value.savedState !== undefined && !isSavedPhaseState(value.savedState)) {
+	if (
+		value.savedState !== undefined && value.savedState !== null
+		&& !isSavedPhaseState(value.savedState)
+	) {
 		return false;
 	}
 

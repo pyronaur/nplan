@@ -420,7 +420,7 @@ async function handleSessionStart(runtime: Runtime, ctx: ExtensionContext): Prom
 		runtime.planFilePath = resolveGlobalPlanPath(
 			persistedState.planFilePath ?? runtime.planFilePath,
 		);
-		runtime.savedState = persistedState.savedState ?? runtime.savedState;
+		runtime.savedState = persistedState.savedState ?? null;
 	}
 	if (runtime.phase === "planning") {
 		notifyReviewAvailability(ctx);

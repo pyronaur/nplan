@@ -1,14 +1,27 @@
+import type { SessionEntry } from "@mariozechner/pi-coding-agent";
 import assert from "node:assert/strict";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
 	getDefaultPlanPath,
+	getPersistedPlanState,
 	getPhaseNotification,
 	getPlanningToolBlockResult,
 	resolveGlobalPlanPath,
 } from "../nplan-policy.ts";
 import { formatPhaseWidgetLines } from "../nplan-widget.ts";
+
+function createPlanEntry(data: unknown, id: string, parentId: string | null): SessionEntry {
+	return {
+		type: "custom",
+		customType: "plan",
+		data,
+		id,
+		parentId,
+		timestamp: "2026-04-09T16:51:00.000Z",
+	};
+}
 
 void test("resolveGlobalPlanPath maps empty input to the default global plan", () => {
 	assert.equal(getDefaultPlanPath(), join(homedir(), ".n", "pi", "plans", "plan.md"));
@@ -96,6 +109,39 @@ void test("getPhaseNotification includes the absolute plan path for plan and imp
 		getPhaseNotification("executing", "/abs/path/plan.md"),
 		"Implementation phase enabled. Plan file: /abs/path/plan.md",
 	);
+});
+
+void test("getPersistedPlanState keeps the latest idle plan state with a null savedState", () => {
+	const state = getPersistedPlanState([
+		createPlanEntry(
+			{
+				phase: "planning",
+				planFilePath: "/abs/path/plan.md",
+				savedState: {
+					activeTools: ["read", "bash"],
+					model: { provider: "openai-codex", id: "gpt-5.4" },
+					thinkingLevel: "high",
+				},
+			},
+			"planning",
+			null,
+		),
+		createPlanEntry(
+			{
+				phase: "idle",
+				planFilePath: "/abs/path/plan.md",
+				savedState: null,
+			},
+			"idle",
+			"planning",
+		),
+	]);
+
+	assert.deepEqual(state, {
+		phase: "idle",
+		planFilePath: "/abs/path/plan.md",
+		savedState: null,
+	});
 });
 
 void test("formatPhaseWidgetLines right-aligns the plan path when there is enough width", () => {
