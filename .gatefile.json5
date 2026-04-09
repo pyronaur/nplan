@@ -34,11 +34,11 @@
 	},
 
 	// Runtime-source duplication for the current top-level .ts source files.
-	// dupes_source: {
-	// 	name: 'Check source duplication',
-	// 	match: ['*.ts', '.jscpd.json'],
-	// 	run: 'jscpd --config .jscpd.json',
-	// },
+	dupes_source: {
+		name: 'Check source duplication',
+		match: ['*.ts', '.jscpd.json'],
+		run: 'jscpd --config .jscpd.json',
+	},
 
 	// Test duplication kept separate from runtime source duplication.
 	// dupes_tests: {
