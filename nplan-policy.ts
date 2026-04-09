@@ -37,7 +37,8 @@ type ApplyPatchAction = {
 
 const STATUS_KEY = "plan";
 const WIDGET_KEY = "plan-progress";
-const WIDGET_SIDE_PADDING = 2;
+const WIDGET_LEFT_PADDING = 1;
+const WIDGET_RIGHT_PADDING = 2;
 const WIDGET_GAP = 4;
 
 const PLANNING_MUTATING_BASH_PATTERNS = [
@@ -408,7 +409,8 @@ export function renderPhaseWidget(ctx: ExtensionContext, phase: Phase, planFileP
 				phase,
 				planFilePath,
 				width,
-				padding: WIDGET_SIDE_PADDING,
+				leftPadding: WIDGET_LEFT_PADDING,
+				rightPadding: WIDGET_RIGHT_PADDING,
 				gap: WIDGET_GAP,
 			});
 			return lines.map((line) =>

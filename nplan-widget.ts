@@ -2,7 +2,7 @@ import type { Phase } from "./nplan-tool-scope.ts";
 
 function getPhaseLabel(phase: Phase): string | undefined {
 	if (phase === "planning") {
-		return "plan mode";
+		return "⏸ plan";
 	}
 	if (phase === "executing") {
 		return "implementation phase";
@@ -14,7 +14,8 @@ export function formatPhaseWidgetLines(input: {
 	phase: Phase;
 	planFilePath: string;
 	width: number;
-	padding: number;
+	leftPadding: number;
+	rightPadding: number;
 	gap: number;
 }): string[] {
 	const label = getPhaseLabel(input.phase);
@@ -22,20 +23,20 @@ export function formatPhaseWidgetLines(input: {
 		return [];
 	}
 	const lineWidth = Math.max(input.width, 0);
-	const innerWidth = Math.max(lineWidth - input.padding * 2, 0);
+	const innerWidth = Math.max(lineWidth - input.leftPadding - input.rightPadding, 0);
 	const minWidth = label.length + input.gap + input.planFilePath.length;
 	if (innerWidth >= minWidth) {
 		const spaces = " ".repeat(innerWidth - label.length - input.planFilePath.length);
 		return [
-			`${" ".repeat(input.padding)}${label}${spaces}${input.planFilePath}${
-				" ".repeat(input.padding)
+			`${" ".repeat(input.leftPadding)}${label}${spaces}${input.planFilePath}${
+				" ".repeat(input.rightPadding)
 			}`,
 		];
 	}
 
 	return [
-		`${" ".repeat(input.padding)}${label}`,
-		`${" ".repeat(input.padding)}${input.planFilePath}`,
+		`${" ".repeat(input.leftPadding)}${label}`,
+		`${" ".repeat(input.leftPadding)}${input.planFilePath}`,
 	];
 }
 
