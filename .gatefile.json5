@@ -6,11 +6,11 @@
 
 	// Enable one gate at a time during the staged burn-down.
 	// Top-level runtime and test TypeScript formatting.
-	// format: {
-	// 	name: 'Check formatting',
-	// 	match: ['*.ts', 'tests/**/*.ts', 'dprint.json'],
-	// 	run: 'dprint check',
-	// },
+	format: {
+		name: 'Check formatting',
+		match: ['*.ts', 'tests/**/*.ts', 'dprint.json'],
+		run: 'dprint check',
+	},
 
 	// Strict Oxlint coverage for the current runtime and test source layout.
 	// lint: {

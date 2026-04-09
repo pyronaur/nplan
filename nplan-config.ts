@@ -1,7 +1,7 @@
+import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 
 export type PhaseName = "planning" | "executing" | "reviewing";
 export type RuntimePhase = PhaseName | "idle";
@@ -56,8 +56,7 @@ const INTERNAL_CONFIG: PlanConfig = {
 		planning: {
 			activeTools: ["grep", "find", "ls", "plan_submit"],
 			statusLabel: "⏸ plan",
-			systemPrompt:
-				"[PLAN - PLANNING PHASE]\n"
+			systemPrompt: "[PLAN - PLANNING PHASE]\n"
 				+ "You are in plan mode. You MUST NOT make any changes to the codebase — no edits, no commits, no installs, no destructive commands. The ONLY file you may write to or edit is the plan file: ${planFilePath}.\n\n"
 				+ "Available tools: read, bash, grep, find, ls, write (${planFilePath} only), edit (${planFilePath} only), plan_submit\n\n"
 				+ "Do not run destructive bash commands (rm, git push, npm install, etc.) — focus on reading and exploring the codebase. Web fetching (curl, wget) is fine.\n\n"
@@ -100,8 +99,7 @@ const INTERNAL_CONFIG: PlanConfig = {
 				+ "Do not end your turn without doing one of these two things.",
 		},
 		executing: {
-			systemPrompt:
-				"[PLAN - EXECUTING PHASE]\n"
+			systemPrompt: "[PLAN - EXECUTING PHASE]\n"
 				+ "Full tool access is enabled. Execute the plan from ${planFilePath}.\n\n"
 				+ "Remaining steps:\n"
 				+ "${todoList}\n\n"
@@ -181,7 +179,9 @@ function normalizeTools(value: unknown): string[] | null | undefined {
 		return [];
 	}
 
-	const tools = value.filter((tool): tool is string => typeof tool === "string" && tool.trim().length > 0);
+	const tools = value.filter((tool): tool is string =>
+		typeof tool === "string" && tool.trim().length > 0
+	);
 	return tools.length > 0 ? tools : undefined;
 }
 
@@ -232,7 +232,10 @@ function cloneProfile(profile: PhaseProfile | null | undefined): PhaseProfile | 
 	if (profile === null || profile === undefined) {
 		return profile;
 	}
-	return { ...profile, activeTools: profile.activeTools ? [...profile.activeTools] : profile.activeTools };
+	return {
+		...profile,
+		activeTools: profile.activeTools ? [...profile.activeTools] : profile.activeTools,
+	};
 }
 
 function mergeProfile(
@@ -320,7 +323,8 @@ export function loadPlanConfig(cwd: string): LoadedPlanConfig {
 		warnings.push(projectConfig.warning);
 	}
 
-	const merged = mergeConfig(mergeConfig(INTERNAL_CONFIG, globalConfig.config), projectConfig.config);
+	const merged = mergeConfig(mergeConfig(INTERNAL_CONFIG, globalConfig.config),
+		projectConfig.config);
 	return { config: merged, warnings };
 }
 
@@ -357,7 +361,10 @@ function resolveThinking(
 	return base ?? undefined;
 }
 
-function resolveTools(base: string[] | null | undefined, override: string[] | null | undefined): string[] | undefined {
+function resolveTools(
+	base: string[] | null | undefined,
+	override: string[] | null | undefined,
+): string[] | undefined {
 	if (override !== undefined) {
 		if (override === null) {
 			return [];
@@ -370,7 +377,10 @@ function resolveTools(base: string[] | null | undefined, override: string[] | nu
 	return base ? [...base] : undefined;
 }
 
-function resolveString(base: string | null | undefined, override: string | null | undefined): string | undefined {
+function resolveString(
+	base: string | null | undefined,
+	override: string | null | undefined,
+): string | undefined {
 	if (override !== undefined) {
 		if (override === null || override === "") {
 			return undefined;

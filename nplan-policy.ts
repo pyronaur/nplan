@@ -1,7 +1,7 @@
+import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { homedir } from "node:os";
 import { basename, extname, isAbsolute, join, normalize, parse, resolve, sep } from "node:path";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { PLAN_SUBMIT_TOOL, type Phase } from "./nplan-tool-scope.ts";
+import { type Phase, PLAN_SUBMIT_TOOL } from "./nplan-tool-scope.ts";
 
 export const DEFAULT_PLAN_NAME = "plan";
 
@@ -121,7 +121,8 @@ function expandHome(input: string): string {
 
 function slugifyPlanName(input: string): string {
 	const base = parse(basename(input)).name;
-	const slug = base.normalize("NFKD").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+	const slug = base.normalize("NFKD").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g,
+		"");
 	return slug || DEFAULT_PLAN_NAME;
 }
 
@@ -153,7 +154,9 @@ export function resolveGlobalPlanPath(input?: string): string {
 	}
 
 	const expanded = expandHome(trimmed);
-	if (isAbsolute(expanded) && isStoredPlanPath(expanded) && extname(expanded).toLowerCase() === ".md") {
+	if (
+		isAbsolute(expanded) && isStoredPlanPath(expanded) && extname(expanded).toLowerCase() === ".md"
+	) {
 		return normalize(expanded);
 	}
 
@@ -185,20 +188,25 @@ export function getPlanningToolBlockResult(
 		const command = typeof input.command === "string" ? input.command : "";
 		const trimmed = command.trim();
 		if (!trimmed) {
-			return { block: true, reason: "Plan mode: empty bash commands are not allowed during planning." };
+			return {
+				block: true,
+				reason: "Plan mode: empty bash commands are not allowed during planning.",
+			};
 		}
 
 		if (PLANNING_MUTATING_BASH_PATTERNS.some((pattern) => pattern.test(trimmed))) {
 			return {
 				block: true,
-				reason: `Plan mode: bash commands that can modify files or system state are blocked during planning. Blocked: ${command}`,
+				reason:
+					`Plan mode: bash commands that can modify files or system state are blocked during planning. Blocked: ${command}`,
 			};
 		}
 
 		if (!PLANNING_SAFE_BASH_PATTERNS.some((pattern) => pattern.test(trimmed))) {
 			return {
 				block: true,
-				reason: `Plan mode: bash is restricted to allowlisted read-only inspection commands during planning. Blocked: ${command}`,
+				reason:
+					`Plan mode: bash is restricted to allowlisted read-only inspection commands during planning. Blocked: ${command}`,
 			};
 		}
 	}
@@ -207,7 +215,10 @@ export function getPlanningToolBlockResult(
 		const patch = typeof input.patch === "string" ? input.patch : "";
 		const trimmed = patch.trim();
 		if (!trimmed) {
-			return { block: true, reason: "Plan mode: empty apply_patch payloads are not allowed during planning." };
+			return {
+				block: true,
+				reason: "Plan mode: empty apply_patch payloads are not allowed during planning.",
+			};
 		}
 
 		const actions: Array<{ kind: "update" | "add" | "delete"; path: string }> = [];
@@ -215,7 +226,8 @@ export function getPlanningToolBlockResult(
 			if (line.startsWith("*** Move to: ")) {
 				return {
 					block: true,
-					reason: `Plan mode: apply_patch cannot move files during planning. Patch only ${planFilePath}.`,
+					reason:
+						`Plan mode: apply_patch cannot move files during planning. Patch only ${planFilePath}.`,
 				};
 			}
 			if (line.startsWith("*** Update File: ")) {
@@ -234,7 +246,8 @@ export function getPlanningToolBlockResult(
 		if (actions.length === 0) {
 			return {
 				block: true,
-				reason: "Plan mode: apply_patch is allowed during planning only for patches that target the active plan file.",
+				reason:
+					"Plan mode: apply_patch is allowed during planning only for patches that target the active plan file.",
 			};
 		}
 
@@ -245,14 +258,16 @@ export function getPlanningToolBlockResult(
 			if (action.kind === "delete") {
 				return {
 					block: true,
-					reason: `Plan mode: apply_patch cannot delete files during planning. Patch only ${planFilePath}.`,
+					reason:
+						`Plan mode: apply_patch cannot delete files during planning. Patch only ${planFilePath}.`,
 				};
 			}
 			const targetPath = resolve(cwd, action.path);
 			if (targetPath !== allowedPath) {
 				return {
 					block: true,
-					reason: `Plan mode: apply_patch is restricted to ${planFilePath} during planning. Blocked: ${action.path}`,
+					reason:
+						`Plan mode: apply_patch is restricted to ${planFilePath} during planning. Blocked: ${action.path}`,
 				};
 			}
 		}
@@ -279,12 +294,16 @@ export function renderPhaseWidget(ctx: ExtensionContext, phase: Phase): void {
 	ctx.ui.setWidget(WIDGET_KEY, undefined);
 }
 
-export function getSessionEntries(ctx: ExtensionContext): Array<{ type: string; customType?: string; data?: unknown }> {
+export function getSessionEntries(
+	ctx: ExtensionContext,
+): Array<{ type: string; customType?: string; data?: unknown }> {
 	const sessionManager = ctx.sessionManager as typeof ctx.sessionManager & {
 		getBranch?: () => Array<{ type: string; customType?: string; data?: unknown }>;
 	};
 	if (typeof sessionManager.getBranch === "function") {
 		return sessionManager.getBranch();
 	}
-	return ctx.sessionManager.getEntries() as Array<{ type: string; customType?: string; data?: unknown }>;
+	return ctx.sessionManager.getEntries() as Array<
+		{ type: string; customType?: string; data?: unknown }
+	>;
 }

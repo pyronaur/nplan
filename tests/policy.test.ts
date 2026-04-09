@@ -14,7 +14,8 @@ test("resolveGlobalPlanPath maps empty input to the default global plan", () => 
 });
 
 test("resolveGlobalPlanPath slugifies non-stored paths into the shared plans directory", () => {
-	assert.equal(resolveGlobalPlanPath("Auth Plan"), join(homedir(), ".n", "pi", "plans", "auth-plan.md"));
+	assert.equal(resolveGlobalPlanPath("Auth Plan"),
+		join(homedir(), ".n", "pi", "plans", "auth-plan.md"));
 });
 
 test("resolveGlobalPlanPath preserves absolute stored markdown paths", () => {
@@ -24,14 +25,16 @@ test("resolveGlobalPlanPath preserves absolute stored markdown paths", () => {
 
 test("getPlanningToolBlockResult allows safe read-only bash commands during planning", () => {
 	assert.equal(
-		getPlanningToolBlockResult("bash", { command: "git status" }, "/repo", "/repo/plan.md", "/repo/plan.md"),
+		getPlanningToolBlockResult("bash", { command: "git status" }, "/repo", "/repo/plan.md",
+			"/repo/plan.md"),
 		null,
 	);
 });
 
 test("getPlanningToolBlockResult blocks mutating bash commands during planning", () => {
 	assert.deepEqual(
-		getPlanningToolBlockResult("bash", { command: "npm install" }, "/repo", "/repo/plan.md", "/repo/plan.md"),
+		getPlanningToolBlockResult("bash", { command: "npm install" }, "/repo", "/repo/plan.md",
+			"/repo/plan.md"),
 		{
 			block: true,
 			reason:
@@ -62,7 +65,8 @@ test("getPlanningToolBlockResult only allows apply_patch on the active plan file
 		),
 		{
 			block: true,
-			reason: "Plan mode: apply_patch is restricted to /repo/plan.md during planning. Blocked: src/app.ts",
+			reason:
+				"Plan mode: apply_patch is restricted to /repo/plan.md during planning. Blocked: src/app.ts",
 		},
 	);
 });

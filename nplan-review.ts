@@ -113,7 +113,10 @@ function handleReviewClose(input: {
 			code: input.code,
 			signal: input.signal,
 		});
-		input.settleStarted({ ok: false, error: new Error(`Plannotator CLI review failed: ${reason}`) });
+		input.settleStarted({
+			ok: false,
+			error: new Error(`Plannotator CLI review failed: ${reason}`),
+		});
 		input.reject(new Error(`Plannotator CLI review failed: ${reason}`));
 		return;
 	}
@@ -127,7 +130,9 @@ function handleReviewClose(input: {
 	}
 }
 
-function spawnReviewProcess(input: { reviewId: string; payload: string; cwd: string }): ReviewProcess {
+function spawnReviewProcess(
+	input: { reviewId: string; payload: string; cwd: string },
+): ReviewProcess {
 	let cancel = () => {};
 	const startup = createStartupLatch();
 	const wait = new Promise<NplanReviewResult>((resolve, reject) => {

@@ -1,8 +1,8 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 import { Type } from "@mariozechner/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
 	buildPromptVariables,
 	loadPlanConfig,
@@ -12,8 +12,8 @@ import {
 import { planDenyFeedback } from "./nplan-feedback.ts";
 import {
 	clearPhaseStatus,
-	getDefaultPlanPath,
 	getDefaultPlanningMessage,
+	getDefaultPlanPath,
 	getPlanningToolBlockResult,
 	getPromptTodoStats,
 	getSessionEntries,
@@ -27,8 +27,8 @@ import {
 } from "./nplan-review.ts";
 import {
 	getToolsForPhase,
-	PLAN_SUBMIT_TOOL,
 	type Phase,
+	PLAN_SUBMIT_TOOL,
 	stripPlanningOnlyTools,
 } from "./nplan-tool-scope.ts";
 
@@ -122,7 +122,10 @@ export default function nplan(pi: ExtensionAPI): void {
 		pi.setThinkingLevel(savedState.thinkingLevel);
 	}
 
-	async function applyPhaseConfig(ctx: ExtensionContext, opts: { restoreSavedState?: boolean } = {}): Promise<void> {
+	async function applyPhaseConfig(
+		ctx: ExtensionContext,
+		opts: { restoreSavedState?: boolean } = {},
+	): Promise<void> {
 		const profile = getPhaseProfile();
 		if (opts.restoreSavedState !== false && savedState) {
 			await restoreSavedState(ctx);
@@ -231,8 +234,7 @@ export default function nplan(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: PLAN_SUBMIT_TOOL,
 		label: "Submit Plan",
-		description:
-			"Submit your plan for user review. "
+		description: "Submit your plan for user review. "
 			+ "Call this only while plan mode is active, after drafting or revising your plan file. "
 			+ "The user will review the plan through the `plannotator` CLI and can approve or deny with feedback. "
 			+ "If denied, use the edit tool to make targeted revisions (not write), then call this again.",
@@ -266,7 +268,8 @@ export default function nplan(pi: ExtensionAPI): void {
 					content: [
 						{
 							type: "text",
-							text: `Error: ${planFilePath} does not exist. Write your plan using the write tool first, then call ${PLAN_SUBMIT_TOOL} again.`,
+							text:
+								`Error: ${planFilePath} does not exist. Write your plan using the write tool first, then call ${PLAN_SUBMIT_TOOL} again.`,
 						},
 					],
 					details: { approved: false },
@@ -278,7 +281,8 @@ export default function nplan(pi: ExtensionAPI): void {
 					content: [
 						{
 							type: "text",
-							text: `Error: ${planFilePath} is empty. Write your plan first, then call ${PLAN_SUBMIT_TOOL} again.`,
+							text:
+								`Error: ${planFilePath} is empty. Write your plan first, then call ${PLAN_SUBMIT_TOOL} again.`,
 						},
 					],
 					details: { approved: false },
@@ -346,7 +350,8 @@ export default function nplan(pi: ExtensionAPI): void {
 					content: [
 						{
 							type: "text",
-							text: `Plan approved. You now have full tool access (read, bash, edit, write). Execute the plan in ${planFilePath}.`,
+							text:
+								`Plan approved. You now have full tool access (read, bash, edit, write). Execute the plan in ${planFilePath}.`,
 						},
 					],
 					details: { approved: true },
@@ -378,7 +383,8 @@ export default function nplan(pi: ExtensionAPI): void {
 				const kind = event.toolName === "write" ? "writes" : "edits";
 				return {
 					block: true,
-						reason: `Plan mode: ${kind} are restricted to ${planFilePath} during planning. Blocked: ${event.input.path}`,
+					reason:
+						`Plan mode: ${kind} are restricted to ${planFilePath} during planning. Blocked: ${event.input.path}`,
 				};
 			}
 		}
@@ -410,7 +416,9 @@ export default function nplan(pi: ExtensionAPI): void {
 			);
 			if (rendered.unknownVariables.length > 0) {
 				ctx.ui.notify(
-					`Plan mode: unknown template variables in ${phase} prompt: ${rendered.unknownVariables.join(", ")}`,
+					`Plan mode: unknown template variables in ${phase} prompt: ${
+						rendered.unknownVariables.join(", ")
+					}`,
 					"warning",
 				);
 			}
@@ -449,7 +457,8 @@ export default function nplan(pi: ExtensionAPI): void {
 				}
 				if (Array.isArray(entry.content)) {
 					return !entry.content.some(
-						(content) => content.type === "text" && (content as { text?: string }).text?.includes("[PLAN -"),
+						(content) =>
+							content.type === "text" && (content as { text?: string }).text?.includes("[PLAN -"),
 					);
 				}
 				return true;
@@ -475,7 +484,9 @@ export default function nplan(pi: ExtensionAPI): void {
 
 		const entries = getSessionEntries(ctx);
 		const stateEntry = entries
-			.filter((entry: { type: string; customType?: string }) => entry.type === "custom" && entry.customType === "plan")
+			.filter((entry: { type: string; customType?: string }) =>
+				entry.type === "custom" && entry.customType === "plan"
+			)
 			.pop() as { data?: PersistedPlanState } | undefined;
 
 		if (stateEntry?.data) {
