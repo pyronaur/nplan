@@ -1,8 +1,9 @@
 import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, normalize, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readJsonFile, readTextFile, resolvePathFromBase } from "./nplan-files.ts";
 import { isRecord, isThinkingLevel } from "./nplan-guards.ts";
 
 export type PhaseName = "planning" | "reviewing";
@@ -86,52 +87,6 @@ function getAgentConfigDir(): string {
 	return join(process.env.HOME || process.env.USERPROFILE || homedir(), ".pi", "agent");
 }
 
-function expandHome(input: string): string {
-	if (input === "~") {
-		return homedir();
-	}
-	if (input.startsWith("~/")) {
-		return join(homedir(), input.slice(2));
-	}
-	return input;
-}
-
-function readJsonFile(path: string): { data?: unknown; error?: string } {
-	if (!existsSync(path)) {
-		return {};
-	}
-
-	try {
-		return { data: JSON.parse(readFileSync(path, "utf-8")) };
-	} catch (error) {
-		return {
-			error: `Failed to parse ${path}: ${error instanceof Error ? error.message : String(error)}`,
-		};
-	}
-}
-
-function readTextFile(path: string): { text?: string; error?: string } {
-	if (!existsSync(path)) {
-		return {};
-	}
-
-	try {
-		return { text: readFileSync(path, "utf-8") };
-	} catch (error) {
-		return {
-			error: `Failed to read ${path}: ${error instanceof Error ? error.message : String(error)}`,
-		};
-	}
-}
-
-function resolveConfigPath(input: string, baseDir: string): string {
-	const expanded = expandHome(input.trim());
-	if (isAbsolute(expanded)) {
-		return normalize(expanded);
-	}
-	return resolve(baseDir, expanded);
-}
-
 function normalizeModel(value: unknown): PhaseModelRef | null | undefined {
 	if (value === null) {
 		return null;
@@ -147,15 +102,25 @@ function normalizeModel(value: unknown): PhaseModelRef | null | undefined {
 	return { provider, id };
 }
 
-function normalizeThinking(value: unknown): ThinkingLevel | null | undefined {
+function normalizeOptionalString(value: unknown): string | null | undefined {
 	if (value === null) {
 		return null;
 	}
+
 	if (typeof value !== "string") {
 		return undefined;
 	}
+
 	const trimmed = value.trim();
-	if (!trimmed) {
+	return trimmed || null;
+}
+
+function normalizeThinking(value: unknown): ThinkingLevel | null | undefined {
+	const trimmed = normalizeOptionalString(value);
+	if (trimmed === undefined) {
+		return undefined;
+	}
+	if (trimmed === null) {
 		return null;
 	}
 	if (!isThinkingLevel(trimmed)) {
@@ -184,31 +149,21 @@ function normalizeTools(value: unknown): string[] | null | undefined {
 }
 
 function normalizeLabel(value: unknown): string | null | undefined {
-	if (value === null) {
-		return null;
-	}
-	if (typeof value !== "string") {
-		return undefined;
-	}
-	const trimmed = value.trim();
-	return trimmed.length > 0 ? trimmed : null;
+	return normalizeOptionalString(value);
 }
 
 function normalizePlanningPromptFile(
 	value: unknown,
 	options: { baseDir: string; warnings: string[]; keyPath: string },
 ): string | null | undefined {
-	if (value === null) {
-		return null;
-	}
-	if (typeof value !== "string") {
+	const trimmed = normalizeOptionalString(value);
+	if (trimmed === undefined) {
 		return undefined;
 	}
-	const trimmed = value.trim();
-	if (!trimmed) {
+	if (trimmed === null) {
 		return null;
 	}
-	const path = resolveConfigPath(trimmed, options.baseDir);
+	const path = resolvePathFromBase(trimmed, options.baseDir);
 	const prompt = readTextFile(path);
 	if (prompt.error) {
 		options.warnings.push(`${options.keyPath}: ${prompt.error}`);

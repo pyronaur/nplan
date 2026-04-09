@@ -1,7 +1,8 @@
 import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
-import type { ExtensionContext, SessionEntry } from "@mariozechner/pi-coding-agent";
+import type { ContextEvent, ExtensionContext, SessionEntry } from "@mariozechner/pi-coding-agent";
 import { homedir } from "node:os";
 import { basename, extname, isAbsolute, join, normalize, parse, resolve, sep } from "node:path";
+import { expandHome } from "./nplan-files.ts";
 import { isRecord, isThinkingLevel } from "./nplan-guards.ts";
 import { type Phase } from "./nplan-tool-scope.ts";
 import { formatPhaseWidgetLines, renderColoredPhaseWidgetLine } from "./nplan-widget.ts";
@@ -137,18 +138,6 @@ const PLANNING_SAFE_BASH_PATTERNS = [
 	/^\s*bat\b/i,
 	/^\s*exa\b/i,
 ] as const;
-
-function expandHome(input: string): string {
-	if (input === "~") {
-		return homedir();
-	}
-
-	if (input.startsWith("~/")) {
-		return join(homedir(), input.slice(2));
-	}
-
-	return input;
-}
 
 function isSavedPhaseState(value: unknown): value is SavedPhaseState {
 	if (!isRecord(value)) {
@@ -442,15 +431,37 @@ export function shouldKeepContextMessage(message: unknown): boolean {
 	return !hasPlanBanner(message.content);
 }
 
-export function syncPlanningContextMessages(messages: unknown[], planningPrompt: string): unknown[] {
+type PlanContextMessage = {
+	role: "custom";
+	customType: "plan-context";
+	content: string;
+	display: false;
+	timestamp: number;
+};
+
+declare module "@mariozechner/pi-agent-core" {
+	interface CustomAgentMessages {
+		planContext: PlanContextMessage;
+	}
+}
+
+function createPlanContextMessage(planningPrompt: string): PlanContextMessage {
+	return {
+		role: "custom",
+		customType: "plan-context",
+		content: planningPrompt,
+		display: false,
+		timestamp: Date.now(),
+	};
+}
+
+export function syncPlanningContextMessages(
+	messages: ContextEvent["messages"],
+	planningPrompt: string,
+): ContextEvent["messages"] {
 	return [
 		...messages.filter(shouldKeepContextMessage),
-		{
-			role: "custom",
-			customType: "plan-context",
-			content: planningPrompt,
-			display: false,
-		},
+		createPlanContextMessage(planningPrompt),
 	];
 }
 
