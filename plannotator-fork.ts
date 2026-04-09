@@ -57,6 +57,7 @@ import {
 	type Phase,
 	stripPlanningOnlyTools,
 } from "./vendor/plannotator/apps/pi-extension/tool-scope.ts";
+import * as seam from "./nplan-seams.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -98,18 +99,19 @@ function getPlanReviewAvailabilityWarning(options: { hasUI: boolean; hasPlanHtml
 	const { hasUI, hasPlanHtml } = options;
 	if (hasUI && hasPlanHtml) return null;
 	if (!hasUI && !hasPlanHtml) {
-		return "Plannotator: interactive plan review is unavailable in this session (no UI support and missing built assets). Plans will auto-approve on exit_plan_mode.";
+		return "Plannotator: interactive plan review is unavailable in this session (no UI support and missing built assets). Plans will auto-approve on submit.";
 	}
 	if (!hasUI) {
-		return "Plannotator: interactive plan review is unavailable in this session (no UI support). Plans will auto-approve on exit_plan_mode.";
+		return "Plannotator: interactive plan review is unavailable in this session (no UI support). Plans will auto-approve on submit.";
 	}
-	return "Plannotator: interactive plan review assets are missing. Rebuild the extension to restore the browser UI. Plans will auto-approve on exit_plan_mode.";
+	return "Plannotator: interactive plan review assets are missing. Rebuild the vendored Plannotator assets to restore the browser UI. Plans will auto-approve on submit.";
 }
 
 export default function plannotator(pi: ExtensionAPI): void {
 	let phase: Phase = "idle";
 	void registerPlannotatorEventListeners(pi);
-	let planFilePath = "PLAN.md";
+	// let planFilePath = "PLAN.md";
+	let planFilePath = seam.getDefaultPlanPath();
 	// let checklistItems: ChecklistItem[] = [];
 	let savedState: SavedPhaseState | null = null;
 	let plannotatorConfig = {};
@@ -123,9 +125,11 @@ export default function plannotator(pi: ExtensionAPI): void {
 	});
 
 	pi.registerFlag("plan-file", {
-		description: "Plan file path (default: PLAN.md)",
+		// description: "Plan file path (default: PLAN.md)",
+		description: "Global plan name or path under ~/.n/pi/plans/",
 		type: "string",
-		default: "PLAN.md",
+		// default: "PLAN.md",
+		default: seam.getDefaultPlanPath(),
 	});
 
 	// ── Helpers ──────────────────────────────────────────────────────────
@@ -158,6 +162,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 			ctx.ui.setStatus("plannotator", undefined);
 		}
 		*/
+		return seam.clearPhaseStatus(ctx);
 	}
 
 	function updateWidget(ctx: ExtensionContext): void {
@@ -177,6 +182,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 			ctx.ui.setWidget("plannotator-progress", undefined);
 		}
 		*/
+		return seam.renderPhaseWidget(ctx, phase);
 	}
 
 	function captureSavedState(ctx: ExtensionContext): void {
@@ -188,8 +194,6 @@ export default function plannotator(pi: ExtensionAPI): void {
 	}
 
 	function persistState(): void {
-
-
 		pi.appendEntry("plannotator", { phase, planFilePath, savedState });
 	}
 
@@ -277,6 +281,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 		ctx.ui.notify("Plannotator: disabled. Full access restored.");
 	}
 
+	/* upstream toggle helper kept as reference.
 	async function togglePlanMode(ctx: ExtensionContext): Promise<void> {
 		if (phase === "idle") {
 			await enterPlanning(ctx);
@@ -284,11 +289,14 @@ export default function plannotator(pi: ExtensionAPI): void {
 			await exitToIdle(ctx);
 		}
 	}
+	*/
 
 	// ── Commands & Shortcuts ─────────────────────────────────────────────
 
-	pi.registerCommand("plannotator", {
-		description: "Toggle plannotator (file-based plan mode)",
+	// pi.registerCommand("plannotator", {
+	pi.registerCommand("plan", {
+		// description: "Toggle plannotator (file-based plan mode)",
+		description: "Toggle plan mode",
 		handler: async (args, ctx) => {
 			if (phase !== "idle") {
 				await exitToIdle(ctx);
@@ -297,11 +305,13 @@ export default function plannotator(pi: ExtensionAPI): void {
 
 			// Accept path as argument: /plannotator plans/auth.md
 			let targetPath = args?.trim() || undefined;
+			if (targetPath) targetPath = seam.resolveGlobalPlanPath(targetPath);
 
 			// No arg — prompt for file path interactively
 			if (!targetPath && ctx.hasUI) {
 				targetPath = await ctx.ui.input("Plan file path", planFilePath);
 				if (targetPath === undefined) return; // cancelled
+				targetPath = seam.resolveGlobalPlanPath(targetPath);
 			}
 
 			if (targetPath) planFilePath = targetPath;
@@ -309,8 +319,10 @@ export default function plannotator(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.registerCommand("plannotator-status", {
-		description: "Show plannotator status",
+	// pi.registerCommand("plannotator-status", {
+	pi.registerCommand("plan-status", {
+		// description: "Show plannotator status",
+		description: "Show current plan status",
 		handler: async (_args, ctx) => {
 			const parts = [`Phase: ${phase}`, `Plan file: ${planFilePath}`];
 			/* nplan does not keep upstream checklist progress reporting.
@@ -323,14 +335,18 @@ export default function plannotator(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.registerCommand("plannotator-set-file", {
-		description: "Change the plan file path",
+	// pi.registerCommand("plannotator-set-file", {
+	pi.registerCommand("plan-file", {
+		// description: "Change the plan file path",
+		description: "Change the global plan file",
 		handler: async (args, ctx) => {
 			let targetPath = args?.trim() || undefined;
+			if (targetPath) targetPath = seam.resolveGlobalPlanPath(targetPath);
 
 			if (!targetPath && ctx.hasUI) {
 				targetPath = await ctx.ui.input("Plan file path", planFilePath);
 				if (targetPath === undefined) return; // cancelled
+				targetPath = seam.resolveGlobalPlanPath(targetPath);
 			}
 
 			if (!targetPath) {
@@ -551,7 +567,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 					content: [
 						{
 							type: "text",
-							text: "Error: Not in plan mode. Use /plannotator to enter planning mode first.",
+							text: "Error: Not in plan mode. Use /plan to enter planning mode first.",
 						},
 					],
 					details: { approved: false },
@@ -701,6 +717,8 @@ export default function plannotator(pi: ExtensionAPI): void {
 				};
 			}
 		}
+
+		return seam.getPlanningToolBlockResult(event.toolName, event.input as Record<string, unknown>, ctx.cwd, resolvePlanPath(ctx.cwd), planFilePath);
 	});
 
 	// Inject phase-specific context
@@ -734,7 +752,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 			return {
 				message: {
 					customType: "plannotator-context",
-					content: `[PLANNOTATOR - PLANNING PHASE]
+					/* content: `[PLANNOTATOR - PLANNING PHASE]
 You are in plan mode. You MUST NOT make any changes to the codebase — no edits, no commits, no installs, no destructive commands. The ONLY file you may write to or edit is the plan file: ${planFilePath}.
 
 Available tools: read, bash, grep, find, ls, write (${planFilePath} only), edit (${planFilePath} only), ${PLAN_SUBMIT_TOOL}
@@ -795,7 +813,8 @@ Your turn should only end by either:
 - Asking the user a question to gather more information.
 - Calling ${PLAN_SUBMIT_TOOL} when the plan is ready for review.
 
-Do not end your turn without doing one of these two things.`,
+Do not end your turn without doing one of these two things.`, */
+					content: seam.getDefaultPlanningMessage(planFilePath),
 					display: false,
 				},
 			};
@@ -908,7 +927,8 @@ Execute each step in order. After completing a step, include [DONE:n] in your re
 		// Resolve plan file path from flag
 		const flagPlanFile = pi.getFlag("plan-file") as string;
 		if (flagPlanFile) {
-			planFilePath = flagPlanFile;
+			// planFilePath = flagPlanFile;
+			planFilePath = seam.resolveGlobalPlanPath(flagPlanFile);
 		}
 
 		const loadedConfig = loadPlannotatorConfig(ctx.cwd);
@@ -923,7 +943,7 @@ Execute each step in order. After completing a step, include [DONE:n] in your re
 		}
 
 		// Restore persisted state
-		const entries = ctx.sessionManager.getEntries();
+		const entries = seam.getSessionEntries(ctx);
 		const stateEntry = entries
 			.filter(
 				(e: { type: string; customType?: string }) =>
@@ -935,7 +955,8 @@ Execute each step in order. After completing a step, include [DONE:n] in your re
 
 		if (stateEntry?.data) {
 			phase = stateEntry.data.phase ?? phase;
-			planFilePath = stateEntry.data.planFilePath ?? planFilePath;
+			// planFilePath = stateEntry.data.planFilePath ?? planFilePath;
+			planFilePath = seam.resolveGlobalPlanPath(stateEntry.data.planFilePath ?? planFilePath);
 
 
 			savedState = stateEntry.data.savedState ?? savedState;

@@ -11,7 +11,6 @@ import {
 	expandHome,
 	getPlanNameFromPath,
 	getPlanStorageRoot,
-	getRuntimeRegistry,
 	isStoredPlanPath,
 } from "./nplan-seam-internals.ts";
 
@@ -30,10 +29,6 @@ export function resolveGlobalPlanPath(input?: string): string {
 
 	const planName = getPlanNameFromPath(expanded);
 	return join(getPlanStorageRoot(), `${planName}.md`);
-}
-
-export function resolvePlanInputPromptValue(input?: string): string {
-	return getPlanNameFromPath(input);
 }
 
 export function getDefaultPlanningMessage(planFilePath: string): string {
@@ -101,108 +96,95 @@ Your turn should only end by either:
 Do not end your turn without doing one of these two things.`;
 }
 
-export function getDefaultExecutingMessage(planFilePath: string): string {
-	return `[PLANNOTATOR - EXECUTING PLAN]
-Full tool access is enabled. Execute the plan from ${planFilePath}.
-
-Carry out the approved plan carefully and verify your work as you go.`;
-}
-
-export function getPlanningBashBlockReason(command: string): string | null {
-	const trimmed = command.trim();
-	if (!trimmed) {
-		return "Plannotator: empty bash commands are not allowed during planning.";
-	}
-
-	if (PLANNING_MUTATING_BASH_PATTERNS.some((pattern) => pattern.test(trimmed))) {
-		return `Plannotator: bash commands that can modify files or system state are blocked during planning. Blocked: ${command}`;
-	}
-
-	if (!PLANNING_SAFE_BASH_PATTERNS.some((pattern) => pattern.test(trimmed))) {
-		return `Plannotator: bash is restricted to allowlisted read-only inspection commands during planning. Blocked: ${command}`;
-	}
-
-	return null;
-}
-
-export function getPlanningApplyPatchBlockReason(
-	patch: string,
+export function getPlanningToolBlockResult(
+	toolName: string,
+	input: Record<string, unknown>,
 	cwd: string,
 	allowedPath: string,
 	planFilePath: string,
-): string | null {
-	const trimmed = patch.trim();
-	if (!trimmed) {
-		return "Plannotator: empty apply_patch payloads are not allowed during planning.";
+): { block: true; reason: string } | null {
+	if (toolName === "bash") {
+		const command = typeof input.command === "string" ? input.command : "";
+		const trimmed = command.trim();
+		if (!trimmed) {
+			return { block: true, reason: "Plannotator: empty bash commands are not allowed during planning." };
+		}
+
+		if (PLANNING_MUTATING_BASH_PATTERNS.some((pattern) => pattern.test(trimmed))) {
+			return {
+				block: true,
+				reason: `Plannotator: bash commands that can modify files or system state are blocked during planning. Blocked: ${command}`,
+			};
+		}
+
+		if (!PLANNING_SAFE_BASH_PATTERNS.some((pattern) => pattern.test(trimmed))) {
+			return {
+				block: true,
+				reason: `Plannotator: bash is restricted to allowlisted read-only inspection commands during planning. Blocked: ${command}`,
+			};
+		}
 	}
 
-	const actions: Array<{ kind: "update" | "add" | "delete"; path: string }> = [];
-	for (const line of trimmed.split(/\r?\n/)) {
-		if (line.startsWith("*** Move to: ")) {
-			return `Plannotator: apply_patch cannot move files during planning. Patch only ${planFilePath}.`;
+	if (toolName === "apply_patch") {
+		const patch = typeof input.patch === "string" ? input.patch : "";
+		const trimmed = patch.trim();
+		if (!trimmed) {
+			return { block: true, reason: "Plannotator: empty apply_patch payloads are not allowed during planning." };
 		}
-		if (line.startsWith("*** Update File: ")) {
-			actions.push({ kind: "update", path: line.slice("*** Update File: ".length).trim() });
-			continue;
-		}
-		if (line.startsWith("*** Add File: ")) {
-			actions.push({ kind: "add", path: line.slice("*** Add File: ".length).trim() });
-			continue;
-		}
-		if (line.startsWith("*** Delete File: ")) {
-			actions.push({ kind: "delete", path: line.slice("*** Delete File: ".length).trim() });
-		}
-	}
 
-	if (actions.length === 0) {
-		return "Plannotator: apply_patch is allowed during planning only for patches that target the active plan file.";
-	}
+		const actions: Array<{ kind: "update" | "add" | "delete"; path: string }> = [];
+		for (const line of trimmed.split(/\r?\n/)) {
+			if (line.startsWith("*** Move to: ")) {
+				return {
+					block: true,
+					reason: `Plannotator: apply_patch cannot move files during planning. Patch only ${planFilePath}.`,
+				};
+			}
+			if (line.startsWith("*** Update File: ")) {
+				actions.push({ kind: "update", path: line.slice("*** Update File: ".length).trim() });
+				continue;
+			}
+			if (line.startsWith("*** Add File: ")) {
+				actions.push({ kind: "add", path: line.slice("*** Add File: ".length).trim() });
+				continue;
+			}
+			if (line.startsWith("*** Delete File: ")) {
+				actions.push({ kind: "delete", path: line.slice("*** Delete File: ".length).trim() });
+			}
+		}
 
-	for (const action of actions) {
-		if (!action.path) {
-			return "Plannotator: malformed apply_patch path during planning.";
+		if (actions.length === 0) {
+			return {
+				block: true,
+				reason: "Plannotator: apply_patch is allowed during planning only for patches that target the active plan file.",
+			};
 		}
-		if (action.kind === "delete") {
-			return `Plannotator: apply_patch cannot delete files during planning. Patch only ${planFilePath}.`;
-		}
-		const targetPath = resolve(cwd, action.path);
-		if (targetPath !== allowedPath) {
-			return `Plannotator: apply_patch is restricted to ${planFilePath} during planning. Blocked: ${action.path}`;
+
+		for (const action of actions) {
+			if (!action.path) {
+				return { block: true, reason: "Plannotator: malformed apply_patch path during planning." };
+			}
+			if (action.kind === "delete") {
+				return {
+					block: true,
+					reason: `Plannotator: apply_patch cannot delete files during planning. Patch only ${planFilePath}.`,
+				};
+			}
+			const targetPath = resolve(cwd, action.path);
+			if (targetPath !== allowedPath) {
+				return {
+					block: true,
+					reason: `Plannotator: apply_patch is restricted to ${planFilePath} during planning. Blocked: ${action.path}`,
+				};
+			}
 		}
 	}
 
 	return null;
-}
-
-export function createRuntimeGuard(runtimeToken = `${Date.now()}:${Math.random().toString(36).slice(2)}`): {
-	activate(): void;
-	isActive(): boolean;
-	deactivate(): void;
-} {
-	const runtimeRegistry = getRuntimeRegistry();
-
-	return {
-		activate(): void {
-			runtimeRegistry.activeRuntimeToken = runtimeToken;
-		},
-		isActive(): boolean {
-			return runtimeRegistry.activeRuntimeToken === runtimeToken;
-		},
-		deactivate(): void {
-			if (runtimeRegistry.activeRuntimeToken === runtimeToken) {
-				runtimeRegistry.activeRuntimeToken = null;
-			}
-		},
-	};
 }
 
 export function clearPhaseStatus(ctx: ExtensionContext): void {
 	ctx.ui.setStatus(STATUS_KEY, undefined);
-}
-
-export function clearPhaseHeader(ctx: ExtensionContext): void {
-	if (!ctx.hasUI) return;
-	ctx.ui.setHeader(undefined);
 }
 
 export function renderPhaseWidget(ctx: ExtensionContext, phase: Phase): void {
@@ -219,8 +201,12 @@ export function renderPhaseWidget(ctx: ExtensionContext, phase: Phase): void {
 	clearPhaseWidget(ctx);
 }
 
-export function clearPhaseUi(ctx: ExtensionContext): void {
-	clearPhaseStatus(ctx);
-	clearPhaseWidget(ctx);
-	clearPhaseHeader(ctx);
+export function getSessionEntries(ctx: ExtensionContext): Array<{ type: string; customType?: string; data?: unknown }> {
+	const sessionManager = ctx.sessionManager as typeof ctx.sessionManager & {
+		getBranch?: () => Array<{ type: string; customType?: string; data?: unknown }>;
+	};
+	if (typeof sessionManager.getBranch === "function") {
+		return sessionManager.getBranch();
+	}
+	return sessionManager.getEntries() as Array<{ type: string; customType?: string; data?: unknown }>;
 }

@@ -41,10 +41,11 @@ Good seam examples:
 
 - `seam.getDefaultPlanPath()`
 - `seam.resolveGlobalPlanPath(...)`
-- `seam.createRuntimeGuard()`
 - `seam.clearPhaseStatus(ctx)`
 - `seam.renderPhaseWidget(ctx, phase)`
-- `seam.getPlanningApplyPatchBlockReason(...)`
+- `seam.getPlanningToolBlockResult(...)`
+- `seam.getDefaultPlanningMessage(...)`
+- `seam.getSessionEntries(ctx)`
 
 ## What Is Not A Seam
 
