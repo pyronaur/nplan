@@ -55,9 +55,9 @@
 	// },
 
 	// Preserve the existing node:test interaction surface under gate.
-	// test: {
-	// 	name: 'Run tests',
-	// 	match: ['*.ts', 'tests/**/*.ts'],
-	// 	run: 'node --test tests/*.test.ts',
-	// },
+	test: {
+		name: 'Run tests',
+		match: ['*.ts', 'tests/**/*.ts'],
+		run: 'node --test tests/*.test.ts',
+	},
 }
