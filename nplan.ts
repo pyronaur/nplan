@@ -16,6 +16,7 @@ import {
 	getDefaultPlanningMessage,
 	getDefaultPlanPath,
 	getPersistedPlanState,
+	getPhaseNotification,
 	getPlanningToolBlockResult,
 	getPromptTodoStats,
 	getSessionEntries,
@@ -75,7 +76,7 @@ function getPhaseProfile(runtime: Runtime): ReturnType<typeof resolvePhaseProfil
 
 function updateUi(runtime: Runtime, ctx: ExtensionContext): void {
 	clearPhaseStatus(ctx);
-	renderPhaseWidget(ctx, runtime.phase);
+	renderPhaseWidget(ctx, runtime.phase, runtime.planFilePath);
 }
 
 function persistState(runtime: Runtime): void {
@@ -170,12 +171,19 @@ function notifyReviewAvailability(ctx: ExtensionContext): void {
 	}
 }
 
+function notifyPhase(runtime: Runtime, ctx: ExtensionContext): void {
+	const message = getPhaseNotification(runtime.phase, runtime.planFilePath);
+	if (message) {
+		ctx.ui.notify(message);
+	}
+}
+
 async function enterPlanning(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
 	runtime.phase = "planning";
 	captureSavedState(runtime, ctx);
 	await applyPhaseConfig(runtime, ctx, { restoreSavedState: false });
 	persistState(runtime);
-	ctx.ui.notify(`Plan mode enabled. Write your plan to ${runtime.planFilePath}.`);
+	notifyPhase(runtime, ctx);
 	notifyReviewAvailability(ctx);
 }
 
@@ -213,6 +221,7 @@ async function enterExecuting(runtime: Runtime, ctx: ExtensionContext): Promise<
 	await applyPhaseConfig(runtime, ctx, { restoreSavedState: true });
 	runtime.pi.appendEntry("plan-execute", { planFilePath: runtime.planFilePath });
 	persistState(runtime);
+	notifyPhase(runtime, ctx);
 }
 
 async function readPlanPathArg(
@@ -273,6 +282,7 @@ async function handlePlanFileCommand(
 
 	runtime.planFilePath = resolveGlobalPlanPath(targetPath);
 	persistState(runtime);
+	updateUi(runtime, ctx);
 	ctx.ui.notify(`Plan file changed to: ${runtime.planFilePath}`);
 }
 
@@ -418,6 +428,7 @@ async function handleSessionStart(runtime: Runtime, ctx: ExtensionContext): Prom
 
 	await syncSessionPhase(runtime, ctx);
 	updateUi(runtime, ctx);
+	notifyPhase(runtime, ctx);
 	persistState(runtime);
 }
 

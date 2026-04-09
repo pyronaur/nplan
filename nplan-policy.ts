@@ -36,6 +36,7 @@ type ApplyPatchAction = {
 
 const STATUS_KEY = "plan";
 const WIDGET_KEY = "plan-progress";
+const WIDGET_GAP = 4;
 
 const PLANNING_MUTATING_BASH_PATTERNS = [
 	/\brm\b/i,
@@ -201,6 +202,16 @@ function hasPlanBanner(content: unknown): boolean {
 
 		return typeof item.text === "string" && item.text.includes("[PLAN -");
 	});
+}
+
+function getPhaseLabel(phase: Phase): string | undefined {
+	if (phase === "planning") {
+		return "plan mode";
+	}
+	if (phase === "executing") {
+		return "implementation phase";
+	}
+	return undefined;
 }
 
 function slugifyPlanName(input: string): string {
@@ -392,18 +403,18 @@ export function clearPhaseStatus(ctx: ExtensionContext): void {
 	ctx.ui.setStatus(STATUS_KEY, undefined);
 }
 
-export function renderPhaseWidget(ctx: ExtensionContext, phase: Phase): void {
-	if (phase === "planning") {
-		ctx.ui.setWidget(WIDGET_KEY, [ctx.ui.theme.fg("warning", "plan mode")]);
+export function renderPhaseWidget(ctx: ExtensionContext, phase: Phase, planFilePath: string): void {
+	if (phase !== "planning" && phase !== "executing") {
+		ctx.ui.setWidget(WIDGET_KEY, undefined);
 		return;
 	}
 
-	if (phase === "executing") {
-		ctx.ui.setWidget(WIDGET_KEY, [ctx.ui.theme.fg("accent", "implementation phase")]);
-		return;
-	}
-
-	ctx.ui.setWidget(WIDGET_KEY, undefined);
+	ctx.ui.setWidget(WIDGET_KEY, () => ({
+		invalidate() {},
+		render(width: number) {
+			return buildPhaseWidgetLines(phase, planFilePath, width);
+		},
+	}));
 }
 
 export function getSessionEntries(ctx: ExtensionContext): SessionEntry[] {
@@ -436,4 +447,33 @@ export function shouldKeepContextMessage(message: unknown): boolean {
 	}
 
 	return !hasPlanBanner(message.content);
+}
+
+export function getPhaseNotification(phase: Phase, planFilePath: string): string | undefined {
+	if (phase === "planning") {
+		return `Plan mode enabled. Plan file: ${planFilePath}`;
+	}
+	if (phase === "executing") {
+		return `Implementation phase enabled. Plan file: ${planFilePath}`;
+	}
+	return undefined;
+}
+
+export function formatPhaseWidgetLines(
+	phase: Phase,
+	planFilePath: string,
+	width: number,
+): string[] {
+	const label = getPhaseLabel(phase);
+	if (!label) {
+		return [];
+	}
+	const lineWidth = Math.max(width, 0);
+	const minWidth = label.length + WIDGET_GAP + planFilePath.length;
+	if (lineWidth >= minWidth) {
+		const spaces = " ".repeat(lineWidth - label.length - planFilePath.length);
+		return [`${label}${spaces}${planFilePath}`];
+	}
+
+	return [label, planFilePath];
 }

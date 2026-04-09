@@ -3,7 +3,9 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
+	formatPhaseWidgetLines,
 	getDefaultPlanPath,
+	getPhaseNotification,
 	getPlanningToolBlockResult,
 	resolveGlobalPlanPath,
 } from "../nplan-policy.ts";
@@ -83,4 +85,25 @@ void test("getPlanningToolBlockResult only allows apply_patch on the active plan
 				"Plan mode: apply_patch is restricted to /repo/plan.md during planning. Blocked: src/app.ts",
 		},
 	);
+});
+
+void test("getPhaseNotification includes the absolute plan path for plan and implementation phases", () => {
+	assert.equal(
+		getPhaseNotification("planning", "/abs/path/plan.md"),
+		"Plan mode enabled. Plan file: /abs/path/plan.md",
+	);
+	assert.equal(
+		getPhaseNotification("executing", "/abs/path/plan.md"),
+		"Implementation phase enabled. Plan file: /abs/path/plan.md",
+	);
+});
+
+void test("formatPhaseWidgetLines right-aligns the plan path when there is enough width", () => {
+	assert.deepEqual(formatPhaseWidgetLines("planning", "/abs/path/plan.md", 40), [
+		"plan mode              /abs/path/plan.md",
+	]);
+	assert.deepEqual(formatPhaseWidgetLines("planning", "/abs/path/plan.md", 10), [
+		"plan mode",
+		"/abs/path/plan.md",
+	]);
 });
