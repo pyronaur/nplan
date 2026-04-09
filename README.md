@@ -1,100 +1,63 @@
 # nplan
 
-Local Pi fork of the Plannotator Pi extension shell.
+Local Pi extension that provides file-based plan mode with Plannotator CLI review.
 
 ## Goal
 
-Keep upstream Plannotator's mature plan/review behavior and browser UI, but expose a thinner local interface:
+Keep the current `nplan` interaction surface intact while removing the vendored upstream fork and git submodule:
 
 - `/plan`
 - `/plan-status`
 - `/plan-file`
-- no upstream default shortcut yet
-- no extra Plannotator review/annotate/archive commands in the UI
+- `--plan`
+- `--plan-file`
 - global plan storage under `~/.n/pi/plans/`
+- restricted planning tools with `plannotator_submit_plan`
+- execution unlock after approval
 
 ## Architecture
 
-`nplan` now owns a local fork of the upstream extension shell file:
+`nplan` is now fully local code. There is no vendored upstream extension tree and no git submodule.
 
-1. the upstream Plannotator repo is vendored as a git submodule at `vendor/plannotator`
-2. `index.ts` loads the local fork at `plannotator-fork.ts`
-3. `plannotator-fork.ts` stays structurally close to upstream `apps/pi-extension/index.ts`
-4. the fork continues to reuse vendored upstream support modules for config loading, event wiring, browser review, and tool scoping
+- `index.ts` loads `nplan.ts`
+- `nplan.ts` owns the extension lifecycle, commands, flags, state restore, tool gating, and plan submission flow
+- `nplan-config.ts` owns config loading, phase profile resolution, and prompt rendering
+- `nplan-policy.ts` owns global plan-path rules, planning prompt fallback text, planning tool restrictions, and phase UI rendering
+- `nplan-review.ts` owns the Plannotator CLI review transport
+- `nplan-tool-scope.ts` owns the planning tool surface
+- `nplan-feedback.ts` owns the plan-denial message template
 
-This keeps the owned behavior in one local file while avoiding a broader fork of the browser/server/runtime support code.
+## Review Flow
 
-Custom fork behavior is centralized in `nplan-seams.ts` and injected into the fork through narrow seam call sites.
+Plan review is handled through the `plannotator` CLI.
 
-## Repo layout
+- while planning, the agent writes to the active global plan file
+- `plannotator_submit_plan` reads that file and submits the plan body to `plannotator` on stdin
+- CLI approval switches the extension to execution mode
+- CLI denial returns revision feedback and keeps the extension in planning mode
+- when review is unavailable, `nplan` preserves the current auto-approve fallback behavior
 
-- `index.ts` — extension entrypoint
-- `plannotator-fork.ts` — local fork of the upstream extension shell
-- `nplan-seams.ts` — centralized seam-owned nplan behavior injected into the fork
-- `vendor/plannotator` — upstream git submodule
+## Config
 
-## Upstream build/update flow
+Config is loaded in this order:
 
-Initial setup:
+1. shipped internal defaults in `nplan-config.ts`
+2. `~/.pi/agent/plannotator.json`
+3. `.pi/plannotator.json` in the current repo
+
+Project config overrides global config. `null`, `[]`, and empty strings preserve the same clearing semantics used by the previous implementation.
+
+## Tests
+
+Run:
 
 ```bash
-cd ~/Projects/Tools/Pi/nplan
-npm install
-cd vendor/plannotator
-bun install
-bun run build:pi
+npm test
 ```
 
-Update upstream later:
+The test suite covers:
 
-```bash
-cd ~/Projects/Tools/Pi/nplan
-git submodule update --remote --merge vendor/plannotator
-cd vendor/plannotator
-bun install
-bun run build:pi
-cd ../..
-```
-
-## Loading in Pi
-
-Load only `nplan`, not the published `@plannotator/pi-extension` package.
-
-Use either:
-
-- a local extensions path pointing at `~/Projects/Tools/Pi/nplan`
-- or a Pi package/extension entry that loads this repo directory directly
-
-Pi should load `nplan/index.ts`, which then loads `plannotator-fork.ts`.
-
-## Behavioral notes
-
-Current `nplan` behavior is intentionally different from upstream in a few places:
-
-- only `plan`, `plan-status`, and `plan-file` are exposed
-- no default upstream shortcut is registered
-- plan files resolve to `~/.n/pi/plans/...`
-- todo / checklist / `[DONE:n]` tracking has been removed
-- planning state restore uses the current session branch, not the whole session tree
-- planning mode enforces:
-  - `write` only to the active plan file
-  - `edit` only to the active plan file
-  - `apply_patch` only when every touched path is the active plan file; file moves/deletes remain blocked
-  - `bash` only for allowlisted read-only inspection / safe web-fetching commands
-- a minimal above-editor phase indicator is shown only while active:
-  - `plan mode`
-  - `implementation phase`
-  - cleared when idle
-- the startup header and footer status line are not used for the persistent phase indicator
-- runtime activation is guarded so a newer loaded `nplan` instance supersedes stale older in-memory instances
-- `session_shutdown` explicitly clears the nplan header/status/widget UI so stale phase indicators do not survive reloads or session switches
-
-## When a tiny upstream patch would be justified
-
-A small upstream patch is justified only if we need behavior that cannot be reached cleanly from that boundary, for example:
-
-- changing hardcoded user-facing `/plannotator` strings inside deeper tool responses
-- adding first-class hooks around phase transitions
-- changing internal plan-mode behavior without wrapping the whole shell
-
-If that happens, prefer a tiny explicit hook in upstream `index.ts` over maintaining a broad fork.
+- config merge and prompt rendering behavior
+- planning tool scoping
+- global plan-path resolution and planning tool restrictions
+- Plannotator CLI request/response handling

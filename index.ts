@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import plannotator from "./plannotator-fork.ts";
+import nplanExtension from "./nplan.ts";
 
 export default function nplan(pi: ExtensionAPI): void {
-	plannotator(pi);
+	nplanExtension(pi);
 }

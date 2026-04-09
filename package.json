@@ -2,7 +2,10 @@
   "name": "nplan",
   "private": true,
   "type": "module",
-  "description": "Local Pi wrapper around upstream Plannotator",
+  "description": "Local Pi plan mode extension with Plannotator CLI review",
+  "scripts": {
+    "test": "node --test tests/*.test.ts"
+  },
   "pi": {
     "extensions": ["./index.ts"]
   },
