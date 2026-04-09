@@ -4,9 +4,6 @@ function getPhaseLabel(phase: Phase): string | undefined {
 	if (phase === "planning") {
 		return "⏸ plan";
 	}
-	if (phase === "executing") {
-		return "implementation phase";
-	}
 	return undefined;
 }
 
@@ -50,21 +47,20 @@ export function renderColoredPhaseWidgetLine(input: {
 	if (!label) {
 		return input.line;
 	}
-	const labelColor = input.phase === "planning" ? "warning" : "accent";
 	const left = input.line.match(/^\s*/)?.[0] ?? "";
 	const right = input.line.match(/\s*$/)?.[0] ?? "";
 	const body = input.line.slice(left.length, input.line.length - right.length);
 	if (body.includes(input.planFilePath)) {
 		const gap = body.slice(label.length, body.length - input.planFilePath.length);
-		return `${left}${input.theme.fg(labelColor, label)}${gap}${
+		return `${left}${input.theme.fg("warning", label)}${gap}${
 			input.theme.fg("dim", input.planFilePath)
 		}${right}`;
 	}
 	if (body === label) {
-		return `${left}${input.theme.fg(labelColor, label)}${right}`;
+		return `${left}${input.theme.fg("warning", label)}${right}`;
 	}
 	if (body === input.planFilePath) {
 		return `${left}${input.theme.fg("dim", input.planFilePath)}${right}`;
 	}
-	return `${left}${input.theme.fg(labelColor, body)}${right}`;
+	return `${left}${input.theme.fg("warning", body)}${right}`;
 }

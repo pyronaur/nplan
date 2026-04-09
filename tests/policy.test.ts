@@ -100,15 +100,12 @@ void test("getPlanningToolBlockResult only allows apply_patch on the active plan
 	);
 });
 
-void test("getPhaseNotification includes the absolute plan path for plan and implementation phases", () => {
+void test("getPhaseNotification includes the absolute plan path for planning only", () => {
 	assert.equal(
 		getPhaseNotification("planning", "/abs/path/plan.md"),
 		"Plan mode enabled. Plan file: /abs/path/plan.md",
 	);
-	assert.equal(
-		getPhaseNotification("executing", "/abs/path/plan.md"),
-		"Implementation phase enabled. Plan file: /abs/path/plan.md",
-	);
+	assert.equal(getPhaseNotification("idle", "/abs/path/plan.md"), undefined);
 });
 
 void test("getPersistedPlanState keeps the latest idle plan state with a null savedState", () => {

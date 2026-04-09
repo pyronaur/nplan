@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { isRecord, isThinkingLevel } from "./nplan-guards.ts";
 
-export type PhaseName = "planning" | "executing" | "reviewing";
+export type PhaseName = "planning" | "reviewing";
 export type RuntimePhase = PhaseName | "idle";
 
 export interface PhaseModelRef {
@@ -99,17 +99,10 @@ const INTERNAL_CONFIG: PlanConfig = {
 				+ "- Calling plan_submit when the plan is ready for review.\n\n"
 				+ "Do not end your turn without doing one of these two things.",
 		},
-		executing: {
-			systemPrompt: "[PLAN - EXECUTING PHASE]\n"
-				+ "Full tool access is enabled. Execute the plan from ${planFilePath}.\n\n"
-				+ "Remaining steps:\n"
-				+ "${todoList}\n\n"
-				+ "Execute each step in order. After completing a step, include [DONE:n] in your response where n is the step number.",
-		},
 	},
 };
 
-const PHASES: PhaseName[] = ["planning", "executing", "reviewing"];
+const PHASES: PhaseName[] = ["planning", "reviewing"];
 
 function getAgentConfigDir(): string {
 	const envDir = process.env.PI_CODING_AGENT_DIR;

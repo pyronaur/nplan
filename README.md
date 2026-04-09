@@ -14,7 +14,7 @@ Keep the current `nplan` interaction surface intact while removing the vendored 
 - `--plan-file`
 - global plan storage under `~/.n/pi/plans/`
 - restricted planning tools with `plan_submit`
-- execution unlock after approval
+- editor-prefilled implementation handoff after approval
 
 The leader action uses the current remembered plan file. Set the plan once with `/plan-file`, then `leader` + `p` toggles plan mode on and off without prompting for the path again.
 
@@ -36,7 +36,7 @@ Plan review is handled through the `plannotator` CLI.
 
 - while planning, the agent writes to the active global plan file
 - `plan_submit` reads that file and submits the plan body to `plannotator` on stdin
-- CLI approval switches the extension to execution mode
+- CLI approval exits plan mode, restores normal access, and prefills the input editor with `Implement the plan @<absolute-plan-path>`
 - CLI denial returns revision feedback and keeps the extension in planning mode
 - when review is unavailable, `nplan` preserves the current auto-approve fallback behavior
 

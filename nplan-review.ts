@@ -15,7 +15,7 @@ type SubmitPlanToolRuntime = {
 	isPlanning: () => boolean;
 	getPlanFilePath: () => string;
 	resolvePlanPath: (cwd: string) => string;
-	enterExecuting: (ctx: ExtensionContext) => Promise<void>;
+	onPlanApproved: (ctx: ExtensionContext, planFilePath: string) => Promise<void>;
 };
 
 interface PlannotatorReviewOutput {
@@ -310,7 +310,7 @@ async function runSubmitPlanTool(
 		return invalidPlan;
 	}
 	if (!ctx.hasUI || !hasPlannotatorCli()) {
-		await runtime.enterExecuting(ctx);
+		await runtime.onPlanApproved(ctx, planFilePath);
 		return makeToolResult(getAutoApproveMessage(ctx.hasUI), { approved: true });
 	}
 
@@ -327,7 +327,7 @@ async function runSubmitPlanTool(
 		return makeToolResult(message, { approved: false });
 	}
 	if (result.status === "approved") {
-		await runtime.enterExecuting(ctx);
+		await runtime.onPlanApproved(ctx, planFilePath);
 		return makeToolResult(getApprovedPlanMessage(planFilePath, result.feedback), {
 			approved: true,
 			feedback: result.feedback ?? undefined,
@@ -339,6 +339,10 @@ async function runSubmitPlanTool(
 		planDenyFeedback(feedbackText, PLAN_SUBMIT_TOOL, { planFilePath }),
 		{ approved: false, feedback: feedbackText },
 	);
+}
+
+export function getImplementationHandoffText(planFilePath: string): string {
+	return `Implement the plan @${planFilePath}`;
 }
 
 export function buildPlannotatorRequest(planFilePath: string): string {

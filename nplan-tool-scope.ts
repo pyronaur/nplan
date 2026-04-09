@@ -1,4 +1,4 @@
-export type Phase = "idle" | "planning" | "executing";
+export type Phase = "idle" | "planning";
 
 export const PLAN_SUBMIT_TOOL = "plan_submit";
 

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, test } from "node:test";
 import {
 	buildPlannotatorRequest,
+	getImplementationHandoffText,
 	parsePlannotatorReviewResult,
 	resetPlannotatorCliAvailabilityCache,
 	runPlanReviewCli,
@@ -117,6 +118,13 @@ void test("parsePlannotatorReviewResult rejects invalid stdout", () => {
 	assert.throws(() => {
 		parsePlannotatorReviewResult("not json");
 	}, /not valid JSON/);
+});
+
+void test("getImplementationHandoffText formats the approved plan path for the input editor", () => {
+	assert.equal(
+		getImplementationHandoffText("/abs/path/plan.md"),
+		"Implement the plan @/abs/path/plan.md",
+	);
 });
 
 void test("runPlanReviewCli sends the plan text to plannotator stdin and approves allow", async () => {

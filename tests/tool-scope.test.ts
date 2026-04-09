@@ -19,7 +19,6 @@ void test("getToolsForPhase strips planning-only tools outside planning", () => 
 	const leakedTools = ["read", "bash", "grep", PLAN_SUBMIT_TOOL, "write"];
 
 	assert.deepEqual(getToolsForPhase(leakedTools, "idle"), ["read", "bash", "grep", "write"]);
-	assert.deepEqual(getToolsForPhase(leakedTools, "executing"), ["read", "bash", "grep", "write"]);
 });
 
 void test("stripPlanningOnlyTools preserves unrelated tools", () => {

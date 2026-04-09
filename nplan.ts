@@ -19,7 +19,6 @@ import {
 	getPersistedPlanState,
 	getPhaseNotification,
 	getPlanningToolBlockResult,
-	getPromptTodoStats,
 	getSessionEntries,
 	renderPhaseWidget,
 	resolveGlobalPlanPath,
@@ -28,6 +27,7 @@ import {
 } from "./nplan-policy.ts";
 import {
 	createPlanSubmitTool,
+	getImplementationHandoffText,
 	getPlanReviewAvailabilityWarning,
 } from "./nplan-review.ts";
 import { getToolsForPhase, type Phase, stripPlanningOnlyTools } from "./nplan-tool-scope.ts";
@@ -76,7 +76,7 @@ function resolvePlanPath(runtime: Runtime, cwd: string): string {
 }
 
 function getPhaseProfile(runtime: Runtime): ReturnType<typeof resolvePhaseProfile> | undefined {
-	if (runtime.phase !== "planning" && runtime.phase !== "executing") {
+	if (runtime.phase !== "planning") {
 		return undefined;
 	}
 
@@ -149,7 +149,7 @@ async function applyPhaseConfig(
 	if (opts.restoreSavedState !== false && runtime.savedState) {
 		await restoreSavedState(runtime, ctx);
 	}
-	if (runtime.phase === "planning" || runtime.phase === "executing") {
+	if (runtime.phase === "planning") {
 		const baseTools = stripPlanningOnlyTools(
 			runtime.savedState?.activeTools ?? runtime.pi.getActiveTools(),
 		);
@@ -157,12 +157,7 @@ async function applyPhaseConfig(
 		for (const tool of profile?.activeTools ?? []) {
 			toolSet.add(tool);
 		}
-		if (runtime.phase === "planning") {
-			runtime.pi.setActiveTools(getToolsForPhase([...toolSet], runtime.phase));
-		}
-		if (runtime.phase === "executing") {
-			runtime.pi.setActiveTools([...toolSet]);
-		}
+		runtime.pi.setActiveTools(getToolsForPhase([...toolSet], runtime.phase));
 	}
 	if (profile?.model) {
 		await applyModelRef({ runtime, ref: profile.model, ctx, reason: runtime.phase });
@@ -196,13 +191,19 @@ async function enterPlanning(runtime: Runtime, ctx: ExtensionContext): Promise<v
 	notifyReviewAvailability(ctx);
 }
 
-async function exitToIdle(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
+async function exitToIdle(
+	runtime: Runtime,
+	ctx: ExtensionContext,
+	options: { notify?: boolean } = {},
+): Promise<void> {
 	runtime.phase = "idle";
 	await restoreSavedState(runtime, ctx);
 	runtime.savedState = null;
 	updateUi(runtime, ctx);
 	persistState(runtime);
-	ctx.ui.notify("Plan mode disabled. Full access restored.");
+	if (options.notify !== false) {
+		ctx.ui.notify("Plan mode disabled. Full access restored.");
+	}
 }
 
 async function togglePlanMode(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
@@ -229,17 +230,9 @@ async function syncSessionPhase(runtime: Runtime, ctx: ExtensionContext): Promis
 		await restoreIdleTools(runtime, ctx);
 		return;
 	}
-	if (runtime.phase === "planning" || runtime.phase === "executing") {
+	if (runtime.phase === "planning") {
 		await applyPhaseConfig(runtime, ctx, { restoreSavedState: true });
 	}
-}
-
-async function enterExecuting(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
-	runtime.phase = "executing";
-	await applyPhaseConfig(runtime, ctx, { restoreSavedState: true });
-	runtime.pi.appendEntry("plan-execute", { planFilePath: runtime.planFilePath });
-	persistState(runtime);
-	notifyPhase(runtime, ctx);
 }
 
 async function readPlanPathArg(
@@ -337,8 +330,13 @@ function registerSubmitTool(runtime: Runtime): void {
 		isPlanning: () => runtime.phase === "planning",
 		getPlanFilePath: () => runtime.planFilePath,
 		resolvePlanPath: (cwd) => resolvePlanPath(runtime, cwd),
-		enterExecuting: async (ctx) => {
-			await enterExecuting(runtime, ctx);
+		onPlanApproved: async (ctx, planFilePath) => {
+			await exitToIdle(runtime, ctx, { notify: false });
+			if (!ctx.hasUI) {
+				return;
+			}
+
+			ctx.ui.setEditorText(getImplementationHandoffText(planFilePath));
 		},
 	}));
 }
@@ -375,17 +373,14 @@ function registerToolCallHandler(runtime: Runtime): void {
 function registerBeforeAgentStartHandler(runtime: Runtime): void {
 	runtime.pi.on("before_agent_start", async (_event, ctx) => {
 		const profile = getPhaseProfile(runtime);
-		const todoStats = getPromptTodoStats();
 		if (profile?.systemPrompt) {
 			const rendered = renderTemplate(
 				profile.systemPrompt,
 				buildPromptVariables({
 					planFilePath: runtime.planFilePath,
 					phase: runtime.phase,
-					todoList: todoStats.todoList,
-					completedCount: todoStats.completedCount,
-					totalCount: todoStats.totalCount,
-					remainingCount: todoStats.remainingCount,
+					completedCount: 0,
+					totalCount: 0,
 				}),
 			);
 			if (rendered.unknownVariables.length > 0) {
