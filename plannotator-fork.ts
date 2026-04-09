@@ -12,10 +12,10 @@
  * - --plan-file flag to customize the plan file path
  * - Bash unrestricted during planning (prompt-guided)
  * - Write restricted to plan file only during planning
+ * - plannotator_submit_plan tool with browser-based visual approval
  * - [DONE:n] markers for execution progress tracking
  * - /plannotator-review command for code review
  * - /plannotator-annotate command for markdown annotation
- * - plannotator_submit_plan tool with browser-based visual approval
  */
 
 import {
@@ -203,6 +203,8 @@ export default function plannotator(pi: ExtensionAPI): void {
 	}
 
 	function persistState(): void {
+
+
 		pi.appendEntry("plannotator", { phase, planFilePath, savedState });
 	}
 
@@ -612,6 +614,8 @@ export default function plannotator(pi: ExtensionAPI): void {
 			// Non-interactive or no HTML: auto-approve
 			if (!ctx.hasUI || !hasPlanBrowserHtml()) {
 				phase = "executing";
+
+
 				await applyPhaseConfig(ctx, { restoreSavedState: true });
 				pi.appendEntry("plannotator-execute", { planFilePath });
 				persistState();
@@ -737,6 +741,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 		*/
 		// const todoStats = phase === "executing" ? formatTodoList(checklistItems) : formatTodoList([]);
 		const todoStats = seam.getPromptTodoStats();
+
 		if (profile?.systemPrompt) {
 			const rendered = renderTemplate(
 				profile.systemPrompt,
@@ -924,6 +929,8 @@ Execute each step in order. After completing a step, include [DONE:n] in your re
 			);
 			phase = "idle";
 			checklistItems = [];
+
+
 			await restoreSavedState(ctx);
 			savedState = null;
 			updateStatus(ctx);
@@ -961,12 +968,16 @@ Execute each step in order. After completing a step, include [DONE:n] in your re
 				(e: { type: string; customType?: string }) =>
 					e.type === "custom" && e.customType === "plannotator",
 			)
+
+
 			.pop() as { data?: PersistedPlannotatorState } | undefined;
 
 		if (stateEntry?.data) {
 			phase = stateEntry.data.phase ?? phase;
 			// planFilePath = stateEntry.data.planFilePath ?? planFilePath;
 			planFilePath = seam.resolveGlobalPlanPath(stateEntry.data.planFilePath ?? planFilePath);
+
+
 			savedState = stateEntry.data.savedState ?? savedState;
 		}
 
@@ -1005,6 +1016,9 @@ Execute each step in order. After completing a step, include [DONE:n] in your re
 			}
 		}
 		*/
+
+
+
 		if (phase === "planning") {
 			// checklistItems = [];
 			const warning = getPlanReviewAvailabilityWarning({ hasUI: ctx.hasUI, hasPlanHtml: hasPlanBrowserHtml() });
@@ -1026,6 +1040,7 @@ Execute each step in order. After completing a step, include [DONE:n] in your re
 		} else if (phase === "planning" || phase === "executing") {
 			await applyPhaseConfig(ctx, { restoreSavedState: true });
 		}
+
 		updateStatus(ctx);
 		updateWidget(ctx);
 		persistState();
