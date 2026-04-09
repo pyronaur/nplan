@@ -22,6 +22,7 @@ Do not grow custom logic inline in the fork.
 - Preserve upstream function names, ordering, and control flow where practical.
 - In the fork, custom behavior should come through `import * as seam from "./nplan-seams.ts"`.
 - Do not add other nplan-specific imports to the fork unless the user explicitly asks for a different structure.
+- Repo-mechanical fork edits are expected when needed to make the upstream file live in this repo layout. This includes fixing import paths to vendored upstream files and adding the single seam namespace import.
 - Put nplan-specific behavior into the seam module and call it from thin seam sites in the fork.
 - Prefer injecting policy through seam functions over rewriting upstream blocks.
 - If a customization can live outside the fork, move it out of the fork.
@@ -76,6 +77,7 @@ Those belong in `nplan-seam-internals.ts` or another internal module, not in `np
 - Prefer one seam call per replacement site.
 - Make seam calls precise single-site injections. Keep surrounding upstream logic in the fork when it still applies.
 - Do not pull adjacent caller logic into a seam just because it sits next to the replacement. Trimming, `|| undefined`, prompt fallback, and similar flow should stay in the fork unless that logic itself is the fork behavior.
+- Plain literal fork edits such as command renames, flag/help text renames, and other direct string substitutions are normal fork edits, not seam-design questions.
 - Name seam functions after the fork location or behavior they replace, not after an implementation detail hidden inside the seam.
 - Do not move lots of upstream code around just to make seams fit. Keep the upstream shape first, seam second.
 
@@ -124,3 +126,7 @@ If unsure where code belongs, decide by this question:
 
 - If yes, it belongs in `nplan-seams.ts`.
 - If no, it does not belong in `nplan-seams.ts`.
+
+## Interpretation
+
+- Use common sense. Do not apply these rules literally in ways that obscure the intended fork shape or block obvious repo-mechanical edits.
