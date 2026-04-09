@@ -1,17 +1,18 @@
 {
-	"path": ["."],
+	"path": [
+		"index.ts",
+		"nplan-config.ts",
+		"nplan-feedback.ts",
+		"nplan-guards.ts",
+		"nplan-policy.ts",
+		"nplan-review.ts",
+		"nplan-tool-scope.ts",
+		"nplan-widget.ts",
+		"nplan.ts"
+	],
 	"threshold": 0,
 	"reporters": ["console"],
 	"minTokens": 40,
 	"minLines": 3,
-	"formats": ["typescript"],
-	"ignore": [
-		"**/node_modules/**",
-		"**/.git/**",
-		"tests/**",
-		"docs/**",
-		"prompts/**",
-		"*.json",
-		"*.md"
-	]
+	"formats": ["typescript"]
 }
