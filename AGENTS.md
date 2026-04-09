@@ -12,7 +12,7 @@ Do not reintroduce vendored upstream extension code, git submodules, or a fork-s
 - Main extension runtime: `nplan.ts`
 - Config loading and prompt rendering: `nplan-config.ts`
 - nplan policy and restrictions: `nplan-policy.ts`
-- Plannotator CLI review transport: `nplan-review.ts`
+- CLI review transport: `nplan-review.ts`
 - Planning tool scoping: `nplan-tool-scope.ts`
 - Plan denial template: `nplan-feedback.ts`
 
@@ -35,7 +35,7 @@ Do not reintroduce vendored upstream extension code, git submodules, or a fork-s
 	- `edit` only to the active plan file
 	- `apply_patch` only when every touched path is the active plan file
 	- restricted read-only `bash` allowlist during planning
-- `plannotator_submit_plan` approval moves to execution mode
+- `plan_submit` approval moves to execution mode
 - denied plans return revision feedback and keep planning mode active
 - persisted phase state restores from the current session branch
 

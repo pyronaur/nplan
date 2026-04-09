@@ -35,7 +35,7 @@ test("getPlanningToolBlockResult blocks mutating bash commands during planning",
 		{
 			block: true,
 			reason:
-				"Plannotator: bash commands that can modify files or system state are blocked during planning. Blocked: npm install",
+				"Plan mode: bash commands that can modify files or system state are blocked during planning. Blocked: npm install",
 		},
 	);
 });
@@ -62,7 +62,7 @@ test("getPlanningToolBlockResult only allows apply_patch on the active plan file
 		),
 		{
 			block: true,
-			reason: "Plannotator: apply_patch is restricted to /repo/plan.md during planning. Blocked: src/app.ts",
+			reason: "Plan mode: apply_patch is restricted to /repo/plan.md during planning. Blocked: src/app.ts",
 		},
 	);
 });

@@ -5,7 +5,7 @@ import { Type } from "@mariozechner/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import {
 	buildPromptVariables,
-	loadPlannotatorConfig,
+	loadPlanConfig,
 	renderTemplate,
 	resolvePhaseProfile,
 } from "./nplan-config.ts";
@@ -38,7 +38,7 @@ type SavedPhaseState = {
 	thinkingLevel: ThinkingLevel;
 };
 
-type PersistedPlannotatorState = {
+type PersistedPlanState = {
 	phase: Phase;
 	planFilePath?: string;
 	savedState?: SavedPhaseState;
@@ -48,7 +48,7 @@ export default function nplan(pi: ExtensionAPI): void {
 	let phase: Phase = "idle";
 	let planFilePath = getDefaultPlanPath();
 	let savedState: SavedPhaseState | null = null;
-	let plannotatorConfig = {};
+	let planConfig = {};
 
 	pi.registerFlag("plan", {
 		description: "Start in plan mode (restricted exploration and planning)",
@@ -68,7 +68,7 @@ export default function nplan(pi: ExtensionAPI): void {
 
 	function getPhaseProfile(): ReturnType<typeof resolvePhaseProfile> | undefined {
 		if (phase === "planning" || phase === "executing") {
-			return resolvePhaseProfile(plannotatorConfig, phase);
+			return resolvePhaseProfile(planConfig, phase);
 		}
 		return undefined;
 	}
@@ -90,7 +90,7 @@ export default function nplan(pi: ExtensionAPI): void {
 	}
 
 	function persistState(): void {
-		pi.appendEntry("plannotator", { phase, planFilePath, savedState });
+		pi.appendEntry("plan", { phase, planFilePath, savedState });
 	}
 
 	async function applyModelRef(
@@ -100,13 +100,13 @@ export default function nplan(pi: ExtensionAPI): void {
 	): Promise<void> {
 		const model = ctx.modelRegistry.find(ref.provider, ref.id);
 		if (!model) {
-			ctx.ui.notify(`Plannotator: ${reason} model ${ref.provider}/${ref.id} not found.`, "warning");
+			ctx.ui.notify(`Plan mode: ${reason} model ${ref.provider}/${ref.id} not found.`, "warning");
 			return;
 		}
 
 		const success = await pi.setModel(model);
 		if (!success) {
-			ctx.ui.notify(`Plannotator: no API key for ${ref.provider}/${ref.id}.`, "warning");
+			ctx.ui.notify(`Plan mode: no API key for ${ref.provider}/${ref.id}.`, "warning");
 		}
 	}
 
@@ -158,7 +158,7 @@ export default function nplan(pi: ExtensionAPI): void {
 		captureSavedState(ctx);
 		await applyPhaseConfig(ctx, { restoreSavedState: false });
 		persistState();
-		ctx.ui.notify(`Plannotator: planning mode enabled. Write your plan to ${planFilePath}.`);
+		ctx.ui.notify(`Plan mode enabled. Write your plan to ${planFilePath}.`);
 		const warning = getPlanReviewAvailabilityWarning({ hasUI: ctx.hasUI });
 		if (warning) {
 			ctx.ui.notify(warning, "warning");
@@ -172,7 +172,7 @@ export default function nplan(pi: ExtensionAPI): void {
 		updateStatus(ctx);
 		updateWidget(ctx);
 		persistState();
-		ctx.ui.notify("Plannotator: disabled. Full access restored.");
+		ctx.ui.notify("Plan mode disabled. Full access restored.");
 	}
 
 	pi.registerCommand("plan", {
@@ -232,9 +232,9 @@ export default function nplan(pi: ExtensionAPI): void {
 		name: PLAN_SUBMIT_TOOL,
 		label: "Submit Plan",
 		description:
-			"Submit your Plannotator plan for user review. "
-			+ "Call this only while Plannotator planning mode is active, after drafting or revising your plan file. "
-			+ "The user will review the plan through the Plannotator CLI and can approve or deny with feedback. "
+			"Submit your plan for user review. "
+			+ "Call this only while plan mode is active, after drafting or revising your plan file. "
+			+ "The user will review the plan through the `plannotator` CLI and can approve or deny with feedback. "
 			+ "If denied, use the edit tool to make targeted revisions (not write), then call this again.",
 		parameters: Type.Object({
 			summary: Type.Optional(
@@ -288,7 +288,7 @@ export default function nplan(pi: ExtensionAPI): void {
 			if (!ctx.hasUI || !hasPlannotatorCli()) {
 				phase = "executing";
 				await applyPhaseConfig(ctx, { restoreSavedState: true });
-				pi.appendEntry("plannotator-execute", { planFilePath });
+				pi.appendEntry("plan-execute", { planFilePath });
 				persistState();
 				const autoApproveMessage = ctx.hasUI
 					? "Plan auto-approved (review unavailable). Execute the plan now."
@@ -323,7 +323,7 @@ export default function nplan(pi: ExtensionAPI): void {
 			if (result.status === "approved") {
 				phase = "executing";
 				await applyPhaseConfig(ctx, { restoreSavedState: true });
-				pi.appendEntry("plannotator-execute", { planFilePath });
+				pi.appendEntry("plan-execute", { planFilePath });
 				persistState();
 
 				if (result.feedback) {
@@ -378,7 +378,7 @@ export default function nplan(pi: ExtensionAPI): void {
 				const kind = event.toolName === "write" ? "writes" : "edits";
 				return {
 					block: true,
-					reason: `Plannotator: ${kind} are restricted to ${planFilePath} during planning. Blocked: ${event.input.path}`,
+						reason: `Plan mode: ${kind} are restricted to ${planFilePath} during planning. Blocked: ${event.input.path}`,
 				};
 			}
 		}
@@ -410,7 +410,7 @@ export default function nplan(pi: ExtensionAPI): void {
 			);
 			if (rendered.unknownVariables.length > 0) {
 				ctx.ui.notify(
-					`Plannotator: unknown template variables in ${phase} prompt: ${rendered.unknownVariables.join(", ")}`,
+					`Plan mode: unknown template variables in ${phase} prompt: ${rendered.unknownVariables.join(", ")}`,
 					"warning",
 				);
 			}
@@ -421,7 +421,7 @@ export default function nplan(pi: ExtensionAPI): void {
 		if (phase === "planning") {
 			return {
 				message: {
-					customType: "plannotator-context",
+					customType: "plan-context",
 					content: getDefaultPlanningMessage(planFilePath),
 					display: false,
 				},
@@ -437,7 +437,7 @@ export default function nplan(pi: ExtensionAPI): void {
 		return {
 			messages: event.messages.filter((message) => {
 				const entry = message as { customType?: string; role?: string; content?: unknown };
-				if (entry.customType === "plannotator-context") {
+				if (entry.customType === "plan-context") {
 					return false;
 				}
 				if (entry.role !== "user") {
@@ -445,11 +445,11 @@ export default function nplan(pi: ExtensionAPI): void {
 				}
 
 				if (typeof entry.content === "string") {
-					return !entry.content.includes("[PLANNOTATOR -");
+					return !entry.content.includes("[PLAN -");
 				}
 				if (Array.isArray(entry.content)) {
 					return !entry.content.some(
-						(content) => content.type === "text" && (content as { text?: string }).text?.includes("[PLANNOTATOR -"),
+						(content) => content.type === "text" && (content as { text?: string }).text?.includes("[PLAN -"),
 					);
 				}
 				return true;
@@ -463,10 +463,10 @@ export default function nplan(pi: ExtensionAPI): void {
 			planFilePath = resolveGlobalPlanPath(flagPlanFile);
 		}
 
-		const loadedConfig = loadPlannotatorConfig(ctx.cwd);
-		plannotatorConfig = loadedConfig.config;
+		const loadedConfig = loadPlanConfig(ctx.cwd);
+		planConfig = loadedConfig.config;
 		for (const warning of loadedConfig.warnings) {
-			ctx.ui.notify(`Plannotator config: ${warning}`, "warning");
+			ctx.ui.notify(`Plan config: ${warning}`, "warning");
 		}
 
 		if (pi.getFlag("plan") === true) {
@@ -475,8 +475,8 @@ export default function nplan(pi: ExtensionAPI): void {
 
 		const entries = getSessionEntries(ctx);
 		const stateEntry = entries
-			.filter((entry: { type: string; customType?: string }) => entry.type === "custom" && entry.customType === "plannotator")
-			.pop() as { data?: PersistedPlannotatorState } | undefined;
+			.filter((entry: { type: string; customType?: string }) => entry.type === "custom" && entry.customType === "plan")
+			.pop() as { data?: PersistedPlanState } | undefined;
 
 		if (stateEntry?.data) {
 			phase = stateEntry.data.phase ?? phase;

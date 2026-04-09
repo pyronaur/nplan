@@ -19,13 +19,13 @@ export interface PhaseProfile {
 	systemPrompt?: string | null;
 }
 
-export interface PlannotatorConfig {
+export interface PlanConfig {
 	defaults?: PhaseProfile | null;
 	phases?: Partial<Record<PhaseName, PhaseProfile | null>>;
 }
 
-export interface LoadedPlannotatorConfig {
-	config: PlannotatorConfig;
+export interface LoadedPlanConfig {
+	config: PlanConfig;
 	warnings: string[];
 }
 
@@ -51,15 +51,15 @@ export interface PromptRenderResult {
 	unknownVariables: string[];
 }
 
-const INTERNAL_CONFIG: PlannotatorConfig = {
+const INTERNAL_CONFIG: PlanConfig = {
 	phases: {
 		planning: {
-			activeTools: ["grep", "find", "ls", "plannotator_submit_plan"],
+			activeTools: ["grep", "find", "ls", "plan_submit"],
 			statusLabel: "⏸ plan",
 			systemPrompt:
-				"[PLANNOTATOR - PLANNING PHASE]\n"
+				"[PLAN - PLANNING PHASE]\n"
 				+ "You are in plan mode. You MUST NOT make any changes to the codebase — no edits, no commits, no installs, no destructive commands. The ONLY file you may write to or edit is the plan file: ${planFilePath}.\n\n"
-				+ "Available tools: read, bash, grep, find, ls, write (${planFilePath} only), edit (${planFilePath} only), plannotator_submit_plan\n\n"
+				+ "Available tools: read, bash, grep, find, ls, write (${planFilePath} only), edit (${planFilePath} only), plan_submit\n\n"
 				+ "Do not run destructive bash commands (rm, git push, npm install, etc.) — focus on reading and exploring the codebase. Web fetching (curl, wget) is fine.\n\n"
 				+ "## Iterative Planning Workflow\n\n"
 				+ "You are pair-planning with the user. Explore the code to build context, then write your findings into ${planFilePath} as you go. The plan starts as a rough skeleton and gradually becomes the final plan.\n\n"
@@ -87,21 +87,21 @@ const INTERNAL_CONFIG: PlannotatorConfig = {
 				+ "- **Verification** — How to test the changes end-to-end (run the code, run tests, manual checks).\n\n"
 				+ "Keep the plan concise enough to scan quickly, but detailed enough to execute effectively.\n\n"
 				+ "### When to Submit\n\n"
-				+ "Your plan is ready when you've addressed all ambiguities and it covers: what to change, which files to modify, what existing code to reuse, and how to verify. Call plannotator_submit_plan to submit for review.\n\n"
+				+ "Your plan is ready when you've addressed all ambiguities and it covers: what to change, which files to modify, what existing code to reuse, and how to verify. Call plan_submit to submit for review.\n\n"
 				+ "### Revising After Feedback\n\n"
 				+ "When the user denies a plan with feedback:\n"
 				+ "1. Read ${planFilePath} to see the current plan.\n"
 				+ "2. Use the edit tool to make targeted changes addressing the feedback — do NOT rewrite the entire file.\n"
-				+ "3. Call plannotator_submit_plan again to resubmit.\n\n"
+				+ "3. Call plan_submit again to resubmit.\n\n"
 				+ "### Ending Your Turn\n\n"
 				+ "Your turn should only end by either:\n"
 				+ "- Asking the user a question to gather more information.\n"
-				+ "- Calling plannotator_submit_plan when the plan is ready for review.\n\n"
+				+ "- Calling plan_submit when the plan is ready for review.\n\n"
 				+ "Do not end your turn without doing one of these two things.",
 		},
 		executing: {
 			systemPrompt:
-				"[PLANNOTATOR - EXECUTING PLAN]\n"
+				"[PLAN - EXECUTING PHASE]\n"
 				+ "Full tool access is enabled. Execute the plan from ${planFilePath}.\n\n"
 				+ "Remaining steps:\n"
 				+ "${todoList}\n\n"
@@ -258,7 +258,7 @@ function mergeProfile(
 	};
 }
 
-function mergeConfig(base: PlannotatorConfig, override: PlannotatorConfig): PlannotatorConfig {
+function mergeConfig(base: PlanConfig, override: PlanConfig): PlanConfig {
 	const phases: Partial<Record<PhaseName, PhaseProfile | null>> = {};
 	for (const phase of PHASES) {
 		const merged = mergeProfile(base.phases?.[phase], override.phases?.[phase]);
@@ -273,7 +273,7 @@ function mergeConfig(base: PlannotatorConfig, override: PlannotatorConfig): Plan
 	};
 }
 
-function loadConfigSource(path: string): { config: PlannotatorConfig; warning?: string } {
+function loadConfigSource(path: string): { config: PlanConfig; warning?: string } {
 	const parsed = readJsonFile(path);
 	if (parsed.error) {
 		return { config: {}, warning: parsed.error };
@@ -284,7 +284,7 @@ function loadConfigSource(path: string): { config: PlannotatorConfig; warning?: 
 		return { config: {} };
 	}
 
-	const config: PlannotatorConfig = {};
+	const config: PlanConfig = {};
 	if ("defaults" in raw) {
 		config.defaults = normalizeProfile(raw.defaults);
 	}
@@ -305,16 +305,16 @@ function loadConfigSource(path: string): { config: PlannotatorConfig; warning?: 
 	return { config };
 }
 
-export function loadPlannotatorConfig(cwd: string): LoadedPlannotatorConfig {
+export function loadPlanConfig(cwd: string): LoadedPlanConfig {
 	const warnings: string[] = [];
 
-	const globalPath = join(getAgentConfigDir(), "plannotator.json");
+	const globalPath = join(getAgentConfigDir(), "plan.json");
 	const globalConfig = loadConfigSource(globalPath);
 	if (globalConfig.warning) {
 		warnings.push(globalConfig.warning);
 	}
 
-	const projectPath = join(cwd, ".pi", "plannotator.json");
+	const projectPath = join(cwd, ".pi", "plan.json");
 	const projectConfig = loadConfigSource(projectPath);
 	if (projectConfig.warning) {
 		warnings.push(projectConfig.warning);
@@ -324,7 +324,7 @@ export function loadPlannotatorConfig(cwd: string): LoadedPlannotatorConfig {
 	return { config: merged, warnings };
 }
 
-export function resolvePhaseProfile(config: PlannotatorConfig, phase: PhaseName): ResolvedPhaseProfile {
+export function resolvePhaseProfile(config: PlanConfig, phase: PhaseName): ResolvedPhaseProfile {
 	const defaults = config.defaults ?? {};
 	const phaseConfig = config.phases?.[phase] ?? {};
 

@@ -253,12 +253,12 @@ export function hasPlannotatorCli(): boolean {
 
 export function getPlanReviewAvailabilityWarning(options: { hasUI: boolean }): string | null {
 	if (!options.hasUI) {
-		return "Plannotator: interactive plan review is unavailable in this session (no UI support). Plans will auto-approve on submit.";
+		return "Plan mode: interactive plan review is unavailable in this session (no UI support). Plans will auto-approve on submit.";
 	}
 	if (hasPlannotatorCli()) {
 		return null;
 	}
-	return "Plannotator: CLI plan review is unavailable in this session (missing `plannotator` on PATH). Plans will auto-approve on submit.";
+	return "Plan mode: CLI plan review is unavailable in this session (missing `plannotator` on PATH). Plans will auto-approve on submit.";
 }
 
 function startPlanReviewCli(input: StartPlanReviewInput): PlanReviewJob {

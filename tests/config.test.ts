@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	formatTodoList,
-	loadPlannotatorConfig,
+	loadPlanConfig,
 	renderTemplate,
 	resolvePhaseProfile,
 } from "../nplan-config.ts";
@@ -31,19 +31,19 @@ afterEach(() => {
 	}
 });
 
-test("loadPlannotatorConfig loads the shipped internal base config", () => {
+test("loadPlanConfig loads the shipped internal base config", () => {
 	const cwdDir = makeTempDir("nplan-config-base-");
 	process.env.HOME = makeTempDir("nplan-config-home-base-");
 
-	const loaded = loadPlannotatorConfig(cwdDir);
+	const loaded = loadPlanConfig(cwdDir);
 	const planning = resolvePhaseProfile(loaded.config, "planning");
 
 	assert.deepEqual(loaded.warnings, []);
 	assert.equal(planning.statusLabel, "⏸ plan");
-	assert.deepEqual(planning.activeTools, ["grep", "find", "ls", "plannotator_submit_plan"]);
+	assert.deepEqual(planning.activeTools, ["grep", "find", "ls", "plan_submit"]);
 });
 
-test("loadPlannotatorConfig allows a project config to clear an inherited phase with null", () => {
+test("loadPlanConfig allows a project config to clear an inherited phase with null", () => {
 	const homeDir = makeTempDir("nplan-config-home-null-");
 	const cwdDir = makeTempDir("nplan-config-cwd-null-");
 	process.env.HOME = homeDir;
@@ -53,21 +53,21 @@ test("loadPlannotatorConfig allows a project config to clear an inherited phase 
 	mkdirSync(globalConfigDir, { recursive: true });
 	mkdirSync(projectConfigDir, { recursive: true });
 	writeFileSync(
-		join(globalConfigDir, "plannotator.json"),
+		join(globalConfigDir, "plan.json"),
 		JSON.stringify({
 			phases: { planning: { statusLabel: "global", activeTools: ["bash"] } },
 		}),
 		"utf-8",
 	);
 	writeFileSync(
-		join(projectConfigDir, "plannotator.json"),
+		join(projectConfigDir, "plan.json"),
 		JSON.stringify({
 			phases: { planning: null },
 		}),
 		"utf-8",
 	);
 
-	const loaded = loadPlannotatorConfig(cwdDir);
+	const loaded = loadPlanConfig(cwdDir);
 	const planning = resolvePhaseProfile(loaded.config, "planning");
 
 	assert.deepEqual(loaded.warnings, []);
@@ -75,7 +75,7 @@ test("loadPlannotatorConfig allows a project config to clear an inherited phase 
 	assert.equal(planning.activeTools, undefined);
 });
 
-test("loadPlannotatorConfig gives project config precedence over global config", () => {
+test("loadPlanConfig gives project config precedence over global config", () => {
 	const homeDir = makeTempDir("nplan-config-home-");
 	const cwdDir = makeTempDir("nplan-config-cwd-");
 	process.env.HOME = homeDir;
@@ -85,7 +85,7 @@ test("loadPlannotatorConfig gives project config precedence over global config",
 	mkdirSync(globalConfigDir, { recursive: true });
 	mkdirSync(projectConfigDir, { recursive: true });
 	writeFileSync(
-		join(globalConfigDir, "plannotator.json"),
+		join(globalConfigDir, "plan.json"),
 		JSON.stringify({
 			defaults: {
 				thinking: "low",
@@ -96,7 +96,7 @@ test("loadPlannotatorConfig gives project config precedence over global config",
 		"utf-8",
 	);
 	writeFileSync(
-		join(projectConfigDir, "plannotator.json"),
+		join(projectConfigDir, "plan.json"),
 		JSON.stringify({
 			defaults: { thinking: null, model: null },
 			phases: { planning: { statusLabel: "project", activeTools: [] } },
@@ -104,7 +104,7 @@ test("loadPlannotatorConfig gives project config precedence over global config",
 		"utf-8",
 	);
 
-	const loaded = loadPlannotatorConfig(cwdDir);
+	const loaded = loadPlanConfig(cwdDir);
 	const planning = resolvePhaseProfile(loaded.config, "planning");
 
 	assert.deepEqual(loaded.warnings, []);

@@ -1,6 +1,6 @@
 # nplan
 
-Local Pi extension that provides file-based plan mode with Plannotator CLI review.
+Local Pi extension that provides file-based plan mode with CLI review.
 
 ## Goal
 
@@ -12,7 +12,7 @@ Keep the current `nplan` interaction surface intact while removing the vendored 
 - `--plan`
 - `--plan-file`
 - global plan storage under `~/.n/pi/plans/`
-- restricted planning tools with `plannotator_submit_plan`
+- restricted planning tools with `plan_submit`
 - execution unlock after approval
 
 ## Architecture
@@ -23,7 +23,7 @@ Keep the current `nplan` interaction surface intact while removing the vendored 
 - `nplan.ts` owns the extension lifecycle, commands, flags, state restore, tool gating, and plan submission flow
 - `nplan-config.ts` owns config loading, phase profile resolution, and prompt rendering
 - `nplan-policy.ts` owns global plan-path rules, planning prompt fallback text, planning tool restrictions, and phase UI rendering
-- `nplan-review.ts` owns the Plannotator CLI review transport
+- `nplan-review.ts` owns the CLI review transport
 - `nplan-tool-scope.ts` owns the planning tool surface
 - `nplan-feedback.ts` owns the plan-denial message template
 
@@ -32,7 +32,7 @@ Keep the current `nplan` interaction surface intact while removing the vendored 
 Plan review is handled through the `plannotator` CLI.
 
 - while planning, the agent writes to the active global plan file
-- `plannotator_submit_plan` reads that file and submits the plan body to `plannotator` on stdin
+- `plan_submit` reads that file and submits the plan body to `plannotator` on stdin
 - CLI approval switches the extension to execution mode
 - CLI denial returns revision feedback and keeps the extension in planning mode
 - when review is unavailable, `nplan` preserves the current auto-approve fallback behavior
@@ -42,8 +42,8 @@ Plan review is handled through the `plannotator` CLI.
 Config is loaded in this order:
 
 1. shipped internal defaults in `nplan-config.ts`
-2. `~/.pi/agent/plannotator.json`
-3. `.pi/plannotator.json` in the current repo
+2. `~/.pi/agent/plan.json`
+3. `.pi/plan.json` in the current repo
 
 Project config overrides global config. `null`, `[]`, and empty strings preserve the same clearing semantics used by the previous implementation.
 
@@ -60,4 +60,4 @@ The test suite covers:
 - config merge and prompt rendering behavior
 - planning tool scoping
 - global plan-path resolution and planning tool restrictions
-- Plannotator CLI request/response handling
+- CLI request/response handling through `plannotator`

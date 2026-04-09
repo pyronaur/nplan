@@ -4,7 +4,7 @@ export interface PlanDenyFeedbackOptions {
 
 export function planDenyFeedback(
 	feedback: string,
-	toolName: string = "ExitPlanMode",
+	toolName: string = "plan_submit",
 	options?: PlanDenyFeedbackOptions,
 ): string {
 	const planFileRule = options?.planFilePath

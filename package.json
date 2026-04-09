@@ -2,7 +2,7 @@
   "name": "nplan",
   "private": true,
   "type": "module",
-  "description": "Local Pi plan mode extension with Plannotator CLI review",
+  "description": "Local Pi plan mode extension with CLI review",
   "scripts": {
     "test": "node --test tests/*.test.ts"
   },

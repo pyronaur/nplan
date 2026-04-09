@@ -5,8 +5,8 @@ import { PLAN_SUBMIT_TOOL, type Phase } from "./nplan-tool-scope.ts";
 
 export const DEFAULT_PLAN_NAME = "plan";
 
-const STATUS_KEY = "plannotator";
-const WIDGET_KEY = "plannotator-progress";
+const STATUS_KEY = "plan";
+const WIDGET_KEY = "plan-progress";
 
 const PLANNING_MUTATING_BASH_PATTERNS = [
 	/\brm\b/i,
@@ -162,7 +162,7 @@ export function resolveGlobalPlanPath(input?: string): string {
 }
 
 export function getDefaultPlanningMessage(planFilePath: string): string {
-	return `[PLANNOTATOR - PLANNING PHASE]\nYou are in plan mode. You MUST NOT make any changes to the codebase — no edits, no commits, no installs, no destructive commands. The ONLY file you may write to or edit is the plan file: ${planFilePath}.\n\nAvailable tools: read, bash, grep, find, ls, write (${planFilePath} only), edit (${planFilePath} only), ${PLAN_SUBMIT_TOOL}\n\nThe apply_patch tool may be used during planning only when the patch touches the active plan file and nothing else. Moving or deleting files with apply_patch is blocked during planning.\n\nBash is restricted to read-only inspection and safe web-fetching commands during planning. Do not run destructive bash commands (rm, git push, npm install, etc.). Web fetching (curl, wget -O -) is fine.\n\n## Iterative Planning Workflow\n\nYou are pair-planning with the user. Explore the code to build context, then write your findings into ${planFilePath} as you go. The plan starts as a rough skeleton and gradually becomes the final plan.\n\n### The Loop\n\nRepeat this cycle until the plan is complete:\n\n1. **Explore** — Use read, grep, find, ls, and bash to understand the codebase. Actively search for existing functions, utilities, and patterns that can be reused — avoid proposing new code when suitable implementations already exist.\n2. **Update the plan file** — After each discovery, immediately capture what you learned in ${planFilePath}. Don't wait until the end. Use write for the initial draft, then edit for all subsequent updates.\n3. **Ask the user** — When you hit an ambiguity or decision you can't resolve from code alone, ask. Then go back to step 1.\n\n### First Turn\n\nStart by quickly scanning key files to form an initial understanding of the task scope. Then write a skeleton plan (headers and rough notes) and ask the user your first round of questions. Don't explore exhaustively before engaging the user.\n\n### Asking Good Questions\n\n- Never ask what you could find out by reading the code.\n- Batch related questions together.\n- Focus on things only the user can answer: requirements, preferences, tradeoffs, edge-case priorities.\n- Scale depth to the task — a vague feature request needs many rounds; a focused bug fix may need one or none.\n\n### Plan File Structure\n\nYour plan file should use markdown with clear sections:\n- **Context** — Why this change is being made: the problem, what prompted it, the intended outcome.\n- **Approach** — Your recommended approach only, not all alternatives considered.\n- **Files to modify** — List the critical file paths that will be changed.\n- **Reuse** — Reference existing functions and utilities you found, with their file paths.\n- **Steps** — Ordered implementation steps written as plain list items.\n- **Verification** — How to test the changes end-to-end (run the code, run tests, manual checks).\n\nKeep the plan concise enough to scan quickly, but detailed enough to execute effectively.\n\n### When to Submit\n\nYour plan is ready when you've addressed all ambiguities and it covers: what to change, which files to modify, what existing code to reuse, and how to verify. Call ${PLAN_SUBMIT_TOOL} to submit for review.\n\n### Revising After Feedback\n\nWhen the user denies a plan with feedback:\n1. Read ${planFilePath} to see the current plan.\n2. Use the edit tool to make targeted changes addressing the feedback — do NOT rewrite the entire file.\n3. Call ${PLAN_SUBMIT_TOOL} again to resubmit.\n\n### Ending Your Turn\n\nYour turn should only end by either:\n- Asking the user a question to gather more information.\n- Calling ${PLAN_SUBMIT_TOOL} when the plan is ready for review.\n\nDo not end your turn without doing one of these two things.`;
+	return `[PLAN - PLANNING PHASE]\nYou are in plan mode. You MUST NOT make any changes to the codebase — no edits, no commits, no installs, no destructive commands. The ONLY file you may write to or edit is the plan file: ${planFilePath}.\n\nAvailable tools: read, bash, grep, find, ls, write (${planFilePath} only), edit (${planFilePath} only), ${PLAN_SUBMIT_TOOL}\n\nThe apply_patch tool may be used during planning only when the patch touches the active plan file and nothing else. Moving or deleting files with apply_patch is blocked during planning.\n\nBash is restricted to read-only inspection and safe web-fetching commands during planning. Do not run destructive bash commands (rm, git push, npm install, etc.). Web fetching (curl, wget -O -) is fine.\n\n## Iterative Planning Workflow\n\nYou are pair-planning with the user. Explore the code to build context, then write your findings into ${planFilePath} as you go. The plan starts as a rough skeleton and gradually becomes the final plan.\n\n### The Loop\n\nRepeat this cycle until the plan is complete:\n\n1. **Explore** — Use read, grep, find, ls, and bash to understand the codebase. Actively search for existing functions, utilities, and patterns that can be reused — avoid proposing new code when suitable implementations already exist.\n2. **Update the plan file** — After each discovery, immediately capture what you learned in ${planFilePath}. Don't wait until the end. Use write for the initial draft, then edit for all subsequent updates.\n3. **Ask the user** — When you hit an ambiguity or decision you can't resolve from code alone, ask. Then go back to step 1.\n\n### First Turn\n\nStart by quickly scanning key files to form an initial understanding of the task scope. Then write a skeleton plan (headers and rough notes) and ask the user your first round of questions. Don't explore exhaustively before engaging the user.\n\n### Asking Good Questions\n\n- Never ask what you could find out by reading the code.\n- Batch related questions together.\n- Focus on things only the user can answer: requirements, preferences, tradeoffs, edge-case priorities.\n- Scale depth to the task — a vague feature request needs many rounds; a focused bug fix may need one or none.\n\n### Plan File Structure\n\nYour plan file should use markdown with clear sections:\n- **Context** — Why this change is being made: the problem, what prompted it, the intended outcome.\n- **Approach** — Your recommended approach only, not all alternatives considered.\n- **Files to modify** — List the critical file paths that will be changed.\n- **Reuse** — Reference existing functions and utilities you found, with their file paths.\n- **Steps** — Ordered implementation steps written as plain list items.\n- **Verification** — How to test the changes end-to-end (run the code, run tests, manual checks).\n\nKeep the plan concise enough to scan quickly, but detailed enough to execute effectively.\n\n### When to Submit\n\nYour plan is ready when you've addressed all ambiguities and it covers: what to change, which files to modify, what existing code to reuse, and how to verify. Call ${PLAN_SUBMIT_TOOL} to submit for review.\n\n### Revising After Feedback\n\nWhen the user denies a plan with feedback:\n1. Read ${planFilePath} to see the current plan.\n2. Use the edit tool to make targeted changes addressing the feedback — do NOT rewrite the entire file.\n3. Call ${PLAN_SUBMIT_TOOL} again to resubmit.\n\n### Ending Your Turn\n\nYour turn should only end by either:\n- Asking the user a question to gather more information.\n- Calling ${PLAN_SUBMIT_TOOL} when the plan is ready for review.\n\nDo not end your turn without doing one of these two things.`;
 }
 
 export function getPromptTodoStats(): {
@@ -185,20 +185,20 @@ export function getPlanningToolBlockResult(
 		const command = typeof input.command === "string" ? input.command : "";
 		const trimmed = command.trim();
 		if (!trimmed) {
-			return { block: true, reason: "Plannotator: empty bash commands are not allowed during planning." };
+			return { block: true, reason: "Plan mode: empty bash commands are not allowed during planning." };
 		}
 
 		if (PLANNING_MUTATING_BASH_PATTERNS.some((pattern) => pattern.test(trimmed))) {
 			return {
 				block: true,
-				reason: `Plannotator: bash commands that can modify files or system state are blocked during planning. Blocked: ${command}`,
+				reason: `Plan mode: bash commands that can modify files or system state are blocked during planning. Blocked: ${command}`,
 			};
 		}
 
 		if (!PLANNING_SAFE_BASH_PATTERNS.some((pattern) => pattern.test(trimmed))) {
 			return {
 				block: true,
-				reason: `Plannotator: bash is restricted to allowlisted read-only inspection commands during planning. Blocked: ${command}`,
+				reason: `Plan mode: bash is restricted to allowlisted read-only inspection commands during planning. Blocked: ${command}`,
 			};
 		}
 	}
@@ -207,7 +207,7 @@ export function getPlanningToolBlockResult(
 		const patch = typeof input.patch === "string" ? input.patch : "";
 		const trimmed = patch.trim();
 		if (!trimmed) {
-			return { block: true, reason: "Plannotator: empty apply_patch payloads are not allowed during planning." };
+			return { block: true, reason: "Plan mode: empty apply_patch payloads are not allowed during planning." };
 		}
 
 		const actions: Array<{ kind: "update" | "add" | "delete"; path: string }> = [];
@@ -215,7 +215,7 @@ export function getPlanningToolBlockResult(
 			if (line.startsWith("*** Move to: ")) {
 				return {
 					block: true,
-					reason: `Plannotator: apply_patch cannot move files during planning. Patch only ${planFilePath}.`,
+					reason: `Plan mode: apply_patch cannot move files during planning. Patch only ${planFilePath}.`,
 				};
 			}
 			if (line.startsWith("*** Update File: ")) {
@@ -234,25 +234,25 @@ export function getPlanningToolBlockResult(
 		if (actions.length === 0) {
 			return {
 				block: true,
-				reason: "Plannotator: apply_patch is allowed during planning only for patches that target the active plan file.",
+				reason: "Plan mode: apply_patch is allowed during planning only for patches that target the active plan file.",
 			};
 		}
 
 		for (const action of actions) {
 			if (!action.path) {
-				return { block: true, reason: "Plannotator: malformed apply_patch path during planning." };
+				return { block: true, reason: "Plan mode: malformed apply_patch path during planning." };
 			}
 			if (action.kind === "delete") {
 				return {
 					block: true,
-					reason: `Plannotator: apply_patch cannot delete files during planning. Patch only ${planFilePath}.`,
+					reason: `Plan mode: apply_patch cannot delete files during planning. Patch only ${planFilePath}.`,
 				};
 			}
 			const targetPath = resolve(cwd, action.path);
 			if (targetPath !== allowedPath) {
 				return {
 					block: true,
-					reason: `Plannotator: apply_patch is restricted to ${planFilePath} during planning. Blocked: ${action.path}`,
+					reason: `Plan mode: apply_patch is restricted to ${planFilePath} during planning. Blocked: ${action.path}`,
 				};
 			}
 		}

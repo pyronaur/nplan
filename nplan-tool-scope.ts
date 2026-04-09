@@ -1,6 +1,6 @@
 export type Phase = "idle" | "planning" | "executing";
 
-export const PLAN_SUBMIT_TOOL = "plannotator_submit_plan";
+export const PLAN_SUBMIT_TOOL = "plan_submit";
 export const PLANNING_DISCOVERY_TOOLS = ["grep", "find", "ls"] as const;
 
 const PLANNING_ONLY_TOOLS = new Set<string>([PLAN_SUBMIT_TOOL]);
