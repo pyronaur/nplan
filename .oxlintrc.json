@@ -2,21 +2,10 @@
 	"$schema": "./node_modules/oxlint/configuration_schema.json",
 	"plugins": ["eslint", "typescript", "unicorn", "oxc", "import"],
 	"jsPlugins": ["oxlint-plugin-inhuman"],
-	"ignorePatterns": [
-		"**/node_modules/**",
-		"**/dist/**",
-		"**/build/**",
-		"**/coverage/**",
-		"**/out/**",
-		"**/tmp/**",
-		"**/.tmp/**",
-		"**/temp/**",
-		"**/*.d.ts",
-		"**/*.json"
-	],
+	"ignorePatterns": ["**/node_modules/**"],
 	"overrides": [
 		{
-			"files": ["**/*.{ts,tsx,cts,mts,js,jsx,cjs,mjs}"],
+			"files": ["**/*.ts"],
 			"rules": {
 				"eslint/no-unused-vars": [
 					"error",
@@ -64,19 +53,6 @@
 				"typescript/no-unnecessary-type-assertion": "error",
 				"typescript/no-unsafe-type-assertion": "error",
 				"typescript/non-nullable-type-assertion-style": "error"
-			}
-		},
-		{
-			"files": [
-				"**/*.test.{ts,tsx,cts,mts,js,jsx,cjs,mjs}",
-				"**/__tests__/**/*.{ts,tsx,cts,mts,js,jsx,cjs,mjs}",
-				"**/test/**/*.{ts,tsx,cts,mts,js,jsx,cjs,mjs}",
-				"**/tests/**/*.{ts,tsx,cts,mts,js,jsx,cjs,mjs}"
-			],
-			"rules": {
-				"max-depth": ["error", { "max": 4 }],
-				"max-params": ["error", { "max": 5 }],
-				"max-lines": ["error", { "max": 750 }]
 			}
 		}
 	]

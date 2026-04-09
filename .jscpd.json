@@ -4,20 +4,14 @@
 	"reporters": ["console"],
 	"minTokens": 40,
 	"minLines": 3,
-	"formats": ["typescript", "javascript"],
+	"formats": ["typescript"],
 	"ignore": [
 		"**/node_modules/**",
 		"**/.git/**",
-		"**/dist/**",
-		"**/build/**",
-		"**/coverage/**",
-		"**/out/**",
-		"**/tmp/**",
-		"**/.tmp/**",
-		"**/temp/**",
-		"**/test/**",
-		"**/tests/**",
-		"**/__tests__/**",
-		"**/*.test.*"
+		"tests/**",
+		"docs/**",
+		"prompts/**",
+		"*.json",
+		"*.md"
 	]
 }

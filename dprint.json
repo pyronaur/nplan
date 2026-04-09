@@ -1,17 +1,7 @@
 {
 	"$schema": "https://dprint.dev/schemas/v0.json",
 	"lineWidth": 100,
-	"includes": [
-		"**/*.{ts,tsx,cts,mts,js,jsx,cjs,mjs}",
-		"!**/*.d.ts",
-		"!**/tmp/**",
-		"!**/.tmp/**",
-		"!**/temp/**",
-		"!**/dist/**",
-		"!**/build/**",
-		"!**/coverage/**",
-		"!**/out/**"
-	],
+	"includes": ["*.ts", "tests/**/*.ts"],
 	"excludes": [
 		"**/.git/**",
 		"**/node_modules/**"
