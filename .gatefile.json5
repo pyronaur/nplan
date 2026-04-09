@@ -1,0 +1,60 @@
+{
+	$use: './node_modules/.bin',
+
+	// Enable one gate at a time during the staged burn-down.
+	// Top-level runtime and test TypeScript formatting.
+	// format: {
+	// 	name: 'Check formatting',
+	// 	match: ['*.ts', 'tests/**/*.ts', 'dprint.json'],
+	// 	run: 'dprint check',
+	// },
+
+	// Strict Oxlint coverage for the current runtime and test source layout.
+	// lint: {
+	// 	name: 'Lint TypeScript',
+	// 	match: ['*.ts', 'tests/**/*.ts', '.oxlintrc.json', 'tsconfig.json'],
+	// 	run: {
+	// 		label: 'TypeScript lint',
+	// 		cmd: 'oxlint --type-aware --tsconfig tsconfig.json .',
+	// 		guidance: [
+	// 			'If addressing these lints would require unreasonable or hacky workarounds, stop and write a brief problem description to the user.',
+	// 			'Exceptions are rare and reserved for edge cases where no truly clean solution exists.',
+	// 		],
+	// 	},
+	// },
+
+	// Type safety for the extension entrypoint and test files.
+	// typecheck: {
+	// 	name: 'Typecheck TypeScript',
+	// 	match: ['*.ts', 'tests/**/*.ts', 'tsconfig.json'],
+	// 	run: 'tsc --noEmit',
+	// },
+
+	// Runtime-source duplication for the current top-level .ts source files.
+	// dupes_source: {
+	// 	name: 'Check source duplication',
+	// 	match: ['*.ts', '.jscpd.json'],
+	// 	run: 'jscpd --config .jscpd.json',
+	// },
+
+	// Test duplication kept separate from runtime source duplication.
+	// dupes_tests: {
+	// 	name: 'Check test duplication',
+	// 	match: ['tests/**/*.ts', '.jscpd.tests.json'],
+	// 	run: 'jscpd --config .jscpd.tests.json',
+	// },
+
+	// Knip reads package.json, tsconfig, and the TypeScript entry graph directly.
+	// unused: {
+	// 	name: 'Check unused code and dependencies',
+	// 	match: ['*.ts', 'tests/**/*.ts', 'knip.json', 'tsconfig.json', 'package.json'],
+	// 	run: 'knip',
+	// },
+
+	// Preserve the existing node:test interaction surface under gate.
+	// test: {
+	// 	name: 'Run tests',
+	// 	match: ['*.ts', 'tests/**/*.ts'],
+	// 	run: 'node --test tests/*.test.ts',
+	// },
+}
