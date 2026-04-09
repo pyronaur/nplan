@@ -48,11 +48,11 @@
 	},
 
 	// Knip reads package.json, tsconfig, and the TypeScript entry graph directly.
-	// unused: {
-	// 	name: 'Check unused code and dependencies',
-	// 	match: ['*.ts', 'tests/**/*.ts', 'knip.json', 'tsconfig.json', 'package.json'],
-	// 	run: 'knip',
-	// },
+	unused: {
+		name: 'Check unused code and dependencies',
+		match: ['*.ts', 'tests/**/*.ts', 'knip.json', 'tsconfig.json', 'package.json'],
+		run: 'knip',
+	},
 
 	// Preserve the existing node:test interaction surface under gate.
 	test: {

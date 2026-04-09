@@ -1,5 +1,14 @@
 {
-	"entry": ["index.ts"],
-	"project": ["tsconfig.json"],
-	"ignore": ["node_modules", "dist", "build", "coverage"]
+	"ignoreDependencies": ["dprint", "jscpd", "oxlint", "oxlint-tsgolint"],
+	"entry": [
+		"index.ts",
+		"nplan.ts",
+		"nplan-config.ts",
+		"nplan-feedback.ts",
+		"nplan-policy.ts",
+		"nplan-review.ts",
+		"nplan-tool-scope.ts",
+		"tests/*.test.ts"
+	],
+	"project": ["tsconfig.json"]
 }
