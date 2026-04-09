@@ -35,6 +35,7 @@ A seam is all of the following:
 - called directly from `plannotator-fork.ts` as `seam.someName(...)`
 - represents one deliberate fork injection point
 - describes the replaced or injected behavior from the fork's point of view
+- replaces only the fork-specific behavior at that site, not surrounding caller-side control flow
 
 Good seam examples:
 
@@ -55,6 +56,7 @@ These do not belong in `nplan-seams.ts`:
 - regex tables
 - small composition helpers used only by seams
 - runtime registry internals
+- caller-side trimming, empty-value normalization, prompt fallback, or other generic control-flow glue around a seam site
 
 Examples of non-seams:
 
@@ -70,6 +72,8 @@ Those belong in `nplan-seam-internals.ts` or another internal module, not in `np
 - When replacing upstream behavior in the fork, keep the upstream code in place as commented reference when that helps future sync work.
 - Put the active seam call immediately next to the commented upstream block so the difference is obvious during future compares.
 - Prefer one seam call per replacement site.
+- Make seam calls precise single-site injections. Keep surrounding upstream logic in the fork when it still applies.
+- Do not pull adjacent caller logic into a seam just because it sits next to the replacement. Trimming, `|| undefined`, prompt fallback, and similar flow should stay in the fork unless that logic itself is the fork behavior.
 - Name seam functions after the fork location or behavior they replace, not after an implementation detail hidden inside the seam.
 - Do not move lots of upstream code around just to make seams fit. Keep the upstream shape first, seam second.
 

@@ -32,12 +32,6 @@ export function resolveGlobalPlanPath(input?: string): string {
 	return join(getPlanStorageRoot(), `${planName}.md`);
 }
 
-export function resolvePlanInputForCommand(input?: string): string | undefined {
-	const trimmed = input?.trim();
-	if (!trimmed) return undefined;
-	return resolveGlobalPlanPath(trimmed);
-}
-
 export function resolvePlanInputPromptValue(input?: string): string {
 	return getPlanNameFromPath(input);
 }
