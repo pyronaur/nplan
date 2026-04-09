@@ -1,9 +1,13 @@
-import { isToolCallEventType, type ExtensionAPI, type ExtensionContext } from "@mariozechner/pi-coding-agent";
+import {
+	type ExtensionAPI,
+	type ExtensionContext,
+	isToolCallEventType,
+} from "@mariozechner/pi-coding-agent";
 import { resolve } from "node:path";
 import {
 	buildPromptVariables,
-	type PlanConfig,
 	loadPlanConfig,
+	type PlanConfig,
 	renderTemplate,
 	resolvePhaseProfile,
 } from "./nplan-config.ts";
@@ -11,13 +15,13 @@ import {
 	clearPhaseStatus,
 	getDefaultPlanningMessage,
 	getDefaultPlanPath,
-	type SavedPhaseState,
 	getPersistedPlanState,
 	getPlanningToolBlockResult,
 	getPromptTodoStats,
 	getSessionEntries,
 	renderPhaseWidget,
 	resolveGlobalPlanPath,
+	type SavedPhaseState,
 	shouldKeepContextMessage,
 } from "./nplan-policy.ts";
 import {
@@ -354,7 +358,9 @@ function registerBeforeAgentStartHandler(runtime: Runtime): void {
 			);
 			if (rendered.unknownVariables.length > 0) {
 				ctx.ui.notify(
-					`Plan mode: unknown template variables in ${runtime.phase} prompt: ${rendered.unknownVariables.join(", ")}`,
+					`Plan mode: unknown template variables in ${runtime.phase} prompt: ${
+						rendered.unknownVariables.join(", ")
+					}`,
 					"warning",
 				);
 			}

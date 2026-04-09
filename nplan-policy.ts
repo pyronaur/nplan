@@ -161,7 +161,10 @@ function isSavedPhaseState(value: unknown): value is SavedPhaseState {
 	if (!isRecord(value)) {
 		return false;
 	}
-	if (!Array.isArray(value.activeTools) || !value.activeTools.every((tool) => typeof tool === "string")) {
+	if (
+		!Array.isArray(value.activeTools)
+		|| !value.activeTools.every((tool) => typeof tool === "string")
+	) {
 		return false;
 	}
 	if (!isThinkingLevel(value.thinkingLevel)) {
@@ -207,7 +210,7 @@ function hasPlanBanner(content: unknown): boolean {
 			return false;
 		}
 
-	return typeof item.text === "string" && item.text.includes("[PLAN -");
+		return typeof item.text === "string" && item.text.includes("[PLAN -");
 	});
 }
 

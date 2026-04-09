@@ -1,5 +1,5 @@
-import { defineTool, type ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Type } from "@mariozechner/pi-ai";
+import { defineTool, type ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
