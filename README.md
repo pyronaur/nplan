@@ -24,14 +24,13 @@ Keep upstream Plannotator's mature plan/review behavior and browser UI, but expo
 
 This keeps the owned behavior in one local file while avoiding a broader fork of the browser/server/runtime support code.
 
-A separate `plan-path.ts` module owns the current path policy so future project-slug integration has a clean home.
+Custom fork behavior is centralized in `nplan-seams.ts` and injected into the fork through narrow seam call sites.
 
 ## Repo layout
 
 - `index.ts` — extension entrypoint
 - `plannotator-fork.ts` — local fork of the upstream extension shell
-- `plan-path.ts` — global plan-path policy
-- `shim.ts` — legacy wrapper-era code, not part of the active runtime path
+- `nplan-seams.ts` — centralized seam-owned nplan behavior injected into the fork
 - `vendor/plannotator` — upstream git submodule
 
 ## Upstream build/update flow
@@ -91,8 +90,6 @@ Current `nplan` behavior is intentionally different from upstream in a few place
 - `session_shutdown` explicitly clears the nplan header/status/widget UI so stale phase indicators do not survive reloads or session switches
 
 ## When a tiny upstream patch would be justified
-
-Keep using the shim as long as the desired behavior can be expressed at the `ExtensionAPI` boundary.
 
 A small upstream patch is justified only if we need behavior that cannot be reached cleanly from that boundary, for example:
 

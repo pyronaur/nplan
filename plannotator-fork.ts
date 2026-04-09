@@ -30,20 +30,7 @@ import {
 	type Phase,
 	stripPlanningOnlyTools,
 } from "./vendor/plannotator/apps/pi-extension/tool-scope.ts";
-import {
-	getDefaultPlanPath,
-	resolveGlobalPlanPath,
-	resolvePlanInputForCommand,
-	resolvePlanInputPromptValue,
-} from "./plan-path.ts";
-import {
-	getDefaultExecutingMessage,
-	getDefaultPlanningMessage,
-	getPlanningApplyPatchBlockReason,
-	getPlanningBashBlockReason,
-} from "./nplan-policy.ts";
-import { createRuntimeGuard } from "./nplan-runtime.ts";
-import { clearPhaseHeader, clearPhaseStatus, clearPhaseUi, renderPhaseWidget } from "./nplan-ui.ts";
+import * as seam from "./nplan-seams.ts";
 
 type SavedPhaseState = {
 	activeTools: string[];
@@ -70,10 +57,10 @@ function getPlanReviewAvailabilityWarning(options: { hasUI: boolean; hasPlanHtml
 }
 
 export default function plannotator(pi: ExtensionAPI): void {
-	const runtimeGuard = createRuntimeGuard();
+	const runtimeGuard = seam.createRuntimeGuard();
 	let phase: Phase = "idle";
 	void registerPlannotatorEventListeners(pi);
-	let planFilePath = getDefaultPlanPath();
+	let planFilePath = seam.getDefaultPlanPath();
 	let savedState: SavedPhaseState | null = null;
 	let plannotatorConfig = {};
 
@@ -98,7 +85,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 	pi.registerFlag("plan-file", {
 		description: "Global plan name or path under ~/.n/pi/plans/",
 		type: "string",
-		default: getDefaultPlanPath(),
+		default: seam.getDefaultPlanPath(),
 	});
 
 	function resolvePlanPath(cwd: string): string {
@@ -113,7 +100,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 	}
 
 	function updateStatus(ctx: ExtensionContext): void {
-		return clearPhaseStatus(ctx);
+		return seam.clearPhaseStatus(ctx);
 		// const profile = getPhaseProfile();
 		// if (phase === "executing" && checklistItems.length > 0) {
 		// 	const completed = checklistItems.filter((t) => t.completed).length;
@@ -131,11 +118,11 @@ export default function plannotator(pi: ExtensionAPI): void {
 	}
 
 	function updateHeader(ctx: ExtensionContext): void {
-		clearPhaseHeader(ctx);
+		seam.clearPhaseHeader(ctx);
 	}
 
 	function updateWidget(ctx: ExtensionContext): void {
-		return renderPhaseWidget(ctx, phase);
+		return seam.renderPhaseWidget(ctx, phase);
 		// if (phase === "executing" && checklistItems.length > 0) {
 		// 	const lines = checklistItems.map((item) => {
 		// 		if (item.completed) {
@@ -262,11 +249,11 @@ export default function plannotator(pi: ExtensionAPI): void {
 				return;
 			}
 
-			let targetPath = resolvePlanInputForCommand(args);
+			let targetPath = seam.resolvePlanInputForCommand(args);
 			if (!targetPath && ctx.hasUI) {
-				const input = await ctx.ui.input("Plan name", resolvePlanInputPromptValue(planFilePath));
+				const input = await ctx.ui.input("Plan name", seam.resolvePlanInputPromptValue(planFilePath));
 				if (input === undefined) return;
-				targetPath = resolveGlobalPlanPath(input);
+				targetPath = seam.resolveGlobalPlanPath(input);
 			}
 
 			if (targetPath) planFilePath = targetPath;
@@ -286,11 +273,11 @@ export default function plannotator(pi: ExtensionAPI): void {
 		description: "Change the global plan file",
 		handler: async (args, ctx) => {
 			activateRuntime();
-			let targetPath = resolvePlanInputForCommand(args);
+			let targetPath = seam.resolvePlanInputForCommand(args);
 			if (!targetPath && ctx.hasUI) {
-				const input = await ctx.ui.input("Plan name", resolvePlanInputPromptValue(planFilePath));
+				const input = await ctx.ui.input("Plan name", seam.resolvePlanInputPromptValue(planFilePath));
 				if (input === undefined) return;
-				targetPath = resolveGlobalPlanPath(input);
+				targetPath = seam.resolveGlobalPlanPath(input);
 			}
 
 			if (!targetPath) {
@@ -430,7 +417,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 		if (event.toolName === "apply_patch") {
 			const patch = typeof event.input.patch === "string" ? event.input.patch : "";
 			const allowedPath = resolvePlanPath(ctx.cwd);
-			const reason = getPlanningApplyPatchBlockReason(patch, ctx.cwd, allowedPath, planFilePath);
+			const reason = seam.getPlanningApplyPatchBlockReason(patch, ctx.cwd, allowedPath, planFilePath);
 			if (reason) {
 				return {
 					block: true,
@@ -441,7 +428,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 
 		if (event.toolName === "bash") {
 			const command = typeof event.input.command === "string" ? event.input.command : "";
-			const reason = getPlanningBashBlockReason(command);
+			const reason = seam.getPlanningBashBlockReason(command);
 			if (reason) {
 				return {
 					block: true,
@@ -479,7 +466,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 			return {
 				message: {
 					customType: "plannotator-context",
-					content: getDefaultPlanningMessage(planFilePath),
+					content: seam.getDefaultPlanningMessage(planFilePath),
 					display: false,
 				},
 			};
@@ -489,7 +476,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 			return {
 				message: {
 					customType: "plannotator-context",
-					content: getDefaultExecutingMessage(planFilePath),
+					content: seam.getDefaultExecutingMessage(planFilePath),
 					display: false,
 				},
 			};
@@ -523,7 +510,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 		activateRuntime();
 		const flagPlanFile = pi.getFlag("plan-file") as string;
 		if (flagPlanFile) {
-			planFilePath = resolveGlobalPlanPath(flagPlanFile);
+			planFilePath = seam.resolveGlobalPlanPath(flagPlanFile);
 		}
 
 		const loadedConfig = loadPlannotatorConfig(ctx.cwd);
@@ -548,7 +535,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 
 		if (stateEntry?.data) {
 			phase = stateEntry.data.phase ?? phase;
-			planFilePath = resolveGlobalPlanPath(stateEntry.data.planFilePath ?? planFilePath);
+			planFilePath = seam.resolveGlobalPlanPath(stateEntry.data.planFilePath ?? planFilePath);
 			savedState = stateEntry.data.savedState ?? savedState;
 		}
 
@@ -578,7 +565,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 
 	pi.on("session_shutdown", async (_event, ctx) => {
 		if (!isActiveRuntime()) return;
-		clearPhaseUi(ctx);
+		seam.clearPhaseUi(ctx);
 		deactivateRuntime();
 	});
 }

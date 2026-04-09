@@ -1,102 +1,46 @@
-import { resolve } from "node:path";
-import { PLAN_SUBMIT_TOOL } from "./vendor/plannotator/apps/pi-extension/tool-scope.ts";
+import { extname, isAbsolute, join, normalize, resolve } from "node:path";
+import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { PLAN_SUBMIT_TOOL, type Phase } from "./vendor/plannotator/apps/pi-extension/tool-scope.ts";
+import {
+	DEFAULT_PLAN_NAME,
+	PLANNING_MUTATING_BASH_PATTERNS,
+	PLANNING_SAFE_BASH_PATTERNS,
+	STATUS_KEY,
+	WIDGET_KEY,
+	clearPhaseWidget,
+	expandHome,
+	getPlanNameFromPath,
+	getPlanStorageRoot,
+	getRuntimeRegistry,
+	isStoredPlanPath,
+} from "./nplan-seam-internals.ts";
 
-const PLANNING_MUTATING_BASH_PATTERNS = [
-	/\brm\b/i,
-	/\brmdir\b/i,
-	/\bmv\b/i,
-	/\bcp\b/i,
-	/\bmkdir\b/i,
-	/\btouch\b/i,
-	/\bchmod\b/i,
-	/\bchown\b/i,
-	/\bchgrp\b/i,
-	/\bln\b/i,
-	/\btee\b/i,
-	/\btruncate\b/i,
-	/\bdd\b/i,
-	/\brsync\b/i,
-	/\bscp\b/i,
-	/\bsftp\b/i,
-	/(^|[^<])>(?!>)/,
-	/>>/,
-	/<<<?/,
-	/\bsed\s+-i\b/i,
-	/\bnpm\s+(install|uninstall|update|ci|link|publish)\b/i,
-	/\byarn\s+(add|remove|install|publish)\b/i,
-	/\bpnpm\s+(add|remove|install|publish)\b/i,
-	/\bpip(?:3)?\s+(install|uninstall)\b/i,
-	/\bapt(?:-get)?\s+(install|remove|purge|update|upgrade)\b/i,
-	/\bbrew\s+(install|uninstall|upgrade)\b/i,
-	/\bgit\s+(add|commit|push|pull|merge|rebase|reset|checkout|switch|branch\s+-[dD]|stash|cherry-pick|revert|tag|init|clone)\b/i,
-	/\bsudo\b/i,
-	/\bsu\b/i,
-	/\bkill\b/i,
-	/\bpkill\b/i,
-	/\bkillall\b/i,
-	/\breboot\b/i,
-	/\bshutdown\b/i,
-	/\bsystemctl\s+(start|stop|restart|enable|disable)\b/i,
-	/\bservice\s+\S+\s+(start|stop|restart)\b/i,
-	/\b(vim?|nano|emacs|code|subl|mate)\b/i,
-	/\bpython(?:3)?\b(?!\s+--version\b)/i,
-	/\bnode\b(?!\s+--version\b)/i,
-	/\bperl\b(?!\s+-v\b)/i,
-	/\bruby\b(?!\s+--version\b)/i,
-	/\bphp\b(?!\s+-v\b)/i,
-	/\blua\b(?!\s+-v\b)/i,
-] as const;
+export function getDefaultPlanPath(): string {
+	return join(getPlanStorageRoot(), `${DEFAULT_PLAN_NAME}.md`);
+}
 
-const PLANNING_SAFE_BASH_PATTERNS = [
-	/^\s*cat\b/i,
-	/^\s*head\b/i,
-	/^\s*tail\b/i,
-	/^\s*less\b/i,
-	/^\s*more\b/i,
-	/^\s*grep\b/i,
-	/^\s*find\b/i,
-	/^\s*ls\b/i,
-	/^\s*pwd\b/i,
-	/^\s*echo\b/i,
-	/^\s*printf\b/i,
-	/^\s*wc\b/i,
-	/^\s*sort\b/i,
-	/^\s*uniq\b/i,
-	/^\s*diff\b/i,
-	/^\s*file\b/i,
-	/^\s*stat\b/i,
-	/^\s*du\b/i,
-	/^\s*df\b/i,
-	/^\s*tree\b/i,
-	/^\s*which\b/i,
-	/^\s*whereis\b/i,
-	/^\s*type\b/i,
-	/^\s*env\b/i,
-	/^\s*printenv\b/i,
-	/^\s*uname\b/i,
-	/^\s*whoami\b/i,
-	/^\s*id\b/i,
-	/^\s*date\b/i,
-	/^\s*uptime\b/i,
-	/^\s*ps\b/i,
-	/^\s*top\b/i,
-	/^\s*htop\b/i,
-	/^\s*git\s+(status|log|diff|show|branch|remote|config\s+--get|ls-files)\b/i,
-	/^\s*npm\s+(list|ls|view|info|search|outdated|audit)\b/i,
-	/^\s*yarn\s+(list|info|why|audit)\b/i,
-	/^\s*pnpm\s+(list|why|audit)\b/i,
-	/^\s*python(?:3)?\s+--version\b/i,
-	/^\s*node\s+--version\b/i,
-	/^\s*curl\b/i,
-	/^\s*wget\b.*(?:-O\s*-|-O-)\b/i,
-	/^\s*jq\b/i,
-	/^\s*sed\s+-n\b/i,
-	/^\s*awk\b/i,
-	/^\s*rg\b/i,
-	/^\s*fd\b/i,
-	/^\s*bat\b/i,
-	/^\s*exa\b/i,
-] as const;
+export function resolveGlobalPlanPath(input?: string): string {
+	const trimmed = input?.trim();
+	if (!trimmed) return getDefaultPlanPath();
+
+	const expanded = expandHome(trimmed);
+	if (isAbsolute(expanded) && isStoredPlanPath(expanded) && extname(expanded).toLowerCase() === ".md") {
+		return normalize(expanded);
+	}
+
+	const planName = getPlanNameFromPath(expanded);
+	return join(getPlanStorageRoot(), `${planName}.md`);
+}
+
+export function resolvePlanInputForCommand(input?: string): string | undefined {
+	const trimmed = input?.trim();
+	if (!trimmed) return undefined;
+	return resolveGlobalPlanPath(trimmed);
+}
+
+export function resolvePlanInputPromptValue(input?: string): string {
+	return getPlanNameFromPath(input);
+}
 
 export function getDefaultPlanningMessage(planFilePath: string): string {
 	return `[PLANNOTATOR - PLANNING PHASE]
@@ -234,4 +178,55 @@ export function getPlanningApplyPatchBlockReason(
 	}
 
 	return null;
+}
+
+export function createRuntimeGuard(runtimeToken = `${Date.now()}:${Math.random().toString(36).slice(2)}`): {
+	activate(): void;
+	isActive(): boolean;
+	deactivate(): void;
+} {
+	const runtimeRegistry = getRuntimeRegistry();
+
+	return {
+		activate(): void {
+			runtimeRegistry.activeRuntimeToken = runtimeToken;
+		},
+		isActive(): boolean {
+			return runtimeRegistry.activeRuntimeToken === runtimeToken;
+		},
+		deactivate(): void {
+			if (runtimeRegistry.activeRuntimeToken === runtimeToken) {
+				runtimeRegistry.activeRuntimeToken = null;
+			}
+		},
+	};
+}
+
+export function clearPhaseStatus(ctx: ExtensionContext): void {
+	ctx.ui.setStatus(STATUS_KEY, undefined);
+}
+
+export function clearPhaseHeader(ctx: ExtensionContext): void {
+	if (!ctx.hasUI) return;
+	ctx.ui.setHeader(undefined);
+}
+
+export function renderPhaseWidget(ctx: ExtensionContext, phase: Phase): void {
+	if (phase === "planning") {
+		ctx.ui.setWidget(WIDGET_KEY, [ctx.ui.theme.fg("warning", "plan mode")]);
+		return;
+	}
+
+	if (phase === "executing") {
+		ctx.ui.setWidget(WIDGET_KEY, [ctx.ui.theme.fg("accent", "implementation phase")]);
+		return;
+	}
+
+	clearPhaseWidget(ctx);
+}
+
+export function clearPhaseUi(ctx: ExtensionContext): void {
+	clearPhaseStatus(ctx);
+	clearPhaseWidget(ctx);
+	clearPhaseHeader(ctx);
 }

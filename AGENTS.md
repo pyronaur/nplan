@@ -1,28 +1,120 @@
 # nplan
 
-## Maintenance Rule
+## Core Rule
 
-`plannotator-fork.ts` exists only as a narrow maintenance seam so upstream Plannotator changes can be synced with minimal pain.
+`plannotator-fork.ts` is a maintained fork of upstream `vendor/plannotator/apps/pi-extension/index.ts`.
+
+Its job is to stay as close as possible to upstream while exposing a small number of explicit seam call sites for nplan behavior.
 
 Do not grow custom logic inline in the fork.
+
+## Source Of Truth
+
+- Upstream source of truth: `vendor/plannotator/apps/pi-extension/index.ts`
+- Fork file: `plannotator-fork.ts`
+- Seam entrypoints only: `nplan-seams.ts`
+- Internal helpers and utilities used by seams: `nplan-seam-internals.ts`
 
 ## Required Approach
 
 - Keep `vendor/plannotator/` untouched. Treat it as the upstream source of truth.
 - Keep `plannotator-fork.ts` structurally close to `vendor/plannotator/apps/pi-extension/index.ts`.
 - Preserve upstream function names, ordering, and control flow where practical.
-- Put nplan-specific behavior into tiny local helper modules and call them from thin wrappers in the fork.
-- Prefer injecting policy through small helper functions over rewriting upstream blocks.
+- In the fork, custom behavior should come through `import * as seam from "./nplan-seams.ts"`.
+- Do not add other nplan-specific imports to the fork unless the user explicitly asks for a different structure.
+- Put nplan-specific behavior into the seam module and call it from thin seam sites in the fork.
+- Prefer injecting policy through seam functions over rewriting upstream blocks.
 - If a customization can live outside the fork, move it out of the fork.
 - If a change makes the fork diff broader than necessary, stop and reduce the surface.
 
-## nplan-Specific Code
+## What A Seam Is
 
-Local policy belongs in small helper files such as:
+A seam is all of the following:
+
+- an exported function defined in `nplan-seams.ts`
+- called directly from `plannotator-fork.ts` as `seam.someName(...)`
+- represents one deliberate fork injection point
+- describes the replaced or injected behavior from the fork's point of view
+
+Good seam examples:
+
+- `seam.getDefaultPlanPath()`
+- `seam.resolveGlobalPlanPath(...)`
+- `seam.createRuntimeGuard()`
+- `seam.clearPhaseStatus(ctx)`
+- `seam.renderPhaseWidget(ctx, phase)`
+- `seam.getPlanningApplyPatchBlockReason(...)`
+
+## What Is Not A Seam
+
+These do not belong in `nplan-seams.ts`:
+
+- private utilities
+- string munging helpers
+- path parsing helpers
+- regex tables
+- small composition helpers used only by seams
+- runtime registry internals
+
+Examples of non-seams:
+
+- `slugifyPlanName(...)`
+- `expandHome(...)`
+- `getRuntimeRegistry()`
+- `clearPhaseWidget(...)`
+
+Those belong in `nplan-seam-internals.ts` or another internal module, not in `nplan-seams.ts`.
+
+## Fork Edit Rules
+
+- When replacing upstream behavior in the fork, keep the upstream code in place as commented reference when that helps future sync work.
+- Put the active seam call immediately next to the commented upstream block so the difference is obvious during future compares.
+- Prefer one seam call per replacement site.
+- Name seam functions after the fork location or behavior they replace, not after an implementation detail hidden inside the seam.
+- Do not move lots of upstream code around just to make seams fit. Keep the upstream shape first, seam second.
+
+## Seam Ownership
+
+`nplan-seams.ts` owns exported fork-facing behavior such as:
 
 - plan path resolution
 - runtime ownership / reload safety
 - planning tool restrictions
 - nplan-only UI labels
 
-The fork should orchestrate. Helper modules should own policy.
+`nplan-seam-internals.ts` owns private support code for those seams.
+
+The fork orchestrates. The seam module owns injected behavior. Internal modules support the seam module.
+
+## Fork Sync Workflow
+
+When syncing with upstream:
+
+1. Re-read upstream `vendor/plannotator/apps/pi-extension/index.ts` completely.
+2. Re-read `plannotator-fork.ts` completely.
+3. Compare structure first: imports, helper functions, commands, event handlers, lifecycle flow.
+4. Copy upstream changes into the fork while preserving upstream order and wording wherever possible.
+5. Reapply only the known seam call sites.
+6. If a behavior change can be absorbed by editing `nplan-seams.ts`, do that instead of widening the fork diff.
+7. If a utility change is needed, keep it out of `nplan-seams.ts` and put it in `nplan-seam-internals.ts`.
+8. After syncing, check that the fork still has a single nplan namespace import: `import * as seam from "./nplan-seams.ts"`.
+
+## Sync Smells
+
+Stop and reduce the diff if you see any of these:
+
+- custom logic growing inline in the fork
+- multiple nplan imports in the fork
+- exported functions in `nplan-seams.ts` that are not called from the fork as `seam.*(...)`
+- utility helpers defined in `nplan-seams.ts`
+- large fork rewrites where a seam call would have been enough
+- moving upstream blocks around instead of preserving their shape
+
+## Decision Rule
+
+If unsure where code belongs, decide by this question:
+
+"Is this function a fork-facing injection point called from `plannotator-fork.ts` as `seam.*(...)`?"
+
+- If yes, it belongs in `nplan-seams.ts`.
+- If no, it does not belong in `nplan-seams.ts`.
