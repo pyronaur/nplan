@@ -1,21 +1,18 @@
 /**
  * Plannotator Pi Extension — File-based plan mode with visual browser review.
  *
- * Plans are written to PLAN.md on disk (git-trackable, editor-visible).
+ * Plans default to a global path under ~/.n/pi/plans/.
  * The agent calls plannotator_submit_plan to request approval; the user
  * reviews the plan in the Plannotator browser UI and can approve, deny
  * with annotations, or request changes.
  *
  * Features:
- * - /plannotator command or Ctrl+Alt+P to toggle
+ * - /plan command to toggle plan mode
  * - --plan flag to start in planning mode
- * - --plan-file flag to customize the plan file path
- * - Bash unrestricted during planning (prompt-guided)
- * - Write restricted to plan file only during planning
+ * - --plan-file flag to choose the global plan name or path
+ * - Bash restricted to read-only inspection during planning
+ * - Write/edit/apply_patch restricted to the plan file during planning
  * - plannotator_submit_plan tool with browser-based visual approval
- * - [DONE:n] markers for execution progress tracking
- * - /plannotator-review command for code review
- * - /plannotator-annotate command for markdown annotation
  */
 
 import { readFileSync } from "node:fs";
@@ -60,7 +57,6 @@ import {
 import * as seam from "./nplan-seams.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────
-
 
 type SavedPhaseState = {
 	activeTools: string[];
@@ -271,8 +267,6 @@ export default function plannotator(pi: ExtensionAPI): void {
 	async function exitToIdle(ctx: ExtensionContext): Promise<void> {
 		phase = "idle";
 		// checklistItems = [];
-
-
 		await restoreSavedState(ctx);
 		savedState = null;
 		updateStatus(ctx);
@@ -303,18 +297,17 @@ export default function plannotator(pi: ExtensionAPI): void {
 				return;
 			}
 
-			// Accept path as argument: /plannotator plans/auth.md
+			// Accept path as argument: /plan auth
 			let targetPath = args?.trim() || undefined;
-			if (targetPath) targetPath = seam.resolveGlobalPlanPath(targetPath);
 
 			// No arg — prompt for file path interactively
 			if (!targetPath && ctx.hasUI) {
 				targetPath = await ctx.ui.input("Plan file path", planFilePath);
 				if (targetPath === undefined) return; // cancelled
-				targetPath = seam.resolveGlobalPlanPath(targetPath);
 			}
 
-			if (targetPath) planFilePath = targetPath;
+			// if (targetPath) planFilePath = targetPath;
+			if (targetPath) planFilePath = seam.resolveGlobalPlanPath(targetPath);
 			await enterPlanning(ctx);
 		},
 	});
@@ -341,12 +334,10 @@ export default function plannotator(pi: ExtensionAPI): void {
 		description: "Change the global plan file",
 		handler: async (args, ctx) => {
 			let targetPath = args?.trim() || undefined;
-			if (targetPath) targetPath = seam.resolveGlobalPlanPath(targetPath);
 
 			if (!targetPath && ctx.hasUI) {
 				targetPath = await ctx.ui.input("Plan file path", planFilePath);
 				if (targetPath === undefined) return; // cancelled
-				targetPath = seam.resolveGlobalPlanPath(targetPath);
 			}
 
 			if (!targetPath) {
@@ -354,7 +345,8 @@ export default function plannotator(pi: ExtensionAPI): void {
 				return;
 			}
 
-			planFilePath = targetPath;
+			// planFilePath = targetPath;
+			planFilePath = seam.resolveGlobalPlanPath(targetPath);
 			persistState();
 			ctx.ui.notify(`Plan file changed to: ${planFilePath}`);
 		},
@@ -609,8 +601,6 @@ export default function plannotator(pi: ExtensionAPI): void {
 			// Non-interactive or no HTML: auto-approve
 			if (!ctx.hasUI || !hasPlanBrowserHtml()) {
 				phase = "executing";
-
-
 				await applyPhaseConfig(ctx, { restoreSavedState: true });
 				pi.appendEntry("plannotator-execute", { planFilePath });
 				persistState();
@@ -639,8 +629,6 @@ export default function plannotator(pi: ExtensionAPI): void {
 
 			if (result.approved) {
 				phase = "executing";
-
-
 				await applyPhaseConfig(ctx, { restoreSavedState: true });
 				pi.appendEntry("plannotator-execute", { planFilePath });
 				persistState();
@@ -724,8 +712,8 @@ export default function plannotator(pi: ExtensionAPI): void {
 	// Inject phase-specific context
 	pi.on("before_agent_start", async (_event, ctx) => {
 		const profile = getPhaseProfile();
-		// nplan does not carry forward upstream todo/checklist prompt state.
-		const todoStats = { todoList: "", completedCount: 0, totalCount: 0, remainingCount: 0 };
+		// const todoStats = phase === "executing" ? formatTodoList(checklistItems) : formatTodoList([]);
+		const todoStats = seam.getPromptTodoStats();
 		if (profile?.systemPrompt) {
 			const rendered = renderTemplate(
 				profile.systemPrompt,
@@ -943,22 +931,19 @@ Execute each step in order. After completing a step, include [DONE:n] in your re
 		}
 
 		// Restore persisted state
+		// const entries = ctx.sessionManager.getEntries();
 		const entries = seam.getSessionEntries(ctx);
 		const stateEntry = entries
 			.filter(
 				(e: { type: string; customType?: string }) =>
 					e.type === "custom" && e.customType === "plannotator",
 			)
-
-
 			.pop() as { data?: PersistedPlannotatorState } | undefined;
 
 		if (stateEntry?.data) {
 			phase = stateEntry.data.phase ?? phase;
 			// planFilePath = stateEntry.data.planFilePath ?? planFilePath;
 			planFilePath = seam.resolveGlobalPlanPath(stateEntry.data.planFilePath ?? planFilePath);
-
-
 			savedState = stateEntry.data.savedState ?? savedState;
 		}
 
@@ -997,9 +982,6 @@ Execute each step in order. After completing a step, include [DONE:n] in your re
 			}
 		}
 		*/
-
-
-
 		if (phase === "planning") {
 			// checklistItems = [];
 			const warning = getPlanReviewAvailabilityWarning({ hasUI: ctx.hasUI, hasPlanHtml: hasPlanBrowserHtml() });
@@ -1014,7 +996,6 @@ Execute each step in order. After completing a step, include [DONE:n] in your re
 		} else if (phase === "planning" || phase === "executing") {
 			await applyPhaseConfig(ctx, { restoreSavedState: true });
 		}
-
 		updateStatus(ctx);
 		updateWidget(ctx);
 		persistState();

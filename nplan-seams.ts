@@ -96,6 +96,15 @@ Your turn should only end by either:
 Do not end your turn without doing one of these two things.`;
 }
 
+export function getPromptTodoStats(): {
+	todoList: string;
+	completedCount: number;
+	totalCount: number;
+	remainingCount: number;
+} {
+	return { todoList: "", completedCount: 0, totalCount: 0, remainingCount: 0 };
+}
+
 export function getPlanningToolBlockResult(
 	toolName: string,
 	input: Record<string, unknown>,

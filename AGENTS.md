@@ -45,6 +45,7 @@ Good seam examples:
 - `seam.renderPhaseWidget(ctx, phase)`
 - `seam.getPlanningToolBlockResult(...)`
 - `seam.getDefaultPlanningMessage(...)`
+- `seam.getPromptTodoStats()`
 - `seam.getSessionEntries(ctx)`
 
 ## What Is Not A Seam
