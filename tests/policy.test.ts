@@ -13,9 +13,13 @@ import {
 } from "../nplan-policy.ts";
 import { formatPhaseWidgetLines } from "../nplan-widget.ts";
 
-function createUserMessage(content: string) {
+function createUserMessage(content: string): {
+	role: "user";
+	content: string;
+	timestamp: number;
+} {
 	return {
-		role: "user" as const,
+		role: "user",
 		content,
 		timestamp: 1,
 	};

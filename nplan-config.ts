@@ -5,7 +5,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readJsonFile, readTextFile, resolvePathFromBase } from "./nplan-files.ts";
 import { isRecord, isThinkingLevel } from "./nplan-guards.ts";
-export { formatTodoList } from "./nplan-todo.ts";
 
 export type PhaseName = "planning" | "reviewing";
 export type RuntimePhase = PhaseName | "idle";
@@ -490,3 +489,5 @@ export function renderTemplate(template: string, vars: PromptVariables): PromptR
 	});
 	return { text, unknownVariables: [...unknownVariables] };
 }
+
+export { formatTodoList } from "./nplan-todo.ts";
