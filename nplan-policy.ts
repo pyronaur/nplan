@@ -2,6 +2,7 @@ import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 import type { ExtensionContext, SessionEntry } from "@mariozechner/pi-coding-agent";
 import { homedir } from "node:os";
 import { basename, extname, isAbsolute, join, normalize, parse, resolve, sep } from "node:path";
+import { isRecord, isThinkingLevel } from "./nplan-guards.ts";
 import { type Phase, PLAN_SUBMIT_TOOL } from "./nplan-tool-scope.ts";
 
 export const DEFAULT_PLAN_NAME = "plan";
@@ -143,18 +144,6 @@ function expandHome(input: string): string {
 	}
 
 	return input;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isThinkingLevel(value: unknown): value is ThinkingLevel {
-	return value === "minimal"
-		|| value === "low"
-		|| value === "medium"
-		|| value === "high"
-		|| value === "xhigh";
 }
 
 function isSavedPhaseState(value: unknown): value is SavedPhaseState {

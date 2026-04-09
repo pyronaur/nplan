@@ -2,6 +2,7 @@ import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { isRecord, isThinkingLevel } from "./nplan-guards.ts";
 
 export type PhaseName = "planning" | "executing" | "reviewing";
 export type RuntimePhase = PhaseName | "idle";
@@ -116,18 +117,6 @@ function getAgentConfigDir(): string {
 		return envDir;
 	}
 	return join(process.env.HOME || process.env.USERPROFILE || homedir(), ".pi", "agent");
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isThinkingLevel(value: string): value is ThinkingLevel {
-	return value === "minimal"
-		|| value === "low"
-		|| value === "medium"
-		|| value === "high"
-		|| value === "xhigh";
 }
 
 function readJsonFile(path: string): { data?: unknown; error?: string } {
