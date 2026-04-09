@@ -19,6 +19,20 @@ function makeTempDir(prefix: string): string {
 	return dir;
 }
 
+function writeConfigPair(input: {
+	homeDir: string;
+	cwdDir: string;
+	globalConfig: Record<string, unknown>;
+	projectConfig: Record<string, unknown>;
+}): void {
+	const globalConfigDir = join(input.homeDir, ".pi", "agent");
+	const projectConfigDir = join(input.cwdDir, ".pi");
+	mkdirSync(globalConfigDir, { recursive: true });
+	mkdirSync(projectConfigDir, { recursive: true });
+	writeFileSync(join(globalConfigDir, "plan.json"), JSON.stringify(input.globalConfig), "utf-8");
+	writeFileSync(join(projectConfigDir, "plan.json"), JSON.stringify(input.projectConfig), "utf-8");
+}
+
 afterEach(() => {
 	if (originalHome === undefined) {
 		delete process.env.HOME;
@@ -48,24 +62,16 @@ test("loadPlanConfig allows a project config to clear an inherited phase with nu
 	const cwdDir = makeTempDir("nplan-config-cwd-null-");
 	process.env.HOME = homeDir;
 
-	const globalConfigDir = join(homeDir, ".pi", "agent");
-	const projectConfigDir = join(cwdDir, ".pi");
-	mkdirSync(globalConfigDir, { recursive: true });
-	mkdirSync(projectConfigDir, { recursive: true });
-	writeFileSync(
-		join(globalConfigDir, "plan.json"),
-		JSON.stringify({
+	writeConfigPair({
+		homeDir,
+		cwdDir,
+		globalConfig: {
 			phases: { planning: { statusLabel: "global", activeTools: ["bash"] } },
-		}),
-		"utf-8",
-	);
-	writeFileSync(
-		join(projectConfigDir, "plan.json"),
-		JSON.stringify({
+		},
+		projectConfig: {
 			phases: { planning: null },
-		}),
-		"utf-8",
-	);
+		},
+	});
 
 	const loaded = loadPlanConfig(cwdDir);
 	const planning = resolvePhaseProfile(loaded.config, "planning");
@@ -80,29 +86,21 @@ test("loadPlanConfig gives project config precedence over global config", () => 
 	const cwdDir = makeTempDir("nplan-config-cwd-");
 	process.env.HOME = homeDir;
 
-	const globalConfigDir = join(homeDir, ".pi", "agent");
-	const projectConfigDir = join(cwdDir, ".pi");
-	mkdirSync(globalConfigDir, { recursive: true });
-	mkdirSync(projectConfigDir, { recursive: true });
-	writeFileSync(
-		join(globalConfigDir, "plan.json"),
-		JSON.stringify({
+	writeConfigPair({
+		homeDir,
+		cwdDir,
+		globalConfig: {
 			defaults: {
 				thinking: "low",
 				model: { provider: "anthropic", id: "claude-sonnet-4-5" },
 			},
 			phases: { planning: { statusLabel: "global", activeTools: ["bash"] } },
-		}),
-		"utf-8",
-	);
-	writeFileSync(
-		join(projectConfigDir, "plan.json"),
-		JSON.stringify({
+		},
+		projectConfig: {
 			defaults: { thinking: null, model: null },
 			phases: { planning: { statusLabel: "project", activeTools: [] } },
-		}),
-		"utf-8",
-	);
+		},
+	});
 
 	const loaded = loadPlanConfig(cwdDir);
 	const planning = resolvePhaseProfile(loaded.config, "planning");

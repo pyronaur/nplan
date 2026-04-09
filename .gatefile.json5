@@ -41,11 +41,11 @@
 	},
 
 	// Test duplication kept separate from runtime source duplication.
-	// dupes_tests: {
-	// 	name: 'Check test duplication',
-	// 	match: ['tests/**/*.ts', '.jscpd.tests.json'],
-	// 	run: 'jscpd --config .jscpd.tests.json',
-	// },
+	dupes_tests: {
+		name: 'Check test duplication',
+		match: ['tests/**/*.ts', '.jscpd.tests.json'],
+		run: 'jscpd --config .jscpd.tests.json',
+	},
 
 	// Knip reads package.json, tsconfig, and the TypeScript entry graph directly.
 	// unused: {
