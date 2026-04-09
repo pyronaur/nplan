@@ -107,7 +107,7 @@ void test("formatPhaseWidgetLines right-aligns the plan path when there is enoug
 		rightPadding: 2,
 		gap: 4,
 	}), [
-		" ⏸ plan           /abs/path/plan.md  ",
+		" ⏸ plan              /abs/path/plan.md  ",
 	]);
 	assert.deepEqual(formatPhaseWidgetLines({
 		phase: "planning",
