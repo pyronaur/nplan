@@ -66,6 +66,27 @@ export default function nplan(pi: ExtensionAPI): void {
 		return resolve(cwd, planFilePath);
 	}
 
+	async function readPlanPathArg(
+		args: string | undefined,
+		ctx: ExtensionContext,
+	): Promise<string | null | undefined> {
+		const targetPath = args?.trim() || undefined;
+		if (targetPath) {
+			return targetPath;
+		}
+
+		if (!ctx.hasUI) {
+			return undefined;
+		}
+
+		const input = await ctx.ui.input("Plan file path", planFilePath);
+		if (input === undefined) {
+			return null;
+		}
+
+		return input.trim() || undefined;
+	}
+
 	function getPhaseProfile(): ReturnType<typeof resolvePhaseProfile> | undefined {
 		if (phase === "planning" || phase === "executing") {
 			return resolvePhaseProfile(planConfig, phase);
@@ -186,12 +207,9 @@ export default function nplan(pi: ExtensionAPI): void {
 				return;
 			}
 
-			let targetPath = args?.trim() || undefined;
-			if (!targetPath && ctx.hasUI) {
-				targetPath = await ctx.ui.input("Plan file path", planFilePath);
-				if (targetPath === undefined) {
-					return;
-				}
+			const targetPath = await readPlanPathArg(args, ctx);
+			if (targetPath === null) {
+				return;
 			}
 
 			if (targetPath) {
@@ -211,13 +229,9 @@ export default function nplan(pi: ExtensionAPI): void {
 	pi.registerCommand("plan-file", {
 		description: "Change the global plan file",
 		handler: async (args, ctx) => {
-			let targetPath = args?.trim() || undefined;
-
-			if (!targetPath && ctx.hasUI) {
-				targetPath = await ctx.ui.input("Plan file path", planFilePath);
-				if (targetPath === undefined) {
-					return;
-				}
+			const targetPath = await readPlanPathArg(args, ctx);
+			if (targetPath === null) {
+				return;
 			}
 
 			if (!targetPath) {
