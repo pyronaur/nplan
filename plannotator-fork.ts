@@ -1,21 +1,28 @@
 /**
  * Plannotator Pi Extension — File-based plan mode with visual browser review.
  *
- * Plans default to a global path under ~/.n/pi/plans/.
+ * Plans are written to PLAN.md on disk (git-trackable, editor-visible).
  * The agent calls plannotator_submit_plan to request approval; the user
  * reviews the plan in the Plannotator browser UI and can approve, deny
  * with annotations, or request changes.
  *
  * Features:
- * - /plan command to toggle plan mode
+ * - /plannotator command or Ctrl+Alt+P to toggle
  * - --plan flag to start in planning mode
- * - --plan-file flag to choose the global plan name or path
- * - Bash restricted to read-only inspection during planning
- * - Write/edit/apply_patch restricted to the plan file during planning
+ * - --plan-file flag to customize the plan file path
+ * - Bash unrestricted during planning (prompt-guided)
+ * - Write restricted to plan file only during planning
+ * - [DONE:n] markers for execution progress tracking
+ * - /plannotator-review command for code review
+ * - /plannotator-annotate command for markdown annotation
  * - plannotator_submit_plan tool with browser-based visual approval
  */
 
-import { readFileSync } from "node:fs";
+import {
+	// existsSync,
+	readFileSync,
+	// statSync,
+} from "node:fs";
 import { resolve } from "node:path";
 import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 import { Type } from "@mariozechner/pi-ai";
@@ -26,10 +33,11 @@ import type {
 // import { Key } from "@mariozechner/pi-tui";
 import {
 	buildPromptVariables,
+	// formatTodoList,
 	loadPlannotatorConfig,
 	renderTemplate,
 	resolvePhaseProfile,
-} from "./vendor/plannotator/apps/pi-extension/config.js";
+} from "./vendor/plannotator/apps/pi-extension/config.ts";
 /* nplan does not carry forward upstream checklist/todo tracking.
 import {
 	type ChecklistItem,
@@ -37,17 +45,23 @@ import {
 	parseChecklist,
 } from "./generated/checklist.js";
 */
-import { planDenyFeedback } from "./vendor/plannotator/apps/pi-extension/generated/feedback-templates.js";
+import { planDenyFeedback } from "./vendor/plannotator/apps/pi-extension/generated/feedback-templates.ts";
 /* nplan does not carry forward upstream file-annotation browsing helpers.
 import { hasMarkdownFiles } from "./generated/resolve-file.js";
 import { FILE_BROWSER_EXCLUDED } from "./generated/reference-common.js";
 */
 import {
+	// getLastAssistantMessageText,
 	hasPlanBrowserHtml,
+	// hasReviewBrowserHtml,
 	getStartupErrorMessage,
+	// openArchiveBrowserAction,
+	// openCodeReview,
+	// openLastMessageAnnotation,
+	// openMarkdownAnnotation,
 	openPlanReviewBrowser,
 	registerPlannotatorEventListeners,
-} from "./vendor/plannotator/apps/pi-extension/plannotator-events.js";
+} from "./vendor/plannotator/apps/pi-extension/plannotator-events.ts";
 import {
 	getToolsForPhase,
 	PLAN_SUBMIT_TOOL,
@@ -55,7 +69,6 @@ import {
 	stripPlanningOnlyTools,
 } from "./vendor/plannotator/apps/pi-extension/tool-scope.ts";
 import * as seam from "./nplan-seams.ts";
-
 // ── Types ──────────────────────────────────────────────────────────────
 
 type SavedPhaseState = {
@@ -275,7 +288,6 @@ export default function plannotator(pi: ExtensionAPI): void {
 		ctx.ui.notify("Plannotator: disabled. Full access restored.");
 	}
 
-	/* upstream toggle helper kept as reference.
 	async function togglePlanMode(ctx: ExtensionContext): Promise<void> {
 		if (phase === "idle") {
 			await enterPlanning(ctx);
@@ -283,7 +295,6 @@ export default function plannotator(pi: ExtensionAPI): void {
 			await exitToIdle(ctx);
 		}
 	}
-	*/
 
 	// ── Commands & Shortcuts ─────────────────────────────────────────────
 
@@ -633,11 +644,12 @@ export default function plannotator(pi: ExtensionAPI): void {
 				pi.appendEntry("plannotator-execute", { planFilePath });
 				persistState();
 
-				// nplan does not carry forward upstream [DONE:n] execution tracking.
-				// const doneMsg =
-				// 	checklistItems.length > 0
-				// 		? `After completing each step, include [DONE:n] in your response where n is the step number.`
-				// 		: "";
+				/* nplan does not carry forward upstream [DONE:n] execution tracking.
+				const doneMsg =
+					checklistItems.length > 0
+						? `After completing each step, include [DONE:n] in your response where n is the step number.`
+						: "";
+				*/
 
 				if (result.feedback) {
 					return {
@@ -705,13 +717,24 @@ export default function plannotator(pi: ExtensionAPI): void {
 				};
 			}
 		}
-
 		return seam.getPlanningToolBlockResult(event.toolName, event.input as Record<string, unknown>, ctx.cwd, resolvePlanPath(ctx.cwd), planFilePath);
 	});
 
 	// Inject phase-specific context
 	pi.on("before_agent_start", async (_event, ctx) => {
 		const profile = getPhaseProfile();
+		/* nplan does not carry forward upstream executing-phase checklist context.
+		if (phase === "executing") {
+			// Re-read from disk each turn to stay current
+			const fullPath = resolvePlanPath(ctx.cwd);
+			try {
+				const planContent = readFileSync(fullPath, "utf-8");
+				checklistItems = parseChecklist(planContent);
+			} catch {
+				// File deleted during execution — degrade gracefully
+			}
+		}
+		*/
 		// const todoStats = phase === "executing" ? formatTodoList(checklistItems) : formatTodoList([]);
 		const todoStats = seam.getPromptTodoStats();
 		if (profile?.systemPrompt) {
@@ -883,6 +906,7 @@ Execute each step in order. After completing a step, include [DONE:n] in your re
 		persistState();
 	});
 
+	// Detect execution completion
 	pi.on("agent_end", async (_event, ctx) => {
 		if (phase !== "executing" || checklistItems.length === 0) return;
 
@@ -900,7 +924,6 @@ Execute each step in order. After completing a step, include [DONE:n] in your re
 			);
 			phase = "idle";
 			checklistItems = [];
-
 			await restoreSavedState(ctx);
 			savedState = null;
 			updateStatus(ctx);
