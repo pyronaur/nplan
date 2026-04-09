@@ -3,7 +3,7 @@ import type { ExtensionContext, SessionEntry } from "@mariozechner/pi-coding-age
 import { homedir } from "node:os";
 import { basename, extname, isAbsolute, join, normalize, parse, resolve, sep } from "node:path";
 import { isRecord, isThinkingLevel } from "./nplan-guards.ts";
-import { type Phase, PLAN_SUBMIT_TOOL } from "./nplan-tool-scope.ts";
+import { type Phase } from "./nplan-tool-scope.ts";
 import { formatPhaseWidgetLines, renderColoredPhaseWidgetLine } from "./nplan-widget.ts";
 
 export const DEFAULT_PLAN_NAME = "plan";
@@ -368,10 +368,6 @@ export function resolveGlobalPlanPath(input?: string): string {
 	return join(getPlanStorageRoot(), `${planName}.md`);
 }
 
-export function getDefaultPlanningMessage(planFilePath: string): string {
-	return `[PLAN - PLANNING PHASE]\nYou are in plan mode. You MUST NOT make any changes to the codebase - no edits, no commits, no installs, no destructive commands. The ONLY file you may write to or edit is the plan file: ${planFilePath}.\n\nAvailable tools: read, bash, grep, find, ls, write (${planFilePath} only), edit (${planFilePath} only), ${PLAN_SUBMIT_TOOL}\n\nThe apply_patch tool may be used during planning only when the patch touches the active plan file and nothing else. Moving or deleting files with apply_patch is blocked during planning.\n\nBash is restricted to read-only inspection and safe web-fetching commands during planning. Do not run destructive bash commands (rm, git push, npm install, etc.). Web fetching (curl, wget -O -) is fine.\n\n## Iterative Planning Workflow\n\nYou are pair-planning with the user. Explore the code to build context, then write your findings into ${planFilePath} as you go. The plan starts as a rough skeleton and gradually becomes the final plan.\n\n### The Loop\n\nRepeat this cycle until the plan is complete:\n\n1. **Explore** - Use read, grep, find, ls, and bash to understand the codebase. Actively search for existing functions, utilities, and patterns that can be reused - avoid proposing new code when suitable implementations already exist.\n2. **Update the plan file** - After each discovery, immediately capture what you learned in ${planFilePath}. Don't wait until the end. Use write for the initial draft, then edit for all subsequent updates.\n3. **Ask the user** - When you hit an ambiguity or decision you can't resolve from code alone, ask. Then go back to step 1.\n\n### First Turn\n\nStart by quickly scanning key files to form an initial understanding of the task scope. Then write a skeleton plan (headers and rough notes) and ask the user your first round of questions. Don't explore exhaustively before engaging the user.\n\n### Asking Good Questions\n\n- Never ask what you could find out by reading the code.\n- Batch related questions together.\n- Focus on things only the user can answer: requirements, preferences, tradeoffs, edge-case priorities.\n- Scale depth to the task - a vague feature request needs many rounds; a focused bug fix may need one or none.\n\n### Plan File Structure\n\nYour plan file should use markdown with clear sections:\n- **Context** - Why this change is being made: the problem, what prompted it, the intended outcome.\n- **Approach** - Your recommended approach only, not all alternatives considered.\n- **Files to modify** - List the critical file paths that will be changed.\n- **Reuse** - Reference existing functions and utilities you found, with their file paths.\n- **Steps** - Ordered implementation steps written as plain list items.\n- **Verification** - How to test the changes end-to-end (run the code, run tests, manual checks).\n\nKeep the plan concise enough to scan quickly, but detailed enough to execute effectively.\n\n### When to Submit\n\nYour plan is ready when you've addressed all ambiguities and it covers: what to change, which files to modify, what existing code to reuse, and how to verify. Call ${PLAN_SUBMIT_TOOL} to submit for review.\n\n### Revising After Feedback\n\nWhen the user denies a plan with feedback:\n1. Read ${planFilePath} to see the current plan.\n2. Use the edit tool to make targeted changes addressing the feedback - do NOT rewrite the entire file.\n3. Call ${PLAN_SUBMIT_TOOL} again to resubmit.\n\n### Ending Your Turn\n\nYour turn should only end by either:\n- Asking the user a question to gather more information.\n- Calling ${PLAN_SUBMIT_TOOL} when the plan is ready for review.\n\nDo not end your turn without doing one of these two things.`;
-}
-
 export function getPlanningToolBlockResult(
 	check: PlanningToolCheck,
 ): PlanningBlockResult | undefined {
@@ -444,6 +440,18 @@ export function shouldKeepContextMessage(message: unknown): boolean {
 	}
 
 	return !hasPlanBanner(message.content);
+}
+
+export function syncPlanningContextMessages(messages: unknown[], planningPrompt: string): unknown[] {
+	return [
+		...messages.filter(shouldKeepContextMessage),
+		{
+			role: "custom",
+			customType: "plan-context",
+			content: planningPrompt,
+			display: false,
+		},
+	];
 }
 
 export function getPhaseNotification(phase: Phase, planFilePath: string): string | undefined {

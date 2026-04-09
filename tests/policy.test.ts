@@ -9,6 +9,7 @@ import {
 	getPhaseNotification,
 	getPlanningToolBlockResult,
 	resolveGlobalPlanPath,
+	syncPlanningContextMessages,
 } from "../nplan-policy.ts";
 import { formatPhaseWidgetLines } from "../nplan-widget.ts";
 
@@ -139,6 +140,45 @@ void test("getPersistedPlanState keeps the latest idle plan state with a null sa
 		planFilePath: "/abs/path/plan.md",
 		savedState: null,
 	});
+});
+
+void test("syncPlanningContextMessages appends the current planning prompt once", () => {
+	const messages = syncPlanningContextMessages([
+		{ role: "user", content: "hello" },
+	], "[PLAN - PLANNING PHASE]\nCurrent plan prompt");
+
+	assert.deepEqual(messages, [
+		{ role: "user", content: "hello" },
+		{
+			role: "custom",
+			customType: "plan-context",
+			content: "[PLAN - PLANNING PHASE]\nCurrent plan prompt",
+			display: false,
+		},
+	]);
+});
+
+void test("syncPlanningContextMessages replaces stale planning prompts without duplication", () => {
+	const messages = syncPlanningContextMessages([
+		{ role: "user", content: "hello" },
+		{
+			role: "custom",
+			customType: "plan-context",
+			content: "[PLAN - PLANNING PHASE]\nOld plan prompt",
+			display: false,
+		},
+		{ role: "user", content: "[PLAN - PLANNING PHASE]\nOld plan prompt" },
+	], "[PLAN - PLANNING PHASE]\nCurrent plan prompt");
+
+	assert.deepEqual(messages, [
+		{ role: "user", content: "hello" },
+		{
+			role: "custom",
+			customType: "plan-context",
+			content: "[PLAN - PLANNING PHASE]\nCurrent plan prompt",
+			display: false,
+		},
+	]);
 });
 
 void test("formatPhaseWidgetLines right-aligns the plan path when there is enough width", () => {

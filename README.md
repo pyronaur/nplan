@@ -24,8 +24,8 @@ The leader action uses the current remembered plan file. Set the plan once with 
 
 - `index.ts` loads `nplan.ts`
 - `nplan.ts` owns the extension lifecycle, commands, flags, state restore, tool gating, and plan submission flow
-- `nplan-config.ts` owns config loading, phase profile resolution, and prompt rendering
-- `nplan-policy.ts` owns global plan-path rules, planning prompt fallback text, planning tool restrictions, and phase UI rendering
+- `nplan-config.ts` owns config loading, phase profile resolution, bundled/default planning prompt loading, and prompt rendering
+- `nplan-policy.ts` owns global plan-path rules, planning context message shaping, planning tool restrictions, and phase UI rendering
 - `nplan-review.ts` owns the CLI review transport
 - `nplan-tool-scope.ts` owns the planning tool surface
 - `nplan-feedback.ts` owns the plan-denial message template
@@ -50,6 +50,33 @@ Config is loaded in this order:
 
 Project config overrides global config. `null`, `[]`, and empty strings preserve the same clearing semantics used by the previous implementation.
 
+Planning prompt resolution is file-backed and follows the same project-over-global precedence:
+
+1. `phases.planning.planningPromptFile` in `.pi/plan.json`
+2. `.pi/nplan/planning-prompt.md`
+3. `phases.planning.planningPromptFile` in `~/.pi/agent/plan.json`
+4. `~/.pi/agent/nplan/planning-prompt.md`
+5. bundled `prompts/planning-prompt.md`
+
+Example project config:
+
+```json
+{
+  "phases": {
+    "planning": {
+      "planningPromptFile": "prompts/my-planning-prompt.md"
+    }
+  }
+}
+```
+
+Relative `planningPromptFile` paths resolve from the config file directory:
+
+- project config resolves relative to `.pi/`
+- global config resolves relative to `~/.pi/agent/`
+
+The old planning `systemPrompt` config path is no longer supported. `nplan` ignores it and emits a warning.
+
 ## Tests
 
 Run:
@@ -60,7 +87,7 @@ npm test
 
 The test suite covers:
 
-- config merge and prompt rendering behavior
+- config merge, prompt rendering, and planning prompt file resolution behavior
 - planning tool scoping
-- global plan-path resolution and planning tool restrictions
+- global plan-path resolution, planning context shaping, and planning tool restrictions
 - CLI request/response handling through `plannotator`

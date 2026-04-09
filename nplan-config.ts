@@ -1,7 +1,8 @@
 import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, isAbsolute, join, normalize, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { isRecord, isThinkingLevel } from "./nplan-guards.ts";
 
 export type PhaseName = "planning" | "reviewing";
@@ -17,7 +18,7 @@ export interface PhaseProfile {
 	thinking?: ThinkingLevel | null;
 	activeTools?: string[] | null;
 	statusLabel?: string | null;
-	systemPrompt?: string | null;
+	planningPrompt?: string | null;
 }
 
 export interface PlanConfig {
@@ -35,7 +36,7 @@ export interface ResolvedPhaseProfile {
 	thinking?: ThinkingLevel;
 	activeTools?: string[];
 	statusLabel?: string;
-	systemPrompt?: string;
+	planningPrompt?: string;
 }
 
 export interface PromptVariables {
@@ -52,57 +53,30 @@ export interface PromptRenderResult {
 	unknownVariables: string[];
 }
 
+const PHASES: PhaseName[] = ["planning", "reviewing"];
+const PLANNING_PROMPT_FILE = "planning-prompt.md";
+const BUNDLED_PLANNING_PROMPT_PATH = join(
+	dirname(fileURLToPath(import.meta.url)),
+	"prompts",
+	PLANNING_PROMPT_FILE,
+);
+
 const INTERNAL_CONFIG: PlanConfig = {
 	phases: {
 		planning: {
 			activeTools: ["grep", "find", "ls", "plan_submit"],
 			statusLabel: "⏸ plan",
-			systemPrompt: "[PLAN - PLANNING PHASE]\n"
-				+ "You are in plan mode. You MUST NOT make any changes to the codebase - no edits, no commits, no installs, no destructive commands. The ONLY file you may write to or edit is the plan file: ${planFilePath}.\n\n"
-				+ "Available tools: read, bash, grep, find, ls, write (${planFilePath} only), edit (${planFilePath} only), plan_submit\n\n"
-				+ "Do not run destructive bash commands (rm, git push, npm install, etc.) - focus on reading and exploring the codebase. Web fetching (curl, wget) is fine.\n\n"
-				+ "## Iterative Planning Workflow\n\n"
-				+ "You are pair-planning with the user. Explore the code to build context, then write your findings into ${planFilePath} as you go. The plan starts as a rough skeleton and gradually becomes the final plan.\n\n"
-				+ "### The Loop\n\n"
-				+ "Repeat this cycle until the plan is complete:\n\n"
-				+ "1. **Explore** - Use read, grep, find, ls, and bash to understand the codebase. Actively search for existing functions, utilities, and patterns that can be reused - avoid proposing new code when suitable implementations already exist.\n"
-				+ "2. **Update the plan file** - After each discovery, immediately capture what you learned in ${planFilePath}. Don't wait until the end. Use write for the initial draft, then edit for all subsequent updates.\n"
-				+ "3. **Ask the user** - When you hit an ambiguity or decision you can't resolve from code alone, ask. Then go back to step 1.\n\n"
-				+ "### First Turn\n\n"
-				+ "Start by quickly scanning key files to form an initial understanding of the task scope. Then write a skeleton plan (headers and rough notes) and ask the user your first round of questions. Don't explore exhaustively before engaging the user.\n\n"
-				+ "### Asking Good Questions\n\n"
-				+ "- Never ask what you could find out by reading the code.\n"
-				+ "- Batch related questions together.\n"
-				+ "- Focus on things only the user can answer: requirements, preferences, tradeoffs, edge-case priorities.\n"
-				+ "- Scale depth to the task - a vague feature request needs many rounds; a focused bug fix may have one or none.\n\n"
-				+ "### Plan File Structure\n\n"
-				+ "Your plan file should use markdown with clear sections:\n"
-				+ "- **Context** - Why this change is being made: the problem, what prompted it, the intended outcome.\n"
-				+ "- **Approach** - Your recommended approach only, not all alternatives considered.\n"
-				+ "- **Files to modify** - List the critical file paths that will be changed.\n"
-				+ "- **Reuse** - Reference existing functions and utilities you found, with their file paths.\n"
-				+ "- **Steps** - Implementation checklist:\n"
-				+ "  - [ ] Step 1 description\n"
-				+ "  - [ ] Step 2 description\n"
-				+ "- **Verification** - How to test the changes end-to-end (run the code, run tests, manual checks).\n\n"
-				+ "Keep the plan concise enough to scan quickly, but detailed enough to execute effectively.\n\n"
-				+ "### When to Submit\n\n"
-				+ "Your plan is ready when you've addressed all ambiguities and it covers: what to change, which files to modify, what existing code to reuse, and how to verify. Call plan_submit to submit for review.\n\n"
-				+ "### Revising After Feedback\n\n"
-				+ "When the user denies a plan with feedback:\n"
-				+ "1. Read ${planFilePath} to see the current plan.\n"
-				+ "2. Use the edit tool to make targeted changes addressing the feedback - do NOT rewrite the entire file.\n"
-				+ "3. Call plan_submit again to resubmit.\n\n"
-				+ "### Ending Your Turn\n\n"
-				+ "Your turn should only end by either:\n"
-				+ "- Asking the user a question to gather more information.\n"
-				+ "- Calling plan_submit when the plan is ready for review.\n\n"
-				+ "Do not end your turn without doing one of these two things.",
+			planningPrompt: readFileSync(BUNDLED_PLANNING_PROMPT_PATH, "utf-8"),
 		},
 	},
 };
 
-const PHASES: PhaseName[] = ["planning", "reviewing"];
+type ConfigSourceOptions = {
+	configPath: string;
+	baseDir: string;
+	defaultPlanningPromptPath?: string;
+	sourceName: string;
+};
 
 function getAgentConfigDir(): string {
 	const envDir = process.env.PI_CODING_AGENT_DIR;
@@ -110,6 +84,16 @@ function getAgentConfigDir(): string {
 		return envDir;
 	}
 	return join(process.env.HOME || process.env.USERPROFILE || homedir(), ".pi", "agent");
+}
+
+function expandHome(input: string): string {
+	if (input === "~") {
+		return homedir();
+	}
+	if (input.startsWith("~/")) {
+		return join(homedir(), input.slice(2));
+	}
+	return input;
 }
 
 function readJsonFile(path: string): { data?: unknown; error?: string } {
@@ -124,6 +108,28 @@ function readJsonFile(path: string): { data?: unknown; error?: string } {
 			error: `Failed to parse ${path}: ${error instanceof Error ? error.message : String(error)}`,
 		};
 	}
+}
+
+function readTextFile(path: string): { text?: string; error?: string } {
+	if (!existsSync(path)) {
+		return {};
+	}
+
+	try {
+		return { text: readFileSync(path, "utf-8") };
+	} catch (error) {
+		return {
+			error: `Failed to read ${path}: ${error instanceof Error ? error.message : String(error)}`,
+		};
+	}
+}
+
+function resolveConfigPath(input: string, baseDir: string): string {
+	const expanded = expandHome(input.trim());
+	if (isAbsolute(expanded)) {
+		return normalize(expanded);
+	}
+	return resolve(baseDir, expanded);
 }
 
 function normalizeModel(value: unknown): PhaseModelRef | null | undefined {
@@ -188,17 +194,37 @@ function normalizeLabel(value: unknown): string | null | undefined {
 	return trimmed.length > 0 ? trimmed : null;
 }
 
-function normalizePrompt(value: unknown): string | null | undefined {
+function normalizePlanningPromptFile(
+	value: unknown,
+	options: { baseDir: string; warnings: string[]; keyPath: string },
+): string | null | undefined {
 	if (value === null) {
 		return null;
 	}
 	if (typeof value !== "string") {
 		return undefined;
 	}
-	return value.length > 0 ? value : null;
+	const trimmed = value.trim();
+	if (!trimmed) {
+		return null;
+	}
+	const path = resolveConfigPath(trimmed, options.baseDir);
+	const prompt = readTextFile(path);
+	if (prompt.error) {
+		options.warnings.push(`${options.keyPath}: ${prompt.error}`);
+		return undefined;
+	}
+	if (prompt.text === undefined) {
+		options.warnings.push(`${options.keyPath}: prompt file not found: ${path}`);
+		return undefined;
+	}
+	return prompt.text;
 }
 
-function normalizeProfile(raw: unknown): PhaseProfile | null | undefined {
+function normalizeProfile(
+	raw: unknown,
+	options: { baseDir: string; warnings: string[]; keyPath: string },
+): PhaseProfile | null | undefined {
 	if (raw === null) {
 		return null;
 	}
@@ -221,8 +247,18 @@ function normalizeProfile(raw: unknown): PhaseProfile | null | undefined {
 	if ("statusLabel" in raw) {
 		profile.statusLabel = normalizeLabel(raw.statusLabel);
 	}
+	if ("planningPromptFile" in raw) {
+		profile.planningPrompt = normalizePlanningPromptFile(raw.planningPromptFile, options);
+	}
+	if ("planningPrompt" in raw) {
+		options.warnings.push(
+			`${options.keyPath}: inline planningPrompt is not supported; use planningPromptFile instead.`,
+		);
+	}
 	if ("systemPrompt" in raw) {
-		profile.systemPrompt = normalizePrompt(raw.systemPrompt);
+		options.warnings.push(
+			`${options.keyPath}: systemPrompt is no longer supported; use planningPromptFile instead.`,
+		);
 	}
 	return profile;
 }
@@ -255,9 +291,9 @@ function mergeProfile(
 		thinking: override.thinking !== undefined ? override.thinking : base.thinking,
 		activeTools: override.activeTools !== undefined ? override.activeTools : base.activeTools,
 		statusLabel: override.statusLabel !== undefined ? override.statusLabel : base.statusLabel,
-		systemPrompt: override.systemPrompt !== undefined
-			? override.systemPrompt
-			: base.systemPrompt,
+		planningPrompt: override.planningPrompt !== undefined
+			? override.planningPrompt
+			: base.planningPrompt,
 	};
 }
 
@@ -275,24 +311,70 @@ function mergeConfig(base: PlanConfig, override: PlanConfig): PlanConfig {
 	};
 }
 
-function loadConfigSource(path: string): { config: PlanConfig; warning?: string } {
-	const parsed = readJsonFile(path);
+function applyDefaultPlanningPrompt(config: PlanConfig, prompt: string | undefined): PlanConfig {
+	if (prompt === undefined) {
+		return config;
+	}
+	if (config.phases?.planning === null) {
+		return config;
+	}
+	const planning = config.phases?.planning ?? {};
+	if (planning.planningPrompt !== undefined) {
+		return config;
+	}
+	return {
+		...config,
+		phases: {
+			...config.phases,
+			planning: {
+				...planning,
+				planningPrompt: prompt,
+			},
+		},
+	};
+}
+
+function loadDefaultPlanningPrompt(
+	path: string | undefined,
+	warnings: string[],
+	sourceName: string,
+): string | undefined {
+	if (!path) {
+		return undefined;
+	}
+	const prompt = readTextFile(path);
+	if (prompt.error) {
+		warnings.push(`${sourceName}: ${prompt.error}`);
+		return undefined;
+	}
+	return prompt.text;
+}
+
+function loadConfigSource(options: ConfigSourceOptions): LoadedPlanConfig {
+	const warnings: string[] = [];
+	const parsed = readJsonFile(options.configPath);
 	if (parsed.error) {
-		return { config: {}, warning: parsed.error };
-	}
-	const raw = parsed.data;
-	if (!isRecord(raw)) {
-		return { config: {} };
-	}
-	const config: PlanConfig = {};
-	if ("defaults" in raw) {
-		config.defaults = normalizeProfile(raw.defaults);
+		warnings.push(parsed.error);
 	}
 
-	if ("phases" in raw && isRecord(raw.phases)) {
+	const raw = isRecord(parsed.data) ? parsed.data : undefined;
+	let config: PlanConfig = {};
+	if (raw?.defaults !== undefined) {
+		config.defaults = normalizeProfile(raw.defaults, {
+			baseDir: options.baseDir,
+			warnings,
+			keyPath: `${options.sourceName}.defaults`,
+		});
+	}
+
+	if (isRecord(raw?.phases)) {
 		const phases: Partial<Record<PhaseName, PhaseProfile | null>> = {};
 		for (const phase of PHASES) {
-			const normalized = normalizeProfile(raw.phases[phase]);
+			const normalized = normalizeProfile(raw.phases[phase], {
+				baseDir: options.baseDir,
+				warnings,
+				keyPath: `${options.sourceName}.phases.${phase}`,
+			});
 			if (normalized !== undefined) {
 				phases[phase] = normalized;
 			}
@@ -301,7 +383,12 @@ function loadConfigSource(path: string): { config: PlanConfig; warning?: string 
 			config.phases = phases;
 		}
 	}
-	return { config };
+
+	config = applyDefaultPlanningPrompt(
+		config,
+		loadDefaultPlanningPrompt(options.defaultPlanningPromptPath, warnings, options.sourceName),
+	);
+	return { config, warnings };
 }
 
 function resolveModel(
@@ -377,17 +464,23 @@ function readPromptVariable(vars: PromptVariables, key: string): string | undefi
 
 export function loadPlanConfig(cwd: string): LoadedPlanConfig {
 	const warnings: string[] = [];
-	const globalPath = join(getAgentConfigDir(), "plan.json");
-	const globalConfig = loadConfigSource(globalPath);
-	if (globalConfig.warning) {
-		warnings.push(globalConfig.warning);
-	}
+	const agentDir = getAgentConfigDir();
+	const globalConfig = loadConfigSource({
+		configPath: join(agentDir, "plan.json"),
+		baseDir: agentDir,
+		defaultPlanningPromptPath: join(agentDir, "nplan", PLANNING_PROMPT_FILE),
+		sourceName: "global plan config",
+	});
+	warnings.push(...globalConfig.warnings);
 
-	const projectPath = join(cwd, ".pi", "plan.json");
-	const projectConfig = loadConfigSource(projectPath);
-	if (projectConfig.warning) {
-		warnings.push(projectConfig.warning);
-	}
+	const projectConfig = loadConfigSource({
+		configPath: join(cwd, ".pi", "plan.json"),
+		baseDir: join(cwd, ".pi"),
+		defaultPlanningPromptPath: join(cwd, ".pi", "nplan", PLANNING_PROMPT_FILE),
+		sourceName: "project plan config",
+	});
+	warnings.push(...projectConfig.warnings);
+
 	const merged = mergeConfig(
 		mergeConfig(INTERNAL_CONFIG, globalConfig.config),
 		projectConfig.config,
@@ -403,7 +496,7 @@ export function resolvePhaseProfile(config: PlanConfig, phase: PhaseName): Resol
 		thinking: resolveThinking(defaults.thinking, phaseConfig.thinking),
 		activeTools: resolveTools(defaults.activeTools, phaseConfig.activeTools),
 		statusLabel: resolveString(defaults.statusLabel, phaseConfig.statusLabel),
-		systemPrompt: resolveString(defaults.systemPrompt, phaseConfig.systemPrompt),
+		planningPrompt: resolveString(defaults.planningPrompt, phaseConfig.planningPrompt),
 	};
 }
 

@@ -14,7 +14,6 @@ import {
 import { isRecord } from "./nplan-guards.ts";
 import {
 	clearPhaseStatus,
-	getDefaultPlanningMessage,
 	getDefaultPlanPath,
 	getPersistedPlanState,
 	getPhaseNotification,
@@ -24,6 +23,7 @@ import {
 	resolveGlobalPlanPath,
 	type SavedPhaseState,
 	shouldKeepContextMessage,
+	syncPlanningContextMessages,
 } from "./nplan-policy.ts";
 import {
 	createPlanSubmitTool,
@@ -38,6 +38,7 @@ type Runtime = {
 	planFilePath: string;
 	savedState: SavedPhaseState | null;
 	planConfig: PlanConfig;
+	lastPromptWarning: string | null;
 };
 
 type PiLeaderAdd = (key: string, label: string, run: () => void | Promise<void>) => void;
@@ -51,6 +52,7 @@ function createRuntime(pi: ExtensionAPI): Runtime {
 		planFilePath: getDefaultPlanPath(),
 		savedState: null,
 		planConfig: {},
+		lastPromptWarning: null,
 	};
 }
 
@@ -81,6 +83,34 @@ function getPhaseProfile(runtime: Runtime): ReturnType<typeof resolvePhaseProfil
 	}
 
 	return resolvePhaseProfile(runtime.planConfig, runtime.phase);
+}
+
+function renderPlanningPrompt(runtime: Runtime, ctx: ExtensionContext): string | undefined {
+	const profile = getPhaseProfile(runtime);
+	if (!profile?.planningPrompt) {
+		runtime.lastPromptWarning = null;
+		return undefined;
+	}
+
+	const rendered = renderTemplate(
+		profile.planningPrompt,
+		buildPromptVariables({
+			planFilePath: runtime.planFilePath,
+			phase: runtime.phase,
+			completedCount: 0,
+			totalCount: 0,
+		}),
+	);
+	const warning = rendered.unknownVariables.length > 0
+		? `Plan mode: unknown template variables in ${runtime.phase} prompt: ${
+			rendered.unknownVariables.join(", ")
+		}`
+		: null;
+	if (warning && warning !== runtime.lastPromptWarning) {
+		ctx.ui.notify(warning, "warning");
+	}
+	runtime.lastPromptWarning = warning;
+	return rendered.text;
 }
 
 function updateUi(runtime: Runtime, ctx: ExtensionContext): void {
@@ -370,49 +400,24 @@ function registerToolCallHandler(runtime: Runtime): void {
 	});
 }
 
-function registerBeforeAgentStartHandler(runtime: Runtime): void {
-	runtime.pi.on("before_agent_start", async (_event, ctx) => {
-		const profile = getPhaseProfile(runtime);
-		if (profile?.systemPrompt) {
-			const rendered = renderTemplate(
-				profile.systemPrompt,
-				buildPromptVariables({
-					planFilePath: runtime.planFilePath,
-					phase: runtime.phase,
-					completedCount: 0,
-					totalCount: 0,
-				}),
-			);
-			if (rendered.unknownVariables.length > 0) {
-				ctx.ui.notify(
-					`Plan mode: unknown template variables in ${runtime.phase} prompt: ${
-						rendered.unknownVariables.join(", ")
-					}`,
-					"warning",
-				);
+function registerContextHandler(runtime: Runtime): void {
+	runtime.pi.on("context", async (event, ctx) => {
+		if (runtime.phase !== "planning") {
+			if (runtime.phase !== "idle") {
+				return;
 			}
 
-			return { systemPrompt: rendered.text };
-		}
-		if (runtime.phase === "planning") {
-			return {
-				message: {
-					customType: "plan-context",
-					content: getDefaultPlanningMessage(runtime.planFilePath),
-					display: false,
-				},
-			};
-		}
-	});
-}
-
-function registerContextHandler(runtime: Runtime): void {
-	runtime.pi.on("context", async (event) => {
-		if (runtime.phase !== "idle") {
-			return;
+			return { messages: event.messages.filter(shouldKeepContextMessage) };
 		}
 
-		return { messages: event.messages.filter(shouldKeepContextMessage) };
+		const planningPrompt = renderPlanningPrompt(runtime, ctx);
+		if (!planningPrompt) {
+			return { messages: event.messages.filter(shouldKeepContextMessage) };
+		}
+
+		return {
+			messages: syncPlanningContextMessages(event.messages, planningPrompt),
+		};
 	});
 }
 
@@ -484,7 +489,6 @@ export default function nplan(pi: ExtensionAPI): void {
 	registerCommands(runtime);
 	registerSubmitTool(runtime);
 	registerToolCallHandler(runtime);
-	registerBeforeAgentStartHandler(runtime);
 	registerContextHandler(runtime);
 	registerSessionStartHandler(runtime);
 	registerLeaderHandler(runtime);
