@@ -13,18 +13,18 @@
 	},
 
 	// Strict Oxlint coverage for the current runtime and test source layout.
-	// lint: {
-	// 	name: 'Lint TypeScript',
-	// 	match: ['*.ts', 'tests/**/*.ts', '.oxlintrc.json', 'tsconfig.json'],
-	// 	run: {
-	// 		label: 'TypeScript lint',
-	// 		cmd: 'oxlint --type-aware --tsconfig tsconfig.json .',
-	// 		guidance: [
-	// 			'If addressing these lints would require unreasonable or hacky workarounds, stop and write a brief problem description to the user.',
-	// 			'Exceptions are rare and reserved for edge cases where no truly clean solution exists.',
-	// 		],
-	// 	},
-	// },
+	lint: {
+		name: 'Lint TypeScript',
+		match: ['*.ts', 'tests/**/*.ts', '.oxlintrc.json', 'tsconfig.json'],
+		run: {
+			label: 'TypeScript lint',
+			cmd: 'oxlint --type-aware --tsconfig tsconfig.json .',
+			guidance: [
+				'If addressing these lints would require unreasonable or hacky workarounds, stop and write a brief problem description to the user.',
+				'Exceptions are rare and reserved for edge cases where no truly clean solution exists.',
+			],
+		},
+	},
 
 	// Type safety for the extension entrypoint and test files.
 	typecheck: {

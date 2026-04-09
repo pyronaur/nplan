@@ -15,7 +15,8 @@ const originalPath = process.env.PATH;
 afterEach(() => {
 	if (originalPath === undefined) {
 		delete process.env.PATH;
-	} else {
+	}
+	if (originalPath !== undefined) {
 		process.env.PATH = originalPath;
 	}
 	resetPlannotatorCliAvailabilityCache();
@@ -27,8 +28,8 @@ function makeFakePlannotator(output: string) {
 	const binPath = join(dir, "plannotator");
 	const script = [
 		"#!/bin/sh",
-		`cat > \"${capturePath}\"`,
-		`printf '%s' \"${output.replaceAll("\"", "\\\"")}\"`,
+		`cat > "${capturePath}"`,
+		`printf '%s' "${output.replaceAll("\"", "\\\"")}"`,
 	].join("\n");
 
 	writeFileSync(binPath, script, { encoding: "utf-8", mode: 0o755 });
@@ -58,7 +59,7 @@ async function runPlanReviewCliCase(output: string) {
 	};
 }
 
-test("buildPlannotatorRequest serializes the full plan content", () => {
+void test("buildPlannotatorRequest serializes the full plan content", () => {
 	const repoRoot = mkdtempSync(join(tmpdir(), "nplan-plan-review-request-"));
 	const planFilePath = join(repoRoot, "plan.md");
 	const planText = "# Plan\n\nShip the change.\n";
@@ -74,7 +75,7 @@ test("buildPlannotatorRequest serializes the full plan content", () => {
 	);
 });
 
-test("parsePlannotatorReviewResult approves allow decisions and keeps approval notes", () => {
+void test("parsePlannotatorReviewResult approves allow decisions and keeps approval notes", () => {
 	assert.deepEqual(
 		parsePlannotatorReviewResult(
 			JSON.stringify({
@@ -93,7 +94,7 @@ test("parsePlannotatorReviewResult approves allow decisions and keeps approval n
 	);
 });
 
-test("parsePlannotatorReviewResult preserves deny feedback", () => {
+void test("parsePlannotatorReviewResult preserves deny feedback", () => {
 	assert.deepEqual(
 		parsePlannotatorReviewResult(
 			JSON.stringify({
@@ -112,13 +113,13 @@ test("parsePlannotatorReviewResult preserves deny feedback", () => {
 	);
 });
 
-test("parsePlannotatorReviewResult rejects invalid stdout", () => {
+void test("parsePlannotatorReviewResult rejects invalid stdout", () => {
 	assert.throws(() => {
 		parsePlannotatorReviewResult("not json");
 	}, /not valid JSON/);
 });
 
-test("runPlanReviewCli sends the plan text to plannotator stdin and approves allow", async () => {
+void test("runPlanReviewCli sends the plan text to plannotator stdin and approves allow", async () => {
 	const { capturedRequest, planText, result } = await runPlanReviewCliCase(
 		JSON.stringify({
 			hookSpecificOutput: {
@@ -143,7 +144,7 @@ test("runPlanReviewCli sends the plan text to plannotator stdin and approves all
 	);
 });
 
-test("runPlanReviewCli returns revision feedback for deny decisions", async () => {
+void test("runPlanReviewCli returns revision feedback for deny decisions", async () => {
 	const { capturedRequest, planText, result } = await runPlanReviewCliCase(
 		JSON.stringify({
 			hookSpecificOutput: {

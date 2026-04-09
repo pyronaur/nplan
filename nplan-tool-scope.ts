@@ -1,7 +1,6 @@
 export type Phase = "idle" | "planning" | "executing";
 
 export const PLAN_SUBMIT_TOOL = "plan_submit";
-export const PLANNING_DISCOVERY_TOOLS = ["grep", "find", "ls"] as const;
 
 const PLANNING_ONLY_TOOLS = new Set<string>([PLAN_SUBMIT_TOOL]);
 
@@ -17,3 +16,5 @@ export function getToolsForPhase(baseTools: readonly string[], phase: Phase): st
 
 	return [...new Set([...tools, ...PLANNING_DISCOVERY_TOOLS, PLAN_SUBMIT_TOOL])];
 }
+
+export const PLANNING_DISCOVERY_TOOLS = ["grep", "find", "ls"] as const;

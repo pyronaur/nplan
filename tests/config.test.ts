@@ -36,7 +36,8 @@ function writeConfigPair(input: {
 afterEach(() => {
 	if (originalHome === undefined) {
 		delete process.env.HOME;
-	} else {
+	}
+	if (originalHome !== undefined) {
 		process.env.HOME = originalHome;
 	}
 
@@ -45,7 +46,7 @@ afterEach(() => {
 	}
 });
 
-test("loadPlanConfig loads the shipped internal base config", () => {
+void test("loadPlanConfig loads the shipped internal base config", () => {
 	const cwdDir = makeTempDir("nplan-config-base-");
 	process.env.HOME = makeTempDir("nplan-config-home-base-");
 
@@ -57,7 +58,7 @@ test("loadPlanConfig loads the shipped internal base config", () => {
 	assert.deepEqual(planning.activeTools, ["grep", "find", "ls", "plan_submit"]);
 });
 
-test("loadPlanConfig allows a project config to clear an inherited phase with null", () => {
+void test("loadPlanConfig allows a project config to clear an inherited phase with null", () => {
 	const homeDir = makeTempDir("nplan-config-home-null-");
 	const cwdDir = makeTempDir("nplan-config-cwd-null-");
 	process.env.HOME = homeDir;
@@ -81,7 +82,7 @@ test("loadPlanConfig allows a project config to clear an inherited phase with nu
 	assert.equal(planning.activeTools, undefined);
 });
 
-test("loadPlanConfig gives project config precedence over global config", () => {
+void test("loadPlanConfig gives project config precedence over global config", () => {
 	const homeDir = makeTempDir("nplan-config-home-");
 	const cwdDir = makeTempDir("nplan-config-cwd-");
 	process.env.HOME = homeDir;
@@ -112,7 +113,7 @@ test("loadPlanConfig gives project config precedence over global config", () => 
 	assert.deepEqual(planning.activeTools, []);
 });
 
-test("resolvePhaseProfile treats empty strings as clearing values", () => {
+void test("resolvePhaseProfile treats empty strings as clearing values", () => {
 	const profile = resolvePhaseProfile(
 		{
 			defaults: { statusLabel: "base", systemPrompt: "base prompt", activeTools: ["bash"] },
@@ -126,7 +127,7 @@ test("resolvePhaseProfile treats empty strings as clearing values", () => {
 	assert.deepEqual(profile.activeTools, []);
 });
 
-test("resolvePhaseProfile keeps defaults when a phase is cleared with null", () => {
+void test("resolvePhaseProfile keeps defaults when a phase is cleared with null", () => {
 	const profile = resolvePhaseProfile(
 		{
 			defaults: { thinking: "low", activeTools: ["bash"], statusLabel: "base" },
@@ -140,7 +141,7 @@ test("resolvePhaseProfile keeps defaults when a phase is cleared with null", () 
 	assert.equal(profile.statusLabel, "base");
 });
 
-test("renderTemplate reports unknown variables", () => {
+void test("renderTemplate reports unknown variables", () => {
 	const rendered = renderTemplate("Hello ${name} ${missing}", {
 		planFilePath: "PLAN.md",
 		todoList: "- [ ] A",
@@ -154,7 +155,7 @@ test("renderTemplate reports unknown variables", () => {
 	assert.deepEqual(rendered.unknownVariables, ["name", "missing"]);
 });
 
-test("formatTodoList formats remaining steps", () => {
+void test("formatTodoList formats remaining steps", () => {
 	const stats = formatTodoList([
 		{ step: 1, text: "First", completed: true },
 		{ step: 2, text: "Second", completed: false },
