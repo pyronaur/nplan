@@ -80,6 +80,7 @@ Current `nplan` behavior is intentionally different from upstream in a few place
 - planning mode enforces:
   - `write` only to the active plan file
   - `edit` only to the active plan file
+  - `apply_patch` only when every touched path is the active plan file; file moves/deletes remain blocked
   - `bash` only for allowlisted read-only inspection / safe web-fetching commands
 - a minimal above-editor phase indicator is shown only while active:
   - `plan mode`

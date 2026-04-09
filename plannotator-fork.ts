@@ -36,6 +36,14 @@ import {
 	resolvePlanInputForCommand,
 	resolvePlanInputPromptValue,
 } from "./plan-path.ts";
+import {
+	getDefaultExecutingMessage,
+	getDefaultPlanningMessage,
+	getPlanningApplyPatchBlockReason,
+	getPlanningBashBlockReason,
+} from "./nplan-policy.ts";
+import { createRuntimeGuard } from "./nplan-runtime.ts";
+import { clearPhaseHeader, clearPhaseStatus, clearPhaseUi, renderPhaseWidget } from "./nplan-ui.ts";
 
 type SavedPhaseState = {
 	activeTools: string[];
@@ -49,20 +57,6 @@ type PersistedPlannotatorState = {
 	savedState?: SavedPhaseState;
 };
 
-type NplanRuntimeRegistry = {
-	activeRuntimeToken: string | null;
-};
-
-const NPLAN_RUNTIME_REGISTRY_KEY = "__nplanRuntimeRegistry";
-
-function getRuntimeRegistry(): NplanRuntimeRegistry {
-	const globalRegistry = globalThis as typeof globalThis & {
-		[NPLAN_RUNTIME_REGISTRY_KEY]?: NplanRuntimeRegistry;
-	};
-	globalRegistry[NPLAN_RUNTIME_REGISTRY_KEY] ??= { activeRuntimeToken: null };
-	return globalRegistry[NPLAN_RUNTIME_REGISTRY_KEY];
-}
-
 function getPlanReviewAvailabilityWarning(options: { hasUI: boolean; hasPlanHtml: boolean }): string | null {
 	const { hasUI, hasPlanHtml } = options;
 	if (hasUI && hasPlanHtml) return null;
@@ -75,193 +69,8 @@ function getPlanReviewAvailabilityWarning(options: { hasUI: boolean; hasPlanHtml
 	return "Plannotator: interactive plan review assets are missing. Rebuild the vendored Plannotator assets to restore the browser UI. Plans will auto-approve on submit.";
 }
 
-function getDefaultPlanningMessage(planFilePath: string): string {
-	return `[PLANNOTATOR - PLANNING PHASE]
-You are in plan mode. You MUST NOT make any changes to the codebase — no edits, no commits, no installs, no destructive commands. The ONLY file you may write to or edit is the plan file: ${planFilePath}.
-
-Available tools: read, bash, grep, find, ls, write (${planFilePath} only), edit (${planFilePath} only), ${PLAN_SUBMIT_TOOL}
-
-Bash is restricted to read-only inspection and safe web-fetching commands during planning. Do not run destructive bash commands (rm, git push, npm install, etc.). Web fetching (curl, wget -O -) is fine.
-
-## Iterative Planning Workflow
-
-You are pair-planning with the user. Explore the code to build context, then write your findings into ${planFilePath} as you go. The plan starts as a rough skeleton and gradually becomes the final plan.
-
-### The Loop
-
-Repeat this cycle until the plan is complete:
-
-1. **Explore** — Use read, grep, find, ls, and bash to understand the codebase. Actively search for existing functions, utilities, and patterns that can be reused — avoid proposing new code when suitable implementations already exist.
-2. **Update the plan file** — After each discovery, immediately capture what you learned in ${planFilePath}. Don't wait until the end. Use write for the initial draft, then edit for all subsequent updates.
-3. **Ask the user** — When you hit an ambiguity or decision you can't resolve from code alone, ask. Then go back to step 1.
-
-### First Turn
-
-Start by quickly scanning key files to form an initial understanding of the task scope. Then write a skeleton plan (headers and rough notes) and ask the user your first round of questions. Don't explore exhaustively before engaging the user.
-
-### Asking Good Questions
-
-- Never ask what you could find out by reading the code.
-- Batch related questions together.
-- Focus on things only the user can answer: requirements, preferences, tradeoffs, edge-case priorities.
-- Scale depth to the task — a vague feature request needs many rounds; a focused bug fix may need one or none.
-
-### Plan File Structure
-
-Your plan file should use markdown with clear sections:
-- **Context** — Why this change is being made: the problem, what prompted it, the intended outcome.
-- **Approach** — Your recommended approach only, not all alternatives considered.
-- **Files to modify** — List the critical file paths that will be changed.
-- **Reuse** — Reference existing functions and utilities you found, with their file paths.
-- **Steps** — Ordered implementation steps written as plain list items.
-- **Verification** — How to test the changes end-to-end (run the code, run tests, manual checks).
-
-Keep the plan concise enough to scan quickly, but detailed enough to execute effectively.
-
-### When to Submit
-
-Your plan is ready when you've addressed all ambiguities and it covers: what to change, which files to modify, what existing code to reuse, and how to verify. Call ${PLAN_SUBMIT_TOOL} to submit for review.
-
-### Revising After Feedback
-
-When the user denies a plan with feedback:
-1. Read ${planFilePath} to see the current plan.
-2. Use the edit tool to make targeted changes addressing the feedback — do NOT rewrite the entire file.
-3. Call ${PLAN_SUBMIT_TOOL} again to resubmit.
-
-### Ending Your Turn
-
-Your turn should only end by either:
-- Asking the user a question to gather more information.
-- Calling ${PLAN_SUBMIT_TOOL} when the plan is ready for review.
-
-Do not end your turn without doing one of these two things.`;
-}
-
-function getDefaultExecutingMessage(planFilePath: string): string {
-	return `[PLANNOTATOR - EXECUTING PLAN]
-Full tool access is enabled. Execute the plan from ${planFilePath}.
-
-Carry out the approved plan carefully and verify your work as you go.`;
-}
-
-const PLANNING_MUTATING_BASH_PATTERNS = [
-	/\brm\b/i,
-	/\brmdir\b/i,
-	/\bmv\b/i,
-	/\bcp\b/i,
-	/\bmkdir\b/i,
-	/\btouch\b/i,
-	/\bchmod\b/i,
-	/\bchown\b/i,
-	/\bchgrp\b/i,
-	/\bln\b/i,
-	/\btee\b/i,
-	/\btruncate\b/i,
-	/\bdd\b/i,
-	/\brsync\b/i,
-	/\bscp\b/i,
-	/\bsftp\b/i,
-	/(^|[^<])>(?!>)/,
-	/>>/,
-	/<<<?/,
-	/\bsed\s+-i\b/i,
-	/\bnpm\s+(install|uninstall|update|ci|link|publish)\b/i,
-	/\byarn\s+(add|remove|install|publish)\b/i,
-	/\bpnpm\s+(add|remove|install|publish)\b/i,
-	/\bpip(?:3)?\s+(install|uninstall)\b/i,
-	/\bapt(?:-get)?\s+(install|remove|purge|update|upgrade)\b/i,
-	/\bbrew\s+(install|uninstall|upgrade)\b/i,
-	/\bgit\s+(add|commit|push|pull|merge|rebase|reset|checkout|switch|branch\s+-[dD]|stash|cherry-pick|revert|tag|init|clone)\b/i,
-	/\bsudo\b/i,
-	/\bsu\b/i,
-	/\bkill\b/i,
-	/\bpkill\b/i,
-	/\bkillall\b/i,
-	/\breboot\b/i,
-	/\bshutdown\b/i,
-	/\bsystemctl\s+(start|stop|restart|enable|disable)\b/i,
-	/\bservice\s+\S+\s+(start|stop|restart)\b/i,
-	/\b(vim?|nano|emacs|code|subl|mate)\b/i,
-	/\bpython(?:3)?\b(?!\s+--version\b)/i,
-	/\bnode\b(?!\s+--version\b)/i,
-	/\bperl\b(?!\s+-v\b)/i,
-	/\bruby\b(?!\s+--version\b)/i,
-	/\bphp\b(?!\s+-v\b)/i,
-	/\blua\b(?!\s+-v\b)/i,
-] as const;
-
-const PLANNING_SAFE_BASH_PATTERNS = [
-	/^\s*cat\b/i,
-	/^\s*head\b/i,
-	/^\s*tail\b/i,
-	/^\s*less\b/i,
-	/^\s*more\b/i,
-	/^\s*grep\b/i,
-	/^\s*find\b/i,
-	/^\s*ls\b/i,
-	/^\s*pwd\b/i,
-	/^\s*echo\b/i,
-	/^\s*printf\b/i,
-	/^\s*wc\b/i,
-	/^\s*sort\b/i,
-	/^\s*uniq\b/i,
-	/^\s*diff\b/i,
-	/^\s*file\b/i,
-	/^\s*stat\b/i,
-	/^\s*du\b/i,
-	/^\s*df\b/i,
-	/^\s*tree\b/i,
-	/^\s*which\b/i,
-	/^\s*whereis\b/i,
-	/^\s*type\b/i,
-	/^\s*env\b/i,
-	/^\s*printenv\b/i,
-	/^\s*uname\b/i,
-	/^\s*whoami\b/i,
-	/^\s*id\b/i,
-	/^\s*date\b/i,
-	/^\s*uptime\b/i,
-	/^\s*ps\b/i,
-	/^\s*top\b/i,
-	/^\s*htop\b/i,
-	/^\s*git\s+(status|log|diff|show|branch|remote|config\s+--get|ls-files)\b/i,
-	/^\s*npm\s+(list|ls|view|info|search|outdated|audit)\b/i,
-	/^\s*yarn\s+(list|info|why|audit)\b/i,
-	/^\s*pnpm\s+(list|why|audit)\b/i,
-	/^\s*python(?:3)?\s+--version\b/i,
-	/^\s*node\s+--version\b/i,
-	/^\s*curl\b/i,
-	/^\s*wget\b.*(?:-O\s*-|-O-)\b/i,
-	/^\s*jq\b/i,
-	/^\s*sed\s+-n\b/i,
-	/^\s*awk\b/i,
-	/^\s*rg\b/i,
-	/^\s*fd\b/i,
-	/^\s*bat\b/i,
-	/^\s*exa\b/i,
-] as const;
-
-function getPlanningBashBlockReason(command: string): string | null {
-	const trimmed = command.trim();
-	if (!trimmed) {
-		return "Plannotator: empty bash commands are not allowed during planning.";
-	}
-
-	if (PLANNING_MUTATING_BASH_PATTERNS.some((pattern) => pattern.test(trimmed))) {
-		return `Plannotator: bash commands that can modify files or system state are blocked during planning. Blocked: ${command}`;
-	}
-
-	if (!PLANNING_SAFE_BASH_PATTERNS.some((pattern) => pattern.test(trimmed))) {
-		return `Plannotator: bash is restricted to allowlisted read-only inspection commands during planning. Blocked: ${command}`;
-	}
-
-	return null;
-}
-
 export default function plannotator(pi: ExtensionAPI): void {
-	const runtimeRegistry = getRuntimeRegistry();
-	const runtimeToken = `${Date.now()}:${Math.random().toString(36).slice(2)}`;
+	const runtimeGuard = createRuntimeGuard();
 	let phase: Phase = "idle";
 	void registerPlannotatorEventListeners(pi);
 	let planFilePath = getDefaultPlanPath();
@@ -269,17 +78,15 @@ export default function plannotator(pi: ExtensionAPI): void {
 	let plannotatorConfig = {};
 
 	function activateRuntime(): void {
-		runtimeRegistry.activeRuntimeToken = runtimeToken;
+		runtimeGuard.activate();
 	}
 
 	function isActiveRuntime(): boolean {
-		return runtimeRegistry.activeRuntimeToken === runtimeToken;
+		return runtimeGuard.isActive();
 	}
 
 	function deactivateRuntime(): void {
-		if (isActiveRuntime()) {
-			runtimeRegistry.activeRuntimeToken = null;
-		}
+		runtimeGuard.deactivate();
 	}
 
 	pi.registerFlag("plan", {
@@ -306,26 +113,43 @@ export default function plannotator(pi: ExtensionAPI): void {
 	}
 
 	function updateStatus(ctx: ExtensionContext): void {
-		ctx.ui.setStatus("plannotator", undefined);
+		return clearPhaseStatus(ctx);
+		// const profile = getPhaseProfile();
+		// if (phase === "executing" && checklistItems.length > 0) {
+		// 	const completed = checklistItems.filter((t) => t.completed).length;
+		// 	ctx.ui.setStatus(
+		// 		"plannotator",
+		// 		ctx.ui.theme.fg("accent", `📋 ${completed}/${checklistItems.length}`),
+		// 	);
+		// } else if (phase === "planning" && profile?.statusLabel) {
+		// 	ctx.ui.setStatus("plannotator", ctx.ui.theme.fg("warning", profile.statusLabel));
+		// } else if (phase === "executing" && profile?.statusLabel) {
+		// 	ctx.ui.setStatus("plannotator", ctx.ui.theme.fg("accent", profile.statusLabel));
+		// } else {
+		// 	ctx.ui.setStatus("plannotator", undefined);
+		// }
 	}
 
 	function updateHeader(ctx: ExtensionContext): void {
-		if (!ctx.hasUI) return;
-		ctx.ui.setHeader(undefined);
+		clearPhaseHeader(ctx);
 	}
 
 	function updateWidget(ctx: ExtensionContext): void {
-		if (phase === "planning") {
-			ctx.ui.setWidget("plannotator-progress", [ctx.ui.theme.fg("warning", "plan mode")]);
-			return;
-		}
-
-		if (phase === "executing") {
-			ctx.ui.setWidget("plannotator-progress", [ctx.ui.theme.fg("accent", "implementation phase")]);
-			return;
-		}
-
-		ctx.ui.setWidget("plannotator-progress", undefined);
+		return renderPhaseWidget(ctx, phase);
+		// if (phase === "executing" && checklistItems.length > 0) {
+		// 	const lines = checklistItems.map((item) => {
+		// 		if (item.completed) {
+		// 			return (
+		// 				ctx.ui.theme.fg("success", "☑ ") +
+		// 				ctx.ui.theme.fg("muted", ctx.ui.theme.strikethrough(item.text))
+		// 			);
+		// 		}
+		// 		return `${ctx.ui.theme.fg("muted", "☐ ")}${item.text}`;
+		// 	});
+		// 	ctx.ui.setWidget("plannotator-progress", lines);
+		// } else {
+		// 	ctx.ui.setWidget("plannotator-progress", undefined);
+		// }
 	}
 
 	function captureSavedState(ctx: ExtensionContext): void {
@@ -603,6 +427,18 @@ export default function plannotator(pi: ExtensionAPI): void {
 			}
 		}
 
+		if (event.toolName === "apply_patch") {
+			const patch = typeof event.input.patch === "string" ? event.input.patch : "";
+			const allowedPath = resolvePlanPath(ctx.cwd);
+			const reason = getPlanningApplyPatchBlockReason(patch, ctx.cwd, allowedPath, planFilePath);
+			if (reason) {
+				return {
+					block: true,
+					reason,
+				};
+			}
+		}
+
 		if (event.toolName === "bash") {
 			const command = typeof event.input.command === "string" ? event.input.command : "";
 			const reason = getPlanningBashBlockReason(command);
@@ -742,11 +578,7 @@ export default function plannotator(pi: ExtensionAPI): void {
 
 	pi.on("session_shutdown", async (_event, ctx) => {
 		if (!isActiveRuntime()) return;
-		ctx.ui.setStatus("plannotator", undefined);
-		ctx.ui.setWidget("plannotator-progress", undefined);
-		if (ctx.hasUI) {
-			ctx.ui.setHeader(undefined);
-		}
+		clearPhaseUi(ctx);
 		deactivateRuntime();
 	});
 }
