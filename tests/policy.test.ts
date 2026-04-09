@@ -3,12 +3,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
-	formatPhaseWidgetLines,
 	getDefaultPlanPath,
 	getPhaseNotification,
 	getPlanningToolBlockResult,
 	resolveGlobalPlanPath,
 } from "../nplan-policy.ts";
+import { formatPhaseWidgetLines } from "../nplan-widget.ts";
 
 void test("resolveGlobalPlanPath maps empty input to the default global plan", () => {
 	assert.equal(getDefaultPlanPath(), join(homedir(), ".n", "pi", "plans", "plan.md"));
@@ -99,10 +99,22 @@ void test("getPhaseNotification includes the absolute plan path for plan and imp
 });
 
 void test("formatPhaseWidgetLines right-aligns the plan path when there is enough width", () => {
-	assert.deepEqual(formatPhaseWidgetLines("planning", "/abs/path/plan.md", 40), [
+	assert.deepEqual(formatPhaseWidgetLines({
+		phase: "planning",
+		planFilePath: "/abs/path/plan.md",
+		width: 40,
+		padding: 2,
+		gap: 4,
+	}), [
 		"  plan mode          /abs/path/plan.md  ",
 	]);
-	assert.deepEqual(formatPhaseWidgetLines("planning", "/abs/path/plan.md", 10), [
+	assert.deepEqual(formatPhaseWidgetLines({
+		phase: "planning",
+		planFilePath: "/abs/path/plan.md",
+		width: 10,
+		padding: 2,
+		gap: 4,
+	}), [
 		"  plan mode",
 		"  /abs/path/plan.md",
 	]);

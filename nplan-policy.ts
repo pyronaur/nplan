@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { basename, extname, isAbsolute, join, normalize, parse, resolve, sep } from "node:path";
 import { isRecord, isThinkingLevel } from "./nplan-guards.ts";
 import { type Phase, PLAN_SUBMIT_TOOL } from "./nplan-tool-scope.ts";
+import { formatPhaseWidgetLines, renderColoredPhaseWidgetLine } from "./nplan-widget.ts";
 
 export const DEFAULT_PLAN_NAME = "plan";
 
@@ -205,16 +206,6 @@ function hasPlanBanner(content: unknown): boolean {
 	});
 }
 
-function getPhaseLabel(phase: Phase): string | undefined {
-	if (phase === "planning") {
-		return "plan mode";
-	}
-	if (phase === "executing") {
-		return "implementation phase";
-	}
-	return undefined;
-}
-
 function slugifyPlanName(input: string): string {
 	const base = parse(basename(input)).name;
 	const slug = base.normalize("NFKD").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(
@@ -413,13 +404,16 @@ export function renderPhaseWidget(ctx: ExtensionContext, phase: Phase, planFileP
 	ctx.ui.setWidget(WIDGET_KEY, (_tui, theme) => ({
 		invalidate() {},
 		render(width: number) {
-			const color = phase === "planning" ? "warning" : "accent";
-			return formatPhaseWidgetLines(phase, planFilePath, width).map((line) => {
-				const left = line.match(/^\s*/)?.[0] ?? "";
-				const right = line.match(/\s*$/)?.[0] ?? "";
-				const body = line.slice(left.length, line.length - right.length);
-				return `${left}${theme.fg(color, body)}${right}`;
+			const lines = formatPhaseWidgetLines({
+				phase,
+				planFilePath,
+				width,
+				padding: WIDGET_SIDE_PADDING,
+				gap: WIDGET_GAP,
 			});
+			return lines.map((line) =>
+				renderColoredPhaseWidgetLine({ phase, line, planFilePath, theme })
+			);
 		},
 	}));
 }
@@ -464,31 +458,4 @@ export function getPhaseNotification(phase: Phase, planFilePath: string): string
 		return `Implementation phase enabled. Plan file: ${planFilePath}`;
 	}
 	return undefined;
-}
-
-export function formatPhaseWidgetLines(
-	phase: Phase,
-	planFilePath: string,
-	width: number,
-): string[] {
-	const label = getPhaseLabel(phase);
-	if (!label) {
-		return [];
-	}
-	const lineWidth = Math.max(width, 0);
-	const innerWidth = Math.max(lineWidth - WIDGET_SIDE_PADDING * 2, 0);
-	const minWidth = label.length + WIDGET_GAP + planFilePath.length;
-	if (innerWidth >= minWidth) {
-		const spaces = " ".repeat(innerWidth - label.length - planFilePath.length);
-		return [
-			`${" ".repeat(WIDGET_SIDE_PADDING)}${label}${spaces}${planFilePath}${
-				" ".repeat(WIDGET_SIDE_PADDING)
-			}`,
-		];
-	}
-
-	return [
-		`${" ".repeat(WIDGET_SIDE_PADDING)}${label}`,
-		`${" ".repeat(WIDGET_SIDE_PADDING)}${planFilePath}`,
-	];
 }
