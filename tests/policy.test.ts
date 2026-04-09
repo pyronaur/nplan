@@ -100,10 +100,10 @@ void test("getPhaseNotification includes the absolute plan path for plan and imp
 
 void test("formatPhaseWidgetLines right-aligns the plan path when there is enough width", () => {
 	assert.deepEqual(formatPhaseWidgetLines("planning", "/abs/path/plan.md", 40), [
-		"plan mode              /abs/path/plan.md",
+		"  plan mode          /abs/path/plan.md  ",
 	]);
 	assert.deepEqual(formatPhaseWidgetLines("planning", "/abs/path/plan.md", 10), [
-		"plan mode",
-		"/abs/path/plan.md",
+		"  plan mode",
+		"  /abs/path/plan.md",
 	]);
 });

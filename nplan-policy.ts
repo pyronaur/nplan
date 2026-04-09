@@ -36,6 +36,7 @@ type ApplyPatchAction = {
 
 const STATUS_KEY = "plan";
 const WIDGET_KEY = "plan-progress";
+const WIDGET_SIDE_PADDING = 2;
 const WIDGET_GAP = 4;
 
 const PLANNING_MUTATING_BASH_PATTERNS = [
@@ -409,10 +410,16 @@ export function renderPhaseWidget(ctx: ExtensionContext, phase: Phase, planFileP
 		return;
 	}
 
-	ctx.ui.setWidget(WIDGET_KEY, () => ({
+	ctx.ui.setWidget(WIDGET_KEY, (_tui, theme) => ({
 		invalidate() {},
 		render(width: number) {
-			return formatPhaseWidgetLines(phase, planFilePath, width);
+			const color = phase === "planning" ? "warning" : "accent";
+			return formatPhaseWidgetLines(phase, planFilePath, width).map((line) => {
+				const left = line.match(/^\s*/)?.[0] ?? "";
+				const right = line.match(/\s*$/)?.[0] ?? "";
+				const body = line.slice(left.length, line.length - right.length);
+				return `${left}${theme.fg(color, body)}${right}`;
+			});
 		},
 	}));
 }
@@ -469,11 +476,19 @@ export function formatPhaseWidgetLines(
 		return [];
 	}
 	const lineWidth = Math.max(width, 0);
+	const innerWidth = Math.max(lineWidth - WIDGET_SIDE_PADDING * 2, 0);
 	const minWidth = label.length + WIDGET_GAP + planFilePath.length;
-	if (lineWidth >= minWidth) {
-		const spaces = " ".repeat(lineWidth - label.length - planFilePath.length);
-		return [`${label}${spaces}${planFilePath}`];
+	if (innerWidth >= minWidth) {
+		const spaces = " ".repeat(innerWidth - label.length - planFilePath.length);
+		return [
+			`${" ".repeat(WIDGET_SIDE_PADDING)}${label}${spaces}${planFilePath}${
+				" ".repeat(WIDGET_SIDE_PADDING)
+			}`,
+		];
 	}
 
-	return [label, planFilePath];
+	return [
+		`${" ".repeat(WIDGET_SIDE_PADDING)}${label}`,
+		`${" ".repeat(WIDGET_SIDE_PADDING)}${planFilePath}`,
+	];
 }
