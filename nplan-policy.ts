@@ -183,7 +183,7 @@ export function getPlanningToolBlockResult(
 	cwd: string,
 	allowedPath: string,
 	planFilePath: string,
-): { block: true; reason: string } | null {
+): { block: true; reason: string } | undefined {
 	if (toolName === "bash") {
 		const command = typeof input.command === "string" ? input.command : "";
 		const trimmed = command.trim();
@@ -273,7 +273,7 @@ export function getPlanningToolBlockResult(
 		}
 	}
 
-	return null;
+	return undefined;
 }
 
 export function clearPhaseStatus(ctx: ExtensionContext): void {

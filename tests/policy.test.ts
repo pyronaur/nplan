@@ -27,7 +27,7 @@ test("getPlanningToolBlockResult allows safe read-only bash commands during plan
 	assert.equal(
 		getPlanningToolBlockResult("bash", { command: "git status" }, "/repo", "/repo/plan.md",
 			"/repo/plan.md"),
-		null,
+		undefined,
 	);
 });
 
@@ -52,7 +52,7 @@ test("getPlanningToolBlockResult only allows apply_patch on the active plan file
 			"/repo/plan.md",
 			"/repo/plan.md",
 		),
-		null,
+		undefined,
 	);
 
 	assert.deepEqual(

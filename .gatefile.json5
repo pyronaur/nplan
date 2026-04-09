@@ -27,11 +27,11 @@
 	// },
 
 	// Type safety for the extension entrypoint and test files.
-	// typecheck: {
-	// 	name: 'Typecheck TypeScript',
-	// 	match: ['*.ts', 'tests/**/*.ts', 'tsconfig.json'],
-	// 	run: 'tsc --noEmit',
-	// },
+	typecheck: {
+		name: 'Typecheck TypeScript',
+		match: ['*.ts', 'tests/**/*.ts', 'tsconfig.json'],
+		run: 'tsc --noEmit',
+	},
 
 	// Runtime-source duplication for the current top-level .ts source files.
 	// dupes_source: {
