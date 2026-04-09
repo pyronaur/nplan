@@ -412,7 +412,7 @@ export function renderPhaseWidget(ctx: ExtensionContext, phase: Phase, planFileP
 	ctx.ui.setWidget(WIDGET_KEY, () => ({
 		invalidate() {},
 		render(width: number) {
-			return buildPhaseWidgetLines(phase, planFilePath, width);
+			return formatPhaseWidgetLines(phase, planFilePath, width);
 		},
 	}));
 }
