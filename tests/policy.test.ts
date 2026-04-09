@@ -13,6 +13,14 @@ import {
 } from "../nplan-policy.ts";
 import { formatPhaseWidgetLines } from "../nplan-widget.ts";
 
+function createUserMessage(content: string) {
+	return {
+		role: "user" as const,
+		content,
+		timestamp: 1,
+	};
+}
+
 function createPlanEntry(data: unknown, id: string, parentId: string | null): SessionEntry {
 	return {
 		type: "custom",
@@ -22,6 +30,20 @@ function createPlanEntry(data: unknown, id: string, parentId: string | null): Se
 		parentId,
 		timestamp: "2026-04-09T16:51:00.000Z",
 	};
+}
+
+function assertPlanContextMessage(message: unknown, content: string): void {
+	assert.equal(typeof message, "object");
+	assert.notEqual(message, null);
+	if (typeof message !== "object" || message === null) {
+		return;
+	}
+
+	assert.equal("role" in message ? message.role : undefined, "custom");
+	assert.equal("customType" in message ? message.customType : undefined, "plan-context");
+	assert.equal("content" in message ? message.content : undefined, content);
+	assert.equal("display" in message ? message.display : undefined, false);
+	assert.equal(typeof ("timestamp" in message ? message.timestamp : undefined), "number");
 }
 
 void test("resolveGlobalPlanPath maps empty input to the default global plan", () => {
@@ -143,42 +165,30 @@ void test("getPersistedPlanState keeps the latest idle plan state with a null sa
 });
 
 void test("syncPlanningContextMessages appends the current planning prompt once", () => {
-	const messages = syncPlanningContextMessages([
-		{ role: "user", content: "hello" },
-	], "[PLAN - PLANNING PHASE]\nCurrent plan prompt");
+	const messages = syncPlanningContextMessages([createUserMessage("hello")],
+		"[PLAN - PLANNING PHASE]\nCurrent plan prompt");
 
-	assert.deepEqual(messages, [
-		{ role: "user", content: "hello" },
-		{
-			role: "custom",
-			customType: "plan-context",
-			content: "[PLAN - PLANNING PHASE]\nCurrent plan prompt",
-			display: false,
-		},
-	]);
+	assert.equal(messages.length, 2);
+	assert.deepEqual(messages[0], createUserMessage("hello"));
+	assertPlanContextMessage(messages[1], "[PLAN - PLANNING PHASE]\nCurrent plan prompt");
 });
 
 void test("syncPlanningContextMessages replaces stale planning prompts without duplication", () => {
 	const messages = syncPlanningContextMessages([
-		{ role: "user", content: "hello" },
+		createUserMessage("hello"),
 		{
 			role: "custom",
 			customType: "plan-context",
 			content: "[PLAN - PLANNING PHASE]\nOld plan prompt",
 			display: false,
+			timestamp: 2,
 		},
-		{ role: "user", content: "[PLAN - PLANNING PHASE]\nOld plan prompt" },
+		createUserMessage("[PLAN - PLANNING PHASE]\nOld plan prompt"),
 	], "[PLAN - PLANNING PHASE]\nCurrent plan prompt");
 
-	assert.deepEqual(messages, [
-		{ role: "user", content: "hello" },
-		{
-			role: "custom",
-			customType: "plan-context",
-			content: "[PLAN - PLANNING PHASE]\nCurrent plan prompt",
-			display: false,
-		},
-	]);
+	assert.equal(messages.length, 2);
+	assert.deepEqual(messages[0], createUserMessage("hello"));
+	assertPlanContextMessage(messages[1], "[PLAN - PLANNING PHASE]\nCurrent plan prompt");
 });
 
 void test("formatPhaseWidgetLines right-aligns the plan path when there is enough width", () => {

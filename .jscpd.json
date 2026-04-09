@@ -3,9 +3,11 @@
 		"index.ts",
 		"nplan-config.ts",
 		"nplan-feedback.ts",
+		"nplan-files.ts",
 		"nplan-guards.ts",
 		"nplan-policy.ts",
 		"nplan-review.ts",
+		"nplan-todo.ts",
 		"nplan-tool-scope.ts",
 		"nplan-widget.ts",
 		"nplan.ts"

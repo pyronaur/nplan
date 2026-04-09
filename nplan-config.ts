@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readJsonFile, readTextFile, resolvePathFromBase } from "./nplan-files.ts";
 import { isRecord, isThinkingLevel } from "./nplan-guards.ts";
+export { formatTodoList } from "./nplan-todo.ts";
 
 export type PhaseName = "planning" | "reviewing";
 export type RuntimePhase = PhaseName | "idle";
@@ -488,24 +489,4 @@ export function renderTemplate(template: string, vars: PromptVariables): PromptR
 		return "";
 	});
 	return { text, unknownVariables: [...unknownVariables] };
-}
-
-export function formatTodoList(items: Array<{ step: number; text: string; completed: boolean }>): {
-	todoList: string;
-	completedCount: number;
-	totalCount: number;
-	remainingCount: number;
-} {
-	const totalCount = items.length;
-	const completedCount = items.filter((item) => item.completed).length;
-	const remainingItems = items.filter((item) => !item.completed);
-	const todoList = remainingItems.length
-		? remainingItems.map((item) => `- [ ] ${item.step}. ${item.text}`).join("\n")
-		: "";
-	return {
-		todoList,
-		completedCount,
-		totalCount,
-		remainingCount: remainingItems.length,
-	};
 }

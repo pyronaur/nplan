@@ -36,6 +36,20 @@ type ApplyPatchAction = {
 	path: string;
 };
 
+type PlanContextMessage = {
+	role: "custom";
+	customType: "plan-context";
+	content: string;
+	display: false;
+	timestamp: number;
+};
+
+declare module "@mariozechner/pi-agent-core" {
+	interface CustomAgentMessages {
+		planContext: PlanContextMessage;
+	}
+}
+
 const STATUS_KEY = "plan";
 const WIDGET_KEY = "plan-progress";
 const WIDGET_LEFT_PADDING = 1;
@@ -332,6 +346,16 @@ function getApplyPatchBlockResult(check: PlanningToolCheck): PlanningBlockResult
 	return undefined;
 }
 
+function createPlanContextMessage(planningPrompt: string): PlanContextMessage {
+	return {
+		role: "custom",
+		customType: "plan-context",
+		content: planningPrompt,
+		display: false,
+		timestamp: Date.now(),
+	};
+}
+
 export function getPlanStorageRoot(): string {
 	return join(homedir(), ".n", "pi", "plans");
 }
@@ -429,30 +453,6 @@ export function shouldKeepContextMessage(message: unknown): boolean {
 	}
 
 	return !hasPlanBanner(message.content);
-}
-
-type PlanContextMessage = {
-	role: "custom";
-	customType: "plan-context";
-	content: string;
-	display: false;
-	timestamp: number;
-};
-
-declare module "@mariozechner/pi-agent-core" {
-	interface CustomAgentMessages {
-		planContext: PlanContextMessage;
-	}
-}
-
-function createPlanContextMessage(planningPrompt: string): PlanContextMessage {
-	return {
-		role: "custom",
-		customType: "plan-context",
-		content: planningPrompt,
-		display: false,
-		timestamp: Date.now(),
-	};
 }
 
 export function syncPlanningContextMessages(
