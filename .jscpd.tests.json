@@ -1,0 +1,19 @@
+{
+	"path": ["tests"],
+	"threshold": 0,
+	"reporters": ["console"],
+	"minTokens": 60,
+	"minLines": 7,
+	"formats": ["typescript", "javascript"],
+	"ignore": [
+		"**/node_modules/**",
+		"**/.git/**",
+		"**/dist/**",
+		"**/build/**",
+		"**/coverage/**",
+		"**/out/**",
+		"**/tmp/**",
+		"**/.tmp/**",
+		"**/temp/**"
+	]
+}
