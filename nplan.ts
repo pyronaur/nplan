@@ -11,6 +11,7 @@ import {
 	renderTemplate,
 	resolvePhaseProfile,
 } from "./nplan-config.ts";
+import { isRecord } from "./nplan-guards.ts";
 import {
 	clearPhaseStatus,
 	getDefaultPlanningMessage,
@@ -39,6 +40,10 @@ type Runtime = {
 	planConfig: PlanConfig;
 };
 
+type PiLeaderAdd = (key: string, label: string, run: () => void | Promise<void>) => void;
+
+type PiLeaderOpenEvent = { add: PiLeaderAdd };
+
 function createRuntime(pi: ExtensionAPI): Runtime {
 	return {
 		pi,
@@ -47,6 +52,10 @@ function createRuntime(pi: ExtensionAPI): Runtime {
 		savedState: null,
 		planConfig: {},
 	};
+}
+
+function isPiLeaderOpenEvent(event: unknown): event is PiLeaderOpenEvent {
+	return isRecord(event) && typeof event.add === "function";
 }
 
 function registerFlags(pi: ExtensionAPI): void {
@@ -196,6 +205,15 @@ async function exitToIdle(runtime: Runtime, ctx: ExtensionContext): Promise<void
 	ctx.ui.notify("Plan mode disabled. Full access restored.");
 }
 
+async function togglePlanMode(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
+	if (runtime.phase === "idle") {
+		await enterPlanning(runtime, ctx);
+		return;
+	}
+
+	await exitToIdle(runtime, ctx);
+}
+
 async function restoreIdleTools(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
 	if (runtime.savedState) {
 		await restoreSavedState(runtime, ctx);
@@ -251,7 +269,7 @@ async function handlePlanCommand(
 	ctx: ExtensionContext,
 ): Promise<void> {
 	if (runtime.phase !== "idle") {
-		await exitToIdle(runtime, ctx);
+		await togglePlanMode(runtime, ctx);
 		return;
 	}
 
@@ -264,6 +282,10 @@ async function handlePlanCommand(
 	}
 
 	await enterPlanning(runtime, ctx);
+}
+
+function getPlanLeaderLabel(phase: Phase): string {
+	return phase === "idle" ? "Enable plan mode" : "Disable plan mode";
 }
 
 async function handlePlanFileCommand(
@@ -433,8 +455,31 @@ async function handleSessionStart(runtime: Runtime, ctx: ExtensionContext): Prom
 }
 
 function registerSessionStartHandler(runtime: Runtime): void {
-	runtime.pi.on("session_start", async (_event, ctx) => {
-		await handleSessionStart(runtime, ctx);
+	runtime.pi.on("session_start", async (_event, ctx) => await handleSessionStart(runtime, ctx));
+}
+
+function registerLeaderHandler(runtime: Runtime): void {
+	let ctx: ExtensionContext | undefined;
+	const offLeader = runtime.pi.events.on("pi-leader", (event) => {
+		if (!isPiLeaderOpenEvent(event)) {
+			return;
+		}
+
+		event.add("p", getPlanLeaderLabel(runtime.phase), async () => {
+			if (!ctx) {
+				return;
+			}
+			await togglePlanMode(runtime, ctx);
+		});
+	});
+
+	runtime.pi.on("session_start", async (_event, nextCtx) => {
+		ctx = nextCtx;
+	});
+
+	runtime.pi.on("session_shutdown", () => {
+		ctx = undefined;
+		offLeader();
 	});
 }
 
@@ -447,4 +492,5 @@ export default function nplan(pi: ExtensionAPI): void {
 	registerBeforeAgentStartHandler(runtime);
 	registerContextHandler(runtime);
 	registerSessionStartHandler(runtime);
+	registerLeaderHandler(runtime);
 }

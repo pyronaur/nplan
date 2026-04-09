@@ -9,11 +9,14 @@ Keep the current `nplan` interaction surface intact while removing the vendored 
 - `/plan`
 - `/plan-status`
 - `/plan-file`
+- `leader` then `p` when `pi-leader` is installed
 - `--plan`
 - `--plan-file`
 - global plan storage under `~/.n/pi/plans/`
 - restricted planning tools with `plan_submit`
 - execution unlock after approval
+
+The leader action uses the current remembered plan file. Set the plan once with `/plan-file`, then `leader` + `p` toggles plan mode on and off without prompting for the path again.
 
 ## Architecture
 
