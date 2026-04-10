@@ -5,7 +5,7 @@ import { PLAN_SUBMIT_TOOL } from "./nplan-tool-scope.ts";
 export type PlanSubmitDetails = { approved: boolean; feedback?: string };
 
 type ReviewTheme = {
-	fg: (color: string, text: string) => string;
+	fg: (color: "toolTitle" | "muted" | "success" | "warning", text: string) => string;
 	bold: (text: string) => string;
 };
 
