@@ -15,7 +15,7 @@ Keep the current local `nplan` interaction surface focused and explicit:
 - restricted planning tools with `plan_submit`
 - editor-prefilled implementation handoff after approval
 
-`/plan <slug>` attaches or resumes `~/.n/pi/plans/<slug>.md`. Missing targets start a new plan immediately; existing foreign targets ask for confirmation and then resume. Bare `/plan` or `pi-leader` follow-up `p` resumes the currently attached plan when one exists, otherwise it prompts for a slug. `/plan-clear` detaches the current plan and exits planning when necessary. `--plan` enters the same planning-start flow during session startup, including scaffold bootstrapping and the durable start marker.
+`/plan <slug>` attaches or resumes `~/.n/pi/plans/<slug>.md`. Missing targets start a new plan immediately; existing foreign targets ask for confirmation and then resume. Bare `/plan` or `pi-leader` follow-up `p` resumes the currently attached plan when one exists, otherwise it prompts for a slug. `/plan-clear` detaches the current plan and exits planning when necessary. `--plan` enters the same planning-start flow during session startup, including scaffold bootstrapping.
 
 ## Architecture
 
@@ -26,7 +26,7 @@ Keep the current local `nplan` interaction surface focused and explicit:
 - `nplan-phase.ts` owns runtime phase state, prompt rendering inputs, and tool/model restore behavior
 - `nplan-config.ts` owns config loading, phase profile resolution, bundled/default planning prompt loading, scaffold loading, and marker resolution
 - `nplan-template.ts` owns `${...}` prompt/template interpolation
-- `nplan-events.ts` owns visible plan lifecycle message rendering
+- `nplan-events.ts` owns legacy plan lifecycle message rendering for existing session history
 - `nplan-status.ts` owns user-facing status text helpers
 - `nplan-policy.ts` owns global plan-path rules, planning context message shaping, planning tool restrictions, and phase UI rendering
 - `nplan-review.ts` owns the CLI review transport
@@ -46,7 +46,7 @@ Plan review is handled through the `plannotator` CLI.
 - CLI denial returns revision feedback and keeps the extension in planning mode
 - when review is unavailable, `nplan` preserves the current auto-approve fallback behavior
 
-Planning lifecycle rows render as collapsed transcript entries headed by `Plan Mode: Started ...`, `Resumed ...`, `Stopped ...`, or `Abandoned ...`. The first real `Started` entry in a session expands with `Ctrl+O` to show the full planning prompt. Later same-plan `Resumed`/`Stopped` toggles compact to the surviving net transition instead of accumulating a noisy on/off audit trail.
+Plan-mode toggles update the live footer/widget UI and persisted plan state, but they do not append visible transcript messages. The `plan_submit` tool row remains the only durable approval or rejection transcript record.
 
 ## Config
 
@@ -76,16 +76,11 @@ Plan scaffold resolution is also file-backed and follows the same precedence:
 
 When a selected plan file does not exist yet, `nplan` creates it from that scaffold before planning begins.
 
-Lifecycle markers can be overridden in `plan.json` under `markers.resumed`, `markers.stopped`, and `markers.abandoned`. These strings support `${planFilePath}` interpolation.
-
 Example project config:
 
 ```json
 {
   "planTemplateFile": "prompts/my-plan-template.md",
-  "markers": {
-    "resumed": "Back in planning for ${planFilePath}."
-  },
   "phases": {
     "planning": {
       "planningPromptFile": "prompts/my-planning-prompt.md"
