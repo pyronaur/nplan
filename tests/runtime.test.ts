@@ -279,7 +279,7 @@ function createExtensionApi(state: {
 		getThinkingLevel() {
 			return state.thinkingLevel.current;
 		},
-		setThinkingLevel(level: string) {
+		setThinkingLevel(level: ThinkingLevel) {
 			state.thinkingLevel.current = level;
 		},
 	};
