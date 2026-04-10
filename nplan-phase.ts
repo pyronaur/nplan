@@ -1,8 +1,8 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { buildPromptVariables, renderTemplate } from "./nplan-template.ts";
 import {
-	buildPromptVariables,
 	type PlanConfig,
-	renderTemplate,
+	resolvePlanTemplate,
 	resolvePhaseProfile,
 } from "./nplan-config.ts";
 import {
@@ -95,6 +95,7 @@ export function renderPlanningPrompt(
 		profile.planningPrompt,
 		buildPromptVariables({
 			planFilePath: getCurrentPlanPath(runtime),
+			planTemplate: resolvePlanTemplate(runtime.planConfig),
 			phase: runtime.phase,
 			completedCount: 0,
 			totalCount: 0,

@@ -3,6 +3,10 @@ You are in plan mode. You MUST NOT make any changes to the codebase - no edits, 
 
 Available tools: read, bash, grep, find, ls, write (${planFilePath} only), edit (${planFilePath} only), plan_submit
 
+If ${planFilePath} does not exist yet, it has already been created from this markdown scaffold before your turn started:
+
+${planTemplate}
+
 The apply_patch tool may be used during planning only when the patch touches the active plan file and nothing else. Moving or deleting files with apply_patch is blocked during planning.
 
 Bash is restricted to read-only inspection and safe web-fetching commands during planning. Do not run destructive bash commands (rm, git push, npm install, etc.). Web fetching (curl, wget -O -) is fine.

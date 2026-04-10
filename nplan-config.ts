@@ -3,11 +3,11 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readJsonFile, readTextFile, resolvePathFromBase } from "./nplan-files.ts";
+import { readJsonFile } from "./nplan-files.ts";
 import { isRecord, isThinkingLevel } from "./nplan-guards.ts";
+import { loadDefaultText, normalizeTextFile } from "./nplan-config-text.ts";
 
 export type PhaseName = "planning" | "reviewing";
-export type RuntimePhase = PhaseName | "idle";
 
 export interface PhaseModelRef {
 	provider: string;
@@ -25,6 +25,7 @@ export interface PhaseProfile {
 export interface PlanConfig {
 	defaults?: PhaseProfile | null;
 	phases?: Partial<Record<PhaseName, PhaseProfile | null>>;
+	planTemplate?: string | null;
 }
 
 export interface LoadedPlanConfig {
@@ -40,29 +41,22 @@ export interface ResolvedPhaseProfile {
 	planningPrompt?: string;
 }
 
-export interface PromptVariables {
-	planFilePath: string;
-	todoList: string;
-	completedCount: number;
-	totalCount: number;
-	remainingCount: number;
-	phase: RuntimePhase;
-}
-
-export interface PromptRenderResult {
-	text: string;
-	unknownVariables: string[];
-}
-
 const PHASES: PhaseName[] = ["planning", "reviewing"];
 const PLANNING_PROMPT_FILE = "planning-prompt.md";
+const PLAN_TEMPLATE_FILE = "plan-template.md";
 const BUNDLED_PLANNING_PROMPT_PATH = join(
 	dirname(fileURLToPath(import.meta.url)),
 	"prompts",
 	PLANNING_PROMPT_FILE,
 );
+const BUNDLED_PLAN_TEMPLATE_PATH = join(
+	dirname(fileURLToPath(import.meta.url)),
+	"prompts",
+	PLAN_TEMPLATE_FILE,
+);
 
 const INTERNAL_CONFIG: PlanConfig = {
+	planTemplate: readFileSync(BUNDLED_PLAN_TEMPLATE_PATH, "utf-8"),
 	phases: {
 		planning: {
 			activeTools: ["grep", "find", "ls", "plan_submit"],
@@ -76,6 +70,7 @@ type ConfigSourceOptions = {
 	configPath: string;
 	baseDir: string;
 	defaultPlanningPromptPath?: string;
+	defaultPlanTemplatePath?: string;
 	sourceName: string;
 };
 
@@ -157,23 +152,10 @@ function normalizePlanningPromptFile(
 	options: { baseDir: string; warnings: string[]; keyPath: string },
 ): string | null | undefined {
 	const trimmed = normalizeOptionalString(value);
-	if (trimmed === undefined) {
-		return undefined;
-	}
-	if (trimmed === null) {
-		return null;
-	}
-	const path = resolvePathFromBase(trimmed, options.baseDir);
-	const prompt = readTextFile(path);
-	if (prompt.error) {
-		options.warnings.push(`${options.keyPath}: ${prompt.error}`);
-		return undefined;
-	}
-	if (prompt.text === undefined) {
-		options.warnings.push(`${options.keyPath}: prompt file not found: ${path}`);
-		return undefined;
-	}
-	return prompt.text;
+	return normalizeTextFile(trimmed, {
+		...options,
+		missingLabel: "prompt file not found",
+	});
 }
 
 function normalizeProfile(
@@ -216,6 +198,17 @@ function normalizeProfile(
 		);
 	}
 	return profile;
+}
+
+function normalizePlanTemplateFile(
+	value: unknown,
+	options: { baseDir: string; warnings: string[]; keyPath: string },
+): string | null | undefined {
+	const trimmed = normalizeOptionalString(value);
+	return normalizeTextFile(trimmed, {
+		...options,
+		missingLabel: "plan template file not found",
+	});
 }
 
 function cloneProfile(profile: PhaseProfile | null | undefined): PhaseProfile | null | undefined {
@@ -262,6 +255,7 @@ function mergeConfig(base: PlanConfig, override: PlanConfig): PlanConfig {
 	}
 	return {
 		defaults: mergeProfile(base.defaults, override.defaults),
+		planTemplate: override.planTemplate !== undefined ? override.planTemplate : base.planTemplate,
 		phases: Object.keys(phases).length > 0 ? phases : undefined,
 	};
 }
@@ -289,20 +283,15 @@ function applyDefaultPlanningPrompt(config: PlanConfig, prompt: string | undefin
 	};
 }
 
-function loadDefaultPlanningPrompt(
-	path: string | undefined,
-	warnings: string[],
-	sourceName: string,
-): string | undefined {
-	if (!path) {
-		return undefined;
+function applyDefaultPlanTemplate(config: PlanConfig, template: string | undefined): PlanConfig {
+	if (template === undefined || config.planTemplate !== undefined) {
+		return config;
 	}
-	const prompt = readTextFile(path);
-	if (prompt.error) {
-		warnings.push(`${sourceName}: ${prompt.error}`);
-		return undefined;
-	}
-	return prompt.text;
+
+	return {
+		...config,
+		planTemplate: template,
+	};
 }
 
 function loadConfigSource(options: ConfigSourceOptions): LoadedPlanConfig {
@@ -338,10 +327,26 @@ function loadConfigSource(options: ConfigSourceOptions): LoadedPlanConfig {
 			config.phases = phases;
 		}
 	}
+	if (raw?.planTemplateFile !== undefined) {
+		config.planTemplate = normalizePlanTemplateFile(raw.planTemplateFile, {
+			baseDir: options.baseDir,
+			warnings,
+			keyPath: `${options.sourceName}.planTemplateFile`,
+		});
+	}
+	if (raw?.planTemplate !== undefined) {
+		warnings.push(
+			`${options.sourceName}.planTemplate: inline planTemplate is not supported; use planTemplateFile instead.`,
+		);
+	}
 
 	config = applyDefaultPlanningPrompt(
 		config,
-		loadDefaultPlanningPrompt(options.defaultPlanningPromptPath, warnings, options.sourceName),
+		loadDefaultText(options.defaultPlanningPromptPath, warnings, options.sourceName),
+	);
+	config = applyDefaultPlanTemplate(
+		config,
+		loadDefaultText(options.defaultPlanTemplatePath, warnings, options.sourceName),
 	);
 	return { config, warnings };
 }
@@ -395,28 +400,6 @@ function resolveString(
 	return base ?? undefined;
 }
 
-function readPromptVariable(vars: PromptVariables, key: string): string | undefined {
-	if (key === "planFilePath") {
-		return vars.planFilePath;
-	}
-	if (key === "todoList") {
-		return vars.todoList;
-	}
-	if (key === "completedCount") {
-		return String(vars.completedCount);
-	}
-	if (key === "totalCount") {
-		return String(vars.totalCount);
-	}
-	if (key === "remainingCount") {
-		return String(vars.remainingCount);
-	}
-	if (key === "phase") {
-		return vars.phase;
-	}
-	return undefined;
-}
-
 export function loadPlanConfig(cwd: string): LoadedPlanConfig {
 	const warnings: string[] = [];
 	const agentDir = getAgentConfigDir();
@@ -424,6 +407,7 @@ export function loadPlanConfig(cwd: string): LoadedPlanConfig {
 		configPath: join(agentDir, "plan.json"),
 		baseDir: agentDir,
 		defaultPlanningPromptPath: join(agentDir, "nplan", PLANNING_PROMPT_FILE),
+		defaultPlanTemplatePath: join(agentDir, "nplan", PLAN_TEMPLATE_FILE),
 		sourceName: "global plan config",
 	});
 	warnings.push(...globalConfig.warnings);
@@ -432,6 +416,7 @@ export function loadPlanConfig(cwd: string): LoadedPlanConfig {
 		configPath: join(cwd, ".pi", "plan.json"),
 		baseDir: join(cwd, ".pi"),
 		defaultPlanningPromptPath: join(cwd, ".pi", "nplan", PLANNING_PROMPT_FILE),
+		defaultPlanTemplatePath: join(cwd, ".pi", "nplan", PLAN_TEMPLATE_FILE),
 		sourceName: "project plan config",
 	});
 	warnings.push(...projectConfig.warnings);
@@ -455,39 +440,10 @@ export function resolvePhaseProfile(config: PlanConfig, phase: PhaseName): Resol
 	};
 }
 
-export function buildPromptVariables(options: {
-	planFilePath: string;
-	phase: RuntimePhase;
-	totalCount: number;
-	completedCount: number;
-	remainingCount?: number;
-	todoList?: string;
-}): PromptVariables {
-	const totalCount = options.totalCount;
-	const completedCount = options.completedCount;
-	const remainingCount = options.remainingCount ?? Math.max(totalCount - completedCount, 0);
-	return {
-		planFilePath: options.planFilePath,
-		todoList: options.todoList ?? "",
-		completedCount,
-		totalCount,
-		remainingCount,
-		phase: options.phase,
-	};
-}
-
-export function renderTemplate(template: string, vars: PromptVariables): PromptRenderResult {
-	const unknownVariables = new Set<string>();
-	const text = template.replace(/\$\{([a-zA-Z0-9_]+)\}/g, (_match, key: string) => {
-		const value = readPromptVariable(vars, key);
-		if (value !== undefined) {
-			return value;
-		}
-
-		unknownVariables.add(key);
-		return "";
-	});
-	return { text, unknownVariables: [...unknownVariables] };
+export function resolvePlanTemplate(config: PlanConfig): string | undefined {
+	return resolveString(undefined, config.planTemplate);
 }
 
 export { formatTodoList } from "./nplan-todo.ts";
+export { buildPromptVariables, renderTemplate } from "./nplan-template.ts";
+export type { PromptRenderResult, PromptVariables, RuntimePhase } from "./nplan-template.ts";

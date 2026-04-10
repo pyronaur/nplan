@@ -7,6 +7,7 @@ import {
 	formatTodoList,
 	loadPlanConfig,
 	renderTemplate,
+	resolvePlanTemplate,
 	resolvePhaseProfile,
 } from "../nplan-config.ts";
 
@@ -62,6 +63,7 @@ void test("loadPlanConfig loads the shipped internal base config", () => {
 	assert.equal(planning.statusLabel, "⏸ plan");
 	assert.deepEqual(planning.activeTools, ["grep", "find", "ls", "plan_submit"]);
 	assert.match(planning.planningPrompt ?? "", /\[PLAN - PLANNING PHASE\]/);
+	assert.match(resolvePlanTemplate(loaded.config) ?? "", /^# Plan/m);
 });
 
 void test("loadPlanConfig allows a project config to clear an inherited phase with null", () => {
@@ -200,6 +202,47 @@ void test("loadPlanConfig resolves explicit planningPromptFile paths from plan.j
 	assert.equal(planning.planningPrompt, "custom prompt ${phase}");
 });
 
+void test("loadPlanConfig resolves conventional plan template files before global files", () => {
+	const homeDir = makeTempDir("nplan-config-home-template-files-");
+	const cwdDir = makeTempDir("nplan-config-cwd-template-files-");
+	process.env.HOME = homeDir;
+
+	writeConfigPair({
+		homeDir,
+		cwdDir,
+		globalConfig: {},
+		projectConfig: {},
+	});
+	writeTextFile(join(homeDir, ".pi", "agent", "nplan", "plan-template.md"), "# Global Template");
+	writeTextFile(join(cwdDir, ".pi", "nplan", "plan-template.md"), "# Project Template");
+
+	const loaded = loadPlanConfig(cwdDir);
+
+	assert.deepEqual(loaded.warnings, []);
+	assert.equal(resolvePlanTemplate(loaded.config), "# Project Template");
+});
+
+void test("loadPlanConfig resolves explicit planTemplateFile paths from plan.json", () => {
+	const homeDir = makeTempDir("nplan-config-home-explicit-template-");
+	const cwdDir = makeTempDir("nplan-config-cwd-explicit-template-");
+	process.env.HOME = homeDir;
+
+	writeConfigPair({
+		homeDir,
+		cwdDir,
+		globalConfig: {},
+		projectConfig: {
+			planTemplateFile: "prompts/custom-template.md",
+		},
+	});
+	writeTextFile(join(cwdDir, ".pi", "prompts", "custom-template.md"), "# Custom Template");
+
+	const loaded = loadPlanConfig(cwdDir);
+
+	assert.deepEqual(loaded.warnings, []);
+	assert.equal(resolvePlanTemplate(loaded.config), "# Custom Template");
+});
+
 void test("loadPlanConfig warns when deprecated planning systemPrompt config is used", () => {
 	const homeDir = makeTempDir("nplan-config-home-system-prompt-");
 	const cwdDir = makeTempDir("nplan-config-cwd-system-prompt-");
@@ -228,6 +271,7 @@ void test("loadPlanConfig warns when deprecated planning systemPrompt config is 
 void test("renderTemplate reports unknown variables", () => {
 	const rendered = renderTemplate("Hello ${name} ${missing}", {
 		planFilePath: "PLAN.md",
+		planTemplate: "# Plan",
 		todoList: "- [ ] A",
 		completedCount: 1,
 		totalCount: 2,
@@ -237,6 +281,21 @@ void test("renderTemplate reports unknown variables", () => {
 
 	assert.equal(rendered.text, "Hello  ");
 	assert.deepEqual(rendered.unknownVariables, ["name", "missing"]);
+});
+
+void test("renderTemplate interpolates the plan template variable", () => {
+	const rendered = renderTemplate("${planFilePath}\n${planTemplate}", {
+		planFilePath: "PLAN.md",
+		planTemplate: "# Plan\n\n## Overview",
+		todoList: "",
+		completedCount: 0,
+		totalCount: 0,
+		remainingCount: 0,
+		phase: "planning",
+	});
+
+	assert.equal(rendered.text, "PLAN.md\n# Plan\n\n## Overview");
+	assert.deepEqual(rendered.unknownVariables, []);
 });
 
 void test("formatTodoList formats remaining steps", () => {

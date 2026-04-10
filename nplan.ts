@@ -5,7 +5,8 @@ import {
 } from "@mariozechner/pi-coding-agent";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { loadPlanConfig } from "./nplan-config.ts";
+import { loadPlanConfig, resolvePlanTemplate } from "./nplan-config.ts";
+import { ensureTextFile } from "./nplan-files.ts";
 import { isRecord } from "./nplan-guards.ts";
 import {
 	applyPhaseConfig,
@@ -95,8 +96,13 @@ function emitPlanEvent(
 	}, { triggerTurn: false });
 }
 
+function ensureAttachedPlanFile(runtime: Runtime): void {
+	ensureTextFile(getCurrentPlanPath(runtime), resolvePlanTemplate(runtime.planConfig) ?? "# Plan\n");
+}
+
 async function enterPlanning(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
 	runtime.phase = "planning";
+	ensureAttachedPlanFile(runtime);
 	captureSavedState(runtime, ctx);
 	await applyPhaseConfig(runtime, ctx, { restoreSavedState: false });
 	const planFilePath = getCurrentPlanPath(runtime);

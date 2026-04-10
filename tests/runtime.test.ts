@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
@@ -460,4 +460,21 @@ void test("/plan-clear exits planning and detaches the current plan", async () =
 	});
 	assert.equal(harness.ui.editorText, undefined);
 	assert.equal(harness.sentMessages.length > 0, true);
+});
+
+void test("/plan creates a missing plan file from the configured scaffold before planning starts", async () => {
+	const homeDir = makeTempDir("nplan-runtime-home-template-");
+	const cwd = makeTempDir("nplan-runtime-cwd-template-");
+	process.env.HOME = homeDir;
+	mkdirSync(join(cwd, ".pi", "nplan"), { recursive: true });
+	writeFileSync(join(cwd, ".pi", "nplan", "plan-template.md"), "# Custom Template\n", "utf-8");
+	const harness = createHarness(cwd);
+	nplan(harness.api);
+
+	await harness.emit("session_start", { type: "session_start", reason: "startup" });
+	await harness.runCommand("plan", "bootstrap-me");
+
+	const planPath = join(homeDir, ".n", "pi", "plans", "bootstrap-me.md");
+	assert.equal(existsSync(planPath), true);
+	assert.equal(readFileSync(planPath, "utf-8"), "# Custom Template\n");
 });

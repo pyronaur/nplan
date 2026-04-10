@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, normalize, resolve } from "node:path";
+import { dirname, isAbsolute, join, normalize, resolve } from "node:path";
 
 export function expandHome(input: string): string {
 	if (input === "~") {
@@ -40,6 +40,14 @@ export function readTextFile(path: string): { text?: string; error?: string } {
 			error: `Failed to read ${path}: ${error instanceof Error ? error.message : String(error)}`,
 		};
 	}
+}
+
+export function ensureTextFile(path: string, content: string): void {
+	if (existsSync(path)) {
+		return;
+	}
+	mkdirSync(dirname(path), { recursive: true });
+	writeFileSync(path, content, "utf-8");
 }
 
 export function resolvePathFromBase(input: string, baseDir: string): string {
