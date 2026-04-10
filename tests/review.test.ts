@@ -10,6 +10,11 @@ import {
 	resetPlannotatorCliAvailabilityCache,
 	runPlanReviewCli,
 } from "../nplan-review.ts";
+import {
+	getPlanSubmitCallText,
+	getPlanSubmitResultText,
+	patchPlanSubmitResult,
+} from "../nplan-review-ui.ts";
 
 const originalPath = process.env.PATH;
 
@@ -124,6 +129,54 @@ void test("getImplementationHandoffText formats the approved plan path for the i
 	assert.equal(
 		getImplementationHandoffText("/abs/path/plan.md"),
 		"Implement the plan @/abs/path/plan.md",
+	);
+});
+
+void test("getPlanSubmitCallText includes the summary when present", () => {
+	assert.equal(getPlanSubmitCallText(undefined), "plan_submit");
+	assert.equal(getPlanSubmitCallText("ship the auth cleanup"), "plan_submit ship the auth cleanup");
+});
+
+void test("getPlanSubmitResultText renders approved and rejected states without duplication", () => {
+	assert.equal(
+		getPlanSubmitResultText({
+			details: { approved: true },
+			content: [{ type: "text", text: "Plan approved." }],
+			expanded: false,
+		}),
+		"Plan approved",
+	);
+	assert.equal(
+		getPlanSubmitResultText({
+			details: { approved: false, feedback: "Add rollback guidance." },
+			content: [{ type: "text", text: "Plan rejected." }],
+			expanded: true,
+		}),
+		"Plan rejected\n\nAdd rollback guidance.",
+	);
+});
+
+void test("patchPlanSubmitResult flips rejected reviews to tool errors and approvals to success", () => {
+	assert.deepEqual(
+		patchPlanSubmitResult({
+			toolName: "plan_submit",
+			details: { approved: true },
+		}),
+		{ isError: false },
+	);
+	assert.deepEqual(
+		patchPlanSubmitResult({
+			toolName: "plan_submit",
+			details: { approved: false, feedback: "Revise the rollout section." },
+		}),
+		{ isError: true },
+	);
+	assert.equal(
+		patchPlanSubmitResult({
+			toolName: "read",
+			details: { approved: false },
+		}),
+		undefined,
 	);
 });
 

@@ -35,6 +35,7 @@ import {
 	getImplementationHandoffText,
 	getPlanReviewAvailabilityWarning,
 } from "./nplan-review.ts";
+import { patchPlanSubmitResult } from "./nplan-review-ui.ts";
 import { getPlanStatusLines } from "./nplan-status.ts";
 
 type PiLeaderAdd = (key: string, label: string, run: () => void | Promise<void>) => void;
@@ -383,6 +384,10 @@ function registerContextHandler(runtime: Runtime): void {
 	});
 }
 
+function registerToolResultHandler(runtime: Runtime): void {
+	runtime.pi.on("tool_result", async (event) => patchPlanSubmitResult(event));
+}
+
 async function handleSessionStart(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
 	const loadedConfig = loadPlanConfig(ctx.cwd);
 	runtime.planConfig = loadedConfig.config;
@@ -448,6 +453,7 @@ export default function nplan(pi: ExtensionAPI): void {
 	registerCommands(runtime);
 	registerSubmitTool(runtime);
 	registerToolCallHandler(runtime);
+	registerToolResultHandler(runtime);
 	registerContextHandler(runtime);
 	registerSessionStartHandler(runtime);
 	registerLeaderHandler(runtime);

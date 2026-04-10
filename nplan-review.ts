@@ -4,6 +4,11 @@ import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { planDenyFeedback } from "./nplan-feedback.ts";
+import {
+	renderPlanSubmitCall,
+	renderPlanSubmitResult,
+	type PlanSubmitDetails,
+} from "./nplan-review-ui.ts";
 import { PLAN_SUBMIT_TOOL } from "./nplan-tool-scope.ts";
 
 export interface NplanReviewResult {
@@ -53,7 +58,7 @@ interface PlanReviewJob {
 
 type PlanSubmitResult = {
 	content: Array<{ type: "text"; text: string }>;
-	details: { approved: boolean; feedback?: string };
+	details: PlanSubmitDetails;
 };
 
 let cliAvailable: boolean | null = null;
@@ -469,6 +474,12 @@ export function createPlanSubmitTool(runtime: SubmitPlanToolRuntime) {
 		async execute(...args) {
 			const ctx = args[4];
 			return await runSubmitPlanTool(runtime, ctx);
+		},
+		renderCall(args, theme) {
+			return renderPlanSubmitCall(args, theme);
+		},
+		renderResult(result, options, theme) {
+			return renderPlanSubmitResult(result, options, theme);
 		},
 	});
 }
