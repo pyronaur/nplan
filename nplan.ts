@@ -42,7 +42,20 @@ import { registerSubmitInterceptor } from "./nplan-submit-interceptor.ts";
 import { buildPlanTurnMessage } from "./nplan-turn-messages.ts";
 
 type PiLeaderOpenEvent = {
-	add: (key: string, label: string, run: () => void | Promise<void>) => void;
+	add: (
+		...args: [
+			key: string,
+			label: string,
+			run: () => void | Promise<void>,
+			options?: {
+				side?: "left" | "right";
+				group?: string;
+				groupOrder?: number;
+				order?: number;
+				keyLabel?: string;
+			},
+		]
+	) => void;
 };
 type PlanningEntryKind = Extract<PlanEventKind, "started" | "resumed">;
 
@@ -427,6 +440,10 @@ function registerLeaderHandler(runtime: Runtime): void {
 				return;
 			}
 			await handlePlanCommand(runtime, "", ctx);
+		}, {
+			side: "right",
+			group: "default",
+			order: 20,
 		});
 	});
 
