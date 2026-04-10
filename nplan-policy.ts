@@ -18,8 +18,8 @@ export type SavedPhaseState = {
 export type PersistedPlanState = {
 	phase: Phase;
 	attachedPlanPath?: string | null;
+	planningKind?: "started" | "resumed" | null;
 	savedState?: SavedPhaseState | null;
-	fullPromptShownInSession?: boolean;
 };
 
 type PlanningBlockResult = { block: true; reason: string };
@@ -171,6 +171,12 @@ function isPersistedPlanState(value: unknown): value is PersistedPlanState {
 		return false;
 	}
 	if (
+		value.planningKind !== undefined && value.planningKind !== null
+		&& value.planningKind !== "started" && value.planningKind !== "resumed"
+	) {
+		return false;
+	}
+	if (
 		value.attachedPlanPath !== undefined && value.attachedPlanPath !== null
 		&& typeof value.attachedPlanPath !== "string"
 	) {
@@ -179,12 +185,6 @@ function isPersistedPlanState(value: unknown): value is PersistedPlanState {
 	if (
 		value.savedState !== undefined && value.savedState !== null
 		&& !isSavedPhaseState(value.savedState)
-	) {
-		return false;
-	}
-	if (
-		value.fullPromptShownInSession !== undefined
-		&& typeof value.fullPromptShownInSession !== "boolean"
 	) {
 		return false;
 	}
@@ -213,8 +213,8 @@ function normalizePersistedPlanState(value: unknown): PersistedPlanState | undef
 	return {
 		phase: value.phase,
 		attachedPlanPath: typeof value.planFilePath === "string" ? value.planFilePath : null,
+		planningKind: value.phase === "planning" ? "resumed" : null,
 		savedState: value.savedState ?? null,
-		fullPromptShownInSession: false,
 	};
 }
 

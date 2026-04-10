@@ -1,24 +1,23 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { resolvePlanMarker } from "./nplan-config.ts";
-import { createPlanEventMessage, type PlanEventKind } from "./nplan-events.ts";
 import {
-	getCurrentPlanPath,
-	persistState,
-	renderPlanningPrompt,
-	type Runtime,
-} from "./nplan-phase.ts";
+	createPlanEventMessage,
+	getLatestPlanDeliveryState,
+	type PlanDeliveryState,
+	type PlanEventKind,
+} from "./nplan-events.ts";
+import { renderPlanningPrompt, type Runtime } from "./nplan-phase.ts";
+import {
+	getPersistedPlanState,
+	type PersistedPlanState,
+	type SavedPhaseState,
+} from "./nplan-policy.ts";
 
-type PlanningEntryKind = Extract<PlanEventKind, "started" | "resumed">;
 type PlanTurnEvent = { kind: PlanEventKind; planFilePath: string };
-
-type DeliveredPlanState = {
-	phase: "idle" | "planning";
-	attachedPlanPath: string | null;
-};
 
 function getPlanEventBody(
 	runtime: Runtime,
-	kind: Exclude<PlanEventKind, "started">,
+	kind: Extract<PlanEventKind, "stopped" | "abandoned">,
 	planFilePath: string,
 ): string {
 	const marker = resolvePlanMarker(runtime.planConfig, kind);
@@ -29,35 +28,47 @@ function getPlanEventBody(
 	return marker.replaceAll("${planFilePath}", planFilePath);
 }
 
-function clearPendingEvent(runtime: Runtime): void {
-	runtime.pendingPlanEvent = null;
-}
-
-function getDeliveredPlanState(runtime: Runtime): DeliveredPlanState {
-	if (runtime.phase !== "planning") {
+function getCurrentState(
+	runtime: Runtime,
+	entries: ReturnType<ExtensionContext["sessionManager"]["getBranch"]>,
+): {
+	phase: "idle" | "planning";
+	attachedPlanPath: string | null;
+	planningKind: "started" | "resumed" | null;
+	savedState: SavedPhaseState | null;
+} {
+	const persisted = getPersistedPlanState(entries);
+	if (!persisted) {
 		return {
-			phase: "idle",
+			phase: runtime.phase,
 			attachedPlanPath: runtime.attachedPlanPath,
+			planningKind: runtime.planningKind,
+			savedState: runtime.savedState,
 		};
 	}
 
 	return {
-		phase: "planning",
-		attachedPlanPath: getCurrentPlanPath(runtime),
+		phase: persisted.phase,
+		attachedPlanPath: persisted.attachedPlanPath ?? null,
+		planningKind: persisted.planningKind ?? (persisted.phase === "planning" ? "resumed" : null),
+		savedState: persisted.savedState ?? null,
 	};
 }
 
-function getPlanningEntryKind(runtime: Runtime, planFilePath: string): PlanningEntryKind {
-	if (runtime.undeliveredStartedPlanPath === planFilePath) {
+function getPlanningTurnKind(current: {
+	planningKind: PersistedPlanState["planningKind"];
+}): Extract<PlanEventKind, "started" | "resumed"> {
+	if (current.planningKind === "started") {
 		return "started";
 	}
 
 	return "resumed";
 }
 
-function getTurnEvents(runtime: Runtime): PlanTurnEvent[] {
-	const current = getDeliveredPlanState(runtime);
-	const last = runtime.lastDeliveredPlanState;
+function getTurnEvents(
+	delivered: PlanDeliveryState,
+	current: ReturnType<typeof getCurrentState>,
+): PlanTurnEvent[] {
 	if (current.phase === "planning") {
 		const planFilePath = current.attachedPlanPath;
 		if (!planFilePath) {
@@ -65,28 +76,21 @@ function getTurnEvents(runtime: Runtime): PlanTurnEvent[] {
 		}
 
 		const events: PlanTurnEvent[] = [];
-		if (last.attachedPlanPath && last.attachedPlanPath !== planFilePath) {
-			events.push({ kind: "abandoned", planFilePath: last.attachedPlanPath });
+		if (delivered.attachedPlanPath && delivered.attachedPlanPath !== planFilePath) {
+			events.push({ kind: "abandoned", planFilePath: delivered.attachedPlanPath });
 		}
-		if (last.phase === "planning" && last.attachedPlanPath === planFilePath) {
-			return events;
-		}
-
-		events.push({ kind: getPlanningEntryKind(runtime, planFilePath), planFilePath });
+		events.push({ kind: getPlanningTurnKind(current), planFilePath });
 		return events;
 	}
 
-	if (!last.attachedPlanPath) {
+	if (!delivered.attachedPlanPath) {
 		return [];
 	}
-	if (current.attachedPlanPath === null) {
-		return [{ kind: "abandoned", planFilePath: last.attachedPlanPath }];
+	if (delivered.phase === "planning" && current.attachedPlanPath === delivered.attachedPlanPath) {
+		return [{ kind: "stopped", planFilePath: delivered.attachedPlanPath }];
 	}
-	if (last.phase === "planning" && last.attachedPlanPath === current.attachedPlanPath) {
-		return [{ kind: "stopped", planFilePath: current.attachedPlanPath }];
-	}
-	if (current.attachedPlanPath !== last.attachedPlanPath) {
-		return [{ kind: "abandoned", planFilePath: last.attachedPlanPath }];
+	if (current.attachedPlanPath !== delivered.attachedPlanPath) {
+		return [{ kind: "abandoned", planFilePath: delivered.attachedPlanPath }];
 	}
 
 	return [];
@@ -97,16 +101,15 @@ function createTurnMessage(
 	ctx: ExtensionContext,
 	event: PlanTurnEvent,
 ): ReturnType<typeof createPlanEventMessage> {
-	if (event.kind === "started") {
-		const body = !runtime.fullPromptShownInSession ? renderPlanningPrompt(runtime, ctx) ?? "" : "";
-		return createPlanEventMessage(runtime.planEvents, {
+	if (event.kind === "started" || event.kind === "resumed") {
+		return createPlanEventMessage({
 			kind: event.kind,
 			planFilePath: event.planFilePath,
-			body,
+			body: renderPlanningPrompt(runtime, ctx) ?? "",
 		});
 	}
 
-	return createPlanEventMessage(runtime.planEvents, {
+	return createPlanEventMessage({
 		kind: event.kind,
 		planFilePath: event.planFilePath,
 		body: getPlanEventBody(runtime, event.kind, event.planFilePath),
@@ -122,63 +125,20 @@ function sendEarlierTurnMessages(
 	}
 }
 
-function finalizeDeliveredTurnState(runtime: Runtime, current: DeliveredPlanState): void {
-	clearPendingEvent(runtime);
-	runtime.showPlanEventThisTurn = true;
-	runtime.lastDeliveredPlanState = current;
-	if (runtime.phase !== "planning") {
-		return;
-	}
-
-	const planFilePath = current.attachedPlanPath;
-	if (runtime.undeliveredStartedPlanPath === planFilePath) {
-		runtime.undeliveredStartedPlanPath = null;
-	}
-	if (!runtime.fullPromptShownInSession) {
-		runtime.fullPromptShownInSession = true;
-		persistState(runtime);
-	}
-}
-
-export function clearPlanTurnMessage(runtime: Runtime): void {
-	clearPendingEvent(runtime);
-	runtime.showPlanEventThisTurn = false;
-}
-
-export function queuePlanningTurnMessage(
-	runtime: Runtime,
-	kind: PlanningEntryKind,
-	planFilePath: string,
-): void {
-	void kind;
-	void planFilePath;
-	clearPlanTurnMessage(runtime);
-}
-
-export function queueIdleTurnMessage(
-	runtime: Runtime,
-	kind: Extract<PlanEventKind, "stopped" | "abandoned">,
-	planFilePath: string,
-): void {
-	void kind;
-	void planFilePath;
-	clearPlanTurnMessage(runtime);
-}
-
 export function buildPlanTurnMessage(
 	runtime: Runtime,
 	ctx: ExtensionContext,
 ): { message: ReturnType<typeof createPlanEventMessage> } | undefined {
-	const current = getDeliveredPlanState(runtime);
-	const events = getTurnEvents(runtime);
+	const entries = ctx.sessionManager.getBranch();
+	const delivered = getLatestPlanDeliveryState(entries);
+	const current = getCurrentState(runtime, entries);
+	const events = getTurnEvents(delivered, current);
 	if (events.length === 0) {
-		clearPendingEvent(runtime);
 		return undefined;
 	}
 
 	const messages = events.map((event) => createTurnMessage(runtime, ctx, event));
 	sendEarlierTurnMessages(runtime, messages.slice(0, -1));
-	finalizeDeliveredTurnState(runtime, current);
 	const message = messages.at(-1);
 	if (!message) {
 		return undefined;

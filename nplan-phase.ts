@@ -5,12 +5,6 @@ import {
 	resolvePlanTemplate,
 } from "./nplan-config.ts";
 import {
-	createPlanEventTracker,
-	type PlanDeliveryState,
-	type PlanEventKind,
-	type PlanEventTracker,
-} from "./nplan-events.ts";
-import {
 	clearPhaseStatus,
 	getDefaultPlanPath,
 	renderPhaseWidget,
@@ -23,15 +17,10 @@ export type Runtime = {
 	pi: ExtensionAPI;
 	phase: Phase;
 	attachedPlanPath: string | null;
+	planningKind: "started" | "resumed" | null;
 	savedState: SavedPhaseState | null;
 	planConfig: PlanConfig;
 	lastPromptWarning: string | null;
-	fullPromptShownInSession: boolean;
-	planEvents: PlanEventTracker;
-	lastDeliveredPlanState: PlanDeliveryState;
-	pendingPlanEvent: { kind: PlanEventKind; planFilePath: string } | null;
-	undeliveredStartedPlanPath: string | null;
-	showPlanEventThisTurn: boolean;
 };
 
 function getPhaseProfile(runtime: Runtime): ReturnType<typeof resolvePhaseProfile> | undefined {
@@ -81,15 +70,10 @@ export function createRuntime(pi: ExtensionAPI): Runtime {
 		pi,
 		phase: "idle",
 		attachedPlanPath: null,
+		planningKind: null,
 		savedState: null,
 		planConfig: {},
 		lastPromptWarning: null,
-		fullPromptShownInSession: false,
-		planEvents: createPlanEventTracker(),
-		lastDeliveredPlanState: { phase: "idle", attachedPlanPath: null },
-		pendingPlanEvent: null,
-		undeliveredStartedPlanPath: null,
-		showPlanEventThisTurn: false,
 	};
 }
 
@@ -138,8 +122,8 @@ export function persistState(runtime: Runtime): void {
 	runtime.pi.appendEntry("plan", {
 		phase: runtime.phase,
 		attachedPlanPath: runtime.attachedPlanPath,
+		planningKind: runtime.planningKind,
 		savedState: runtime.savedState,
-		fullPromptShownInSession: runtime.fullPromptShownInSession,
 	});
 }
 

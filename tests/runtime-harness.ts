@@ -1,6 +1,5 @@
 import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 type NotificationCall = { message: string; type?: "info" | "warning" | "error" };
@@ -131,12 +130,17 @@ function createSessionManager(cwd: string, entries: Array<Record<string, unknown
 	};
 }
 
-function createContext(cwd: string, entries: Array<Record<string, unknown>>, uiState: UiState) {
+function createContext(input: {
+	cwd: string;
+	entries: Array<Record<string, unknown>>;
+	uiState: UiState;
+	hasUI?: boolean;
+}) {
 	return {
-		ui: createUiApi(uiState),
-		hasUI: true,
-		cwd,
-		sessionManager: createSessionManager(cwd, entries),
+		ui: createUiApi(input.uiState),
+		hasUI: input.hasUI ?? true,
+		cwd: input.cwd,
+		sessionManager: createSessionManager(input.cwd, input.entries),
 		modelRegistry: { find: () => undefined },
 		model: undefined,
 		isIdle: () => true,
@@ -277,6 +281,7 @@ function createExtensionApi(state: {
 	flags: Map<string, boolean | string | undefined>;
 	entries: Array<Record<string, unknown>>;
 	messageRenderers: Map<string, unknown>;
+	tools: Map<string, any>;
 	sentMessages: Array<Record<string, unknown>>;
 	eventHandlers: Map<string, Array<(event: unknown, ctx: unknown) => unknown>>;
 	thinkingLevel: { current: ThinkingLevel };
@@ -297,7 +302,9 @@ function createExtensionApi(state: {
 			state.commands.set(name, command);
 		},
 		registerShortcut() {},
-		registerTool() {},
+		registerTool(tool: any) {
+			state.tools.set(tool.name, tool);
+		},
 		registerProvider() {},
 		unregisterProvider() {},
 		registerMessageRenderer(customType: string, renderer: unknown) {
@@ -335,20 +342,12 @@ function statefulPushMessage(input: {
 	});
 }
 
-type Harness = ReturnType<typeof createHarness>;
-
-export function writePlanFile(homeDir: string, slug: string, content = "# Plan\n"): string {
-	const planPath = join(homeDir, ".n", "pi", "plans", `${slug}.md`);
-	mkdirSync(join(homeDir, ".n", "pi", "plans"), { recursive: true });
-	writeFileSync(planPath, content, "utf-8");
-	return planPath;
-}
-
-export function createHarness(cwd: string) {
+function createHarnessState(cwd: string, options: { hasUI?: boolean }) {
 	const commands = new Map<string, { handler: (args: string, ctx: any) => Promise<void> | void }>();
 	const flags = new Map<string, boolean | string | undefined>();
 	const entries: Array<Record<string, unknown>> = [];
 	const messageRenderers = new Map<string, unknown>();
+	const tools = new Map<string, any>();
 	const sentMessages: Array<Record<string, unknown>> = [];
 	const eventHandlers = new Map<string, Array<(event: unknown, ctx: unknown) => unknown>>();
 	const thinkingLevel: { current: ThinkingLevel } = { current: "medium" };
@@ -360,50 +359,124 @@ export function createHarness(cwd: string) {
 		flags,
 		entries,
 		messageRenderers,
+		tools,
 		sentMessages,
 		eventHandlers,
 		thinkingLevel,
 		activeTools,
 		entryCount,
 	});
-	const ctx = createContext(cwd, entries, ui);
+	const ctx = createContext({ cwd, entries, uiState: ui, hasUI: options.hasUI });
 
+	return {
+		activeTools,
+		api,
+		commands,
+		ctx,
+		entries,
+		entryCount,
+		eventHandlers,
+		flags,
+		messageRenderers,
+		sentMessages,
+		thinkingLevel,
+		tools,
+		ui,
+	};
+}
+
+function createHarnessActions(input: {
+	commands: Map<string, { handler: (args: string, ctx: any) => Promise<void> | void }>;
+	ctx: ReturnType<typeof createContext>;
+	entries: Array<Record<string, unknown>>;
+	entryCount: { current: number };
+	eventHandlers: Map<string, Array<(event: unknown, ctx: unknown) => unknown>>;
+	sentMessages: Array<Record<string, unknown>>;
+	tools: Map<string, any>;
+}) {
 	async function emit(name: string, event: unknown): Promise<unknown[]> {
 		const results: unknown[] = [];
-		for (const handler of eventHandlers.get(name) ?? []) {
-			const result = await handler(event, ctx);
+		for (const handler of input.eventHandlers.get(name) ?? []) {
+			const result = await handler(event, input.ctx);
 			results.push(result);
 			const message = getReturnedMessage(result);
 			if (!message) {
 				continue;
 			}
-			statefulPushMessage({ sentMessages, entries, entryCount, message });
+			statefulPushMessage({
+				sentMessages: input.sentMessages,
+				entries: input.entries,
+				entryCount: input.entryCount,
+				message,
+			});
 		}
 		return results;
 	}
 
 	async function runCommand(name: string, args = ""): Promise<void> {
-		const command = commands.get(name);
+		const command = input.commands.get(name);
 		if (!command) {
 			throw new Error(`Unknown command: ${name}`);
 		}
-		await command.handler(args, ctx);
+		await command.handler(args, input.ctx);
 	}
 
-	return { api, commands, flags, entries, messageRenderers, sentMessages, ui, emit, runCommand };
+	async function runTool(name: string, params: Record<string, unknown> = {}) {
+		const tool = input.tools.get(name);
+		if (!tool) {
+			throw new Error(`Unknown tool: ${name}`);
+		}
+
+		const result = await tool.execute("tool-call-1", params, undefined, () => {}, input.ctx);
+		const event = {
+			type: "tool_result",
+			toolCallId: "tool-call-1",
+			toolName: name,
+			input: params,
+			content: result.content,
+			details: result.details,
+			isError: false,
+		};
+		const patches = await emit("tool_result", event);
+		let patched = { ...event };
+		for (const patch of patches) {
+			if (!patch || typeof patch !== "object") {
+				continue;
+			}
+			patched = { ...patched, ...patch };
+		}
+
+		return patched;
+	}
+
+	return { emit, runCommand, runTool };
 }
 
-export function appendPersistedPlanState(harness: Harness, data: Record<string, unknown>): void {
-	harness.api.appendEntry("plan", data);
+export function createHarness(cwd: string, options: { hasUI?: boolean } = {}) {
+	const state = createHarnessState(cwd, options);
+	const actions = createHarnessActions({
+		commands: state.commands,
+		ctx: state.ctx,
+		entries: state.entries,
+		entryCount: state.entryCount,
+		eventHandlers: state.eventHandlers,
+		sentMessages: state.sentMessages,
+		tools: state.tools,
+	});
+
+	return {
+		api: state.api,
+		commands: state.commands,
+		flags: state.flags,
+		entries: state.entries,
+		messageRenderers: state.messageRenderers,
+		tools: state.tools,
+		sentMessages: state.sentMessages,
+		ui: state.ui,
+		emit: actions.emit,
+		runCommand: actions.runCommand,
+		runTool: actions.runTool,
+	};
 }
 
-export function getLastPlanState(harness: Harness): unknown {
-	return [...harness.entries].reverse().find((entry) => entry.customType === "plan")?.data;
-}
-
-export function getLastMessageContent(harness: Harness): string {
-	const content = harness.sentMessages.at(-1)?.content;
-	return typeof content === "string" ? content : "";
-}
-
-export type { Harness };
+export type Harness = ReturnType<typeof createHarness>;
