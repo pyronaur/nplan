@@ -97,7 +97,7 @@ function createTurnMessage(
 		return createPlanEventMessage({
 			kind: event.kind,
 			planFilePath: event.planFilePath,
-			body: renderPlanningPrompt(runtime, ctx) ?? "",
+			body: renderPlanningPrompt(runtime, ctx, event.planFilePath) ?? "",
 		});
 	}
 

@@ -84,6 +84,7 @@ export function getCurrentPlanPath(runtime: Runtime): string {
 export function renderPlanningPrompt(
 	runtime: Runtime,
 	ctx: ExtensionContext,
+	planFilePath = getCurrentPlanPath(runtime),
 ): string | undefined {
 	const profile = getPhaseProfile(runtime);
 	if (!profile?.planningPrompt) {
@@ -94,7 +95,7 @@ export function renderPlanningPrompt(
 	const rendered = renderTemplate(
 		profile.planningPrompt,
 		buildPromptVariables({
-			planFilePath: getCurrentPlanPath(runtime),
+			planFilePath,
 			planTemplate: resolvePlanTemplate(runtime.planConfig),
 			phase: runtime.phase,
 			completedCount: 0,
