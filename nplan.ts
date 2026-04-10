@@ -5,7 +5,8 @@ import {
 } from "@mariozechner/pi-coding-agent";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { loadPlanConfig, resolvePlanTemplate } from "./nplan-config.ts";
+import { loadPlanConfig, resolvePlanMarker, resolvePlanTemplate } from "./nplan-config.ts";
+import { type PlanEventKind, registerPlanEventRenderer } from "./nplan-events.ts";
 import { ensureTextFile } from "./nplan-files.ts";
 import { isRecord } from "./nplan-guards.ts";
 import {
@@ -35,8 +36,6 @@ import {
 	getPlanReviewAvailabilityWarning,
 } from "./nplan-review.ts";
 import { getPlanStatusLines } from "./nplan-status.ts";
-
-type PlanEventKind = "started" | "resumed" | "stopped" | "abandoned";
 
 type PiLeaderAdd = (key: string, label: string, run: () => void | Promise<void>) => void;
 
@@ -96,6 +95,23 @@ function emitPlanEvent(
 	}, { triggerTurn: false });
 }
 
+function getPlanEventBody(
+	runtime: Runtime,
+	kind: Exclude<PlanEventKind, "started">,
+	planFilePath: string,
+): string {
+	const marker = resolvePlanMarker(runtime.planConfig, kind);
+	if (!marker) {
+		return kind === "resumed"
+			? `Planning resumed for ${planFilePath}.`
+			: kind === "stopped"
+			? `Planning disabled for ${planFilePath}.`
+			: `Planning detached from ${planFilePath}.`;
+	}
+
+	return marker.replaceAll("${planFilePath}", planFilePath);
+}
+
 function ensureAttachedPlanFile(runtime: Runtime): void {
 	ensureTextFile(getCurrentPlanPath(runtime), resolvePlanTemplate(runtime.planConfig) ?? "# Plan\n");
 }
@@ -115,7 +131,7 @@ async function enterPlanning(runtime: Runtime, ctx: ExtensionContext): Promise<v
 		planFilePath,
 		body: firstPrompt
 			? planningPrompt ?? `Planning started for ${planFilePath}.`
-			: `Planning resumed for ${planFilePath}.`,
+				: getPlanEventBody(runtime, "resumed", planFilePath),
 	});
 	notifyReviewAvailability(ctx);
 }
@@ -134,7 +150,7 @@ async function exitPlanningSilently(runtime: Runtime, ctx: ExtensionContext): Pr
 async function exitToIdle(
 	runtime: Runtime,
 	ctx: ExtensionContext,
-	options: { detach?: boolean; eventKind?: PlanEventKind | null } = {},
+	options: { detach?: boolean; eventKind?: Exclude<PlanEventKind, "started"> | null } = {},
 ): Promise<void> {
 	const planFilePath = runtime.attachedPlanPath;
 	await exitPlanningSilently(runtime, ctx);
@@ -146,9 +162,7 @@ async function exitToIdle(
 		emitPlanEvent(runtime, {
 			kind: options.eventKind,
 			planFilePath,
-			body: options.eventKind === "stopped"
-				? `Planning disabled for ${planFilePath}.`
-				: `Planning detached from ${planFilePath}.`,
+			body: getPlanEventBody(runtime, options.eventKind, planFilePath),
 		});
 	}
 }
@@ -201,7 +215,7 @@ async function attachRequestedPlan(
 		emitPlanEvent(runtime, {
 			kind: "abandoned",
 			planFilePath: currentPlanPath,
-			body: `Planning detached from ${currentPlanPath}.`,
+			body: getPlanEventBody(runtime, "abandoned", currentPlanPath),
 		});
 	}
 
@@ -261,7 +275,7 @@ async function handlePlanClearCommand(runtime: Runtime, ctx: ExtensionContext): 
 	emitPlanEvent(runtime, {
 		kind: "abandoned",
 		planFilePath,
-		body: `Planning detached from ${planFilePath}.`,
+		body: getPlanEventBody(runtime, "abandoned", planFilePath),
 	});
 }
 
@@ -430,6 +444,7 @@ function registerLeaderHandler(runtime: Runtime): void {
 export default function nplan(pi: ExtensionAPI): void {
 	const runtime = createRuntime(pi);
 	registerFlags(pi);
+	registerPlanEventRenderer(pi);
 	registerCommands(runtime);
 	registerSubmitTool(runtime);
 	registerToolCallHandler(runtime);

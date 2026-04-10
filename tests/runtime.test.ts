@@ -211,7 +211,8 @@ function createExtensionApi(state: {
 	commands: Map<string, { handler: (args: string, ctx: any) => Promise<void> | void }>;
 	flags: Map<string, boolean | string | undefined>;
 	entries: Array<Record<string, unknown>>;
-	sentMessages: unknown[];
+	messageRenderers: Map<string, unknown>;
+	sentMessages: Array<Record<string, unknown>>;
 	eventHandlers: Map<string, Array<(event: unknown, ctx: unknown) => unknown>>;
 	thinkingLevel: { current: ThinkingLevel };
 	activeTools: { current: string[] };
@@ -234,7 +235,9 @@ function createExtensionApi(state: {
 		registerTool() {},
 		registerProvider() {},
 		unregisterProvider() {},
-		registerMessageRenderer() {},
+		registerMessageRenderer(customType: string, renderer: unknown) {
+			state.messageRenderers.set(customType, renderer);
+		},
 		on(...args: any[]) {
 			const [name, handler] = args;
 			addEventHandler(state.eventHandlers, name, handler);
@@ -246,7 +249,7 @@ function createExtensionApi(state: {
 			},
 			emit() {},
 		},
-		sendMessage(message: unknown) {
+		sendMessage(message: Record<string, unknown>) {
 			state.sentMessages.push(message);
 		},
 		sendUserMessage() {},
@@ -289,7 +292,8 @@ function createHarness(cwd: string) {
 	const commands = new Map<string, { handler: (args: string, ctx: any) => Promise<void> | void }>();
 	const flags = new Map<string, boolean | string | undefined>();
 	const entries: Array<Record<string, unknown>> = [];
-	const sentMessages: unknown[] = [];
+	const messageRenderers = new Map<string, unknown>();
+	const sentMessages: Array<Record<string, unknown>> = [];
 	const eventHandlers = new Map<string, Array<(event: unknown, ctx: unknown) => unknown>>();
 	const thinkingLevel: { current: ThinkingLevel } = { current: "medium" };
 	const activeTools = { current: ["read", "bash", "edit", "write"] };
@@ -299,6 +303,7 @@ function createHarness(cwd: string) {
 		commands,
 		flags,
 		entries,
+		messageRenderers,
 		sentMessages,
 		eventHandlers,
 		thinkingLevel,
@@ -321,7 +326,7 @@ function createHarness(cwd: string) {
 		await command.handler(args, ctx);
 	}
 
-	return { api, commands, flags, entries, sentMessages, ui, emit, runCommand };
+	return { api, commands, flags, entries, messageRenderers, sentMessages, ui, emit, runCommand };
 }
 
 function appendPersistedPlanState(harness: Harness, data: Record<string, unknown>): void {
@@ -330,6 +335,11 @@ function appendPersistedPlanState(harness: Harness, data: Record<string, unknown
 
 function getLastPlanState(harness: Harness): unknown {
 	return harness.entries.at(-1)?.data;
+}
+
+function getLastMessageContent(harness: Harness): string {
+	const content = harness.sentMessages.at(-1)?.content;
+	return typeof content === "string" ? content : "";
 }
 
 afterEach(() => {
@@ -352,6 +362,7 @@ void test("registers plan-clear and removes the legacy plan-file command", () =>
 	assert.ok(harness.commands.has("plan"));
 	assert.ok(harness.commands.has("plan-status"));
 	assert.ok(harness.commands.has("plan-clear"));
+	assert.ok(harness.messageRenderers.has("plan-event"));
 	assert.equal(harness.commands.has("plan-file"), false);
 	assert.equal(harness.flags.has("plan-file"), false);
 });
@@ -378,6 +389,9 @@ void test("/plan with a new slug attaches the normalized plan path and enters pl
 	});
 	assert.equal(harness.ui.inputCalls.length, 0);
 	assert.equal(harness.sentMessages.length > 0, true);
+	assert.equal(harness.sentMessages.at(-1)?.customType, "plan-event");
+	assert.match(getLastMessageContent(harness), /^Plan Mode: Started /);
+	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), true);
 });
 
 void test("bare /plan resumes the attached plan without prompting for a slug", async () => {
@@ -408,6 +422,8 @@ void test("bare /plan resumes the attached plan without prompting for a slug", a
 		},
 		fullPromptShownInSession: true,
 	});
+	assert.match(getLastMessageContent(harness), /^Plan Mode: Resumed /);
+	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), false);
 });
 
 void test("/plan asks to resume a foreign existing plan and cancels when declined", async () => {
