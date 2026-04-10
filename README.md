@@ -82,6 +82,22 @@ The old planning `systemPrompt` config path is no longer supported. `nplan` igno
 Run:
 
 ```bash
+gate
+npm test
+```
+
+`gate` is the main validation surface for this repo. It runs:
+
+- `dprint check`
+- type-aware `oxlint`
+- `tsc --noEmit`
+- `jscpd` for runtime source and tests
+- `knip`
+- `node --test tests/*.test.ts`
+
+For the test suite only:
+
+```bash
 npm test
 ```
 
