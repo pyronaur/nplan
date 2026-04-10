@@ -23,8 +23,9 @@ This is intentionally a structured reference, not a UX recommendation.
 
 ## Message Records
 
-### A01
+### Plan Review
 
+- id: `A01`
 - name: `Plan Review`
 - renderer: tool call row
 - source: `plan_submit` tool call
@@ -37,8 +38,9 @@ This is intentionally a structured reference, not a UX recommendation.
 - sent_to_agent_why: preserves the review action in turn history
 - notes: this is not a `plan-event`
 
-### A02
+### Plan Review With Summary
 
+- id: `A02`
 - name: `Plan Review <summary>`
 - renderer: tool call row
 - source: `plan_submit` tool call
@@ -51,8 +53,9 @@ This is intentionally a structured reference, not a UX recommendation.
 - sent_to_agent_why: preserves the review action and the user-authored summary
 - notes: this is not a `plan-event`
 
-### A03
+### Plan Approved
 
+- id: `A03`
 - name: `Plan Mode: Approved <path>`
 - renderer: tool result row
 - source: `plan_submit` tool result
@@ -65,8 +68,9 @@ This is intentionally a structured reference, not a UX recommendation.
 - sent_to_agent_why: preserves the durable review decision record
 - notes: this is the approval outcome, not the lifecycle marker
 
-### A04
+### Plan Rejected
 
+- id: `A04`
 - name: `Plan Mode: Rejected <path>`
 - renderer: tool result row
 - source: `plan_submit` tool result
@@ -79,8 +83,9 @@ This is intentionally a structured reference, not a UX recommendation.
 - sent_to_agent_why: preserves the durable review decision record
 - notes: planning remains active after this result
 
-### A05
+### Plan Submit Error
 
+- id: `A05`
 - name: `Error: ...`
 - renderer: raw tool result row
 - source: `plan_submit` tool result
@@ -93,8 +98,9 @@ This is intentionally a structured reference, not a UX recommendation.
 - sent_to_agent_why: preserves the failure outcome without pretending it is a review decision
 - notes: this bypasses the approved/rejected header renderer
 
-### A06
+### Plan Started
 
+- id: `A06`
 - name: `Plan Mode: Started <path>`
 - renderer: `plan-event` custom message row
 - source: lifecycle transcript event
@@ -107,8 +113,9 @@ This is intentionally a structured reference, not a UX recommendation.
 - sent_to_agent_why: visible transcript explains that planning began, while hidden planning context owns the actual planning prompt during planning
 - notes: interactive submit can pre-emit this before the user message; non-interactive fallback uses `before_agent_start`
 
-### A07
+### Plan Resumed
 
+- id: `A07`
 - name: `Plan Mode: Resumed <path>`
 - renderer: `plan-event` custom message row
 - source: lifecycle transcript event
@@ -121,8 +128,9 @@ This is intentionally a structured reference, not a UX recommendation.
 - sent_to_agent_why: visible transcript explains that planning resumed, while hidden planning context owns the actual planning prompt during planning
 - notes: interactive submit can pre-emit this before the user message; non-interactive fallback uses `before_agent_start`
 
-### A08
+### Plan Stopped
 
+- id: `A08`
 - name: `Plan Mode: Stopped <path>`
 - renderer: `plan-event` custom message row
 - source: lifecycle transcript event
@@ -135,8 +143,9 @@ This is intentionally a structured reference, not a UX recommendation.
 - sent_to_agent_why: carries the latest planning lifecycle state forward once planning is no longer active
 - notes: this is distinct from approval; approval uses A03
 
-### A09
+### Plan Abandoned
 
+- id: `A09`
 - name: `Plan Mode: Abandoned <path>`
 - renderer: `plan-event` custom message row
 - source: lifecycle transcript event
@@ -149,8 +158,9 @@ This is intentionally a structured reference, not a UX recommendation.
 - sent_to_agent_why: carries forward that the previous attached plan was left behind, which is distinct from ending planning on the same attached plan
 - notes: this is not the same event as A08
 
-### A10
+### Hidden Planning Context
 
+- id: `A10`
 - name: `plan-context`
 - renderer: hidden custom context message
 - source: planning context injection
@@ -165,32 +175,36 @@ This is intentionally a structured reference, not a UX recommendation.
 
 ## Combined Turn Sequences
 
-### S01
+### Approved Submit Sequence
 
+- id: `S01`
 - sequence: `Plan Review ...` -> `Plan Mode: Approved <path>` -> `Plan Mode: Stopped <path>`
 - trigger: approved `plan_submit` turn
 - visible_ui: yes
 - sent_to_agent: tool call and tool result on that same turn; the `Stopped` event becomes later idle context after it is persisted
 - why: current contract separates review outcome from lifecycle state transition
 
-### S02
+### Rejected Submit Sequence
 
+- id: `S02`
 - sequence: `Plan Review ...` -> `Plan Mode: Rejected <path>`
 - trigger: rejected `plan_submit` turn
 - visible_ui: yes
 - sent_to_agent: tool call and tool result on that same turn
 - why: denial is the review outcome and planning remains active, so no stop event is emitted
 
-### S03
+### Switch To New Plan Sequence
 
+- id: `S03`
 - sequence: `Plan Mode: Abandoned <old>` -> `Plan Mode: Started <new>`
 - trigger: switch from one attached plan to a fresh/new target, then make the next real submitted turn
 - visible_ui: yes
 - sent_to_agent: the later idle/planning context logic sees these persisted transcript entries according to normal filtering rules
 - why: current contract records that the old plan was left behind before the new plan begins
 
-### S04
+### Switch To Existing Plan Sequence
 
+- id: `S04`
 - sequence: `Plan Mode: Abandoned <old>` -> `Plan Mode: Resumed <new>`
 - trigger: switch from one attached plan to an existing target, then make the next real submitted turn
 - visible_ui: yes
