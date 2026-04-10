@@ -7,7 +7,12 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadPlanConfig, resolvePlanMarker, resolvePlanTemplate } from "./nplan-config.ts";
 import { filterContextMessages, syncPlanningContextMessages } from "./nplan-context.ts";
-import { emitPlanEvent, type PlanEventKind, registerPlanEventRenderer } from "./nplan-events.ts";
+import {
+	emitPlanEvent,
+	type PlanEventKind,
+	registerPlanEventRenderer,
+	restorePlanEventTracker,
+} from "./nplan-events.ts";
 import { ensureTextFile } from "./nplan-files.ts";
 import { isRecord } from "./nplan-guards.ts";
 import {
@@ -69,11 +74,7 @@ function getPlanEventBody(
 ): string {
 	const marker = resolvePlanMarker(runtime.planConfig, kind);
 	if (!marker) {
-		return kind === "resumed"
-			? `Planning resumed for ${planFilePath}.`
-			: kind === "stopped"
-			? `Planning disabled for ${planFilePath}.`
-			: `Planning detached from ${planFilePath}.`;
+		return kind === "abandoned" ? `Planning detached from ${planFilePath}.` : "";
 	}
 
 	return marker.replaceAll("${planFilePath}", planFilePath);
@@ -85,7 +86,8 @@ function ensureAttachedPlanFile(runtime: Runtime): void {
 }
 
 function getStartedEventBody(planFilePath: string): string {
-	return `Planning started for ${planFilePath}.`;
+	void planFilePath;
+	return "";
 }
 
 async function enterPlanning(
@@ -104,7 +106,7 @@ async function enterPlanning(
 		runtime.fullPromptShownInSession = true;
 	}
 	persistState(runtime);
-	emitPlanEvent(runtime.pi, {
+	emitPlanEvent(runtime.pi, runtime.planEvents, {
 		kind: entryKind,
 		planFilePath,
 		body: showFullPrompt
@@ -139,7 +141,7 @@ async function exitToIdle(
 	}
 	persistState(runtime);
 	if (options.eventKind && planFilePath) {
-		emitPlanEvent(runtime.pi, {
+		emitPlanEvent(runtime.pi, runtime.planEvents, {
 			kind: options.eventKind,
 			planFilePath,
 			body: getPlanEventBody(runtime, options.eventKind, planFilePath),
@@ -193,7 +195,7 @@ async function attachRequestedPlan(
 		}
 		runtime.attachedPlanPath = null;
 		persistState(runtime);
-		emitPlanEvent(runtime.pi, {
+		emitPlanEvent(runtime.pi, runtime.planEvents, {
 			kind: "abandoned",
 			planFilePath: currentPlanPath,
 			body: getPlanEventBody(runtime, "abandoned", currentPlanPath),
@@ -287,7 +289,7 @@ async function handlePlanClearCommand(runtime: Runtime, ctx: ExtensionContext): 
 	const planFilePath = runtime.attachedPlanPath;
 	runtime.attachedPlanPath = null;
 	persistState(runtime);
-	emitPlanEvent(runtime.pi, {
+	emitPlanEvent(runtime.pi, runtime.planEvents, {
 		kind: "abandoned",
 		planFilePath,
 		body: getPlanEventBody(runtime, "abandoned", planFilePath),
@@ -414,6 +416,7 @@ async function handleSessionStart(runtime: Runtime, ctx: ExtensionContext): Prom
 	}
 
 	const persistedState = getPersistedPlanState(getSessionEntries(ctx));
+	restorePlanEventTracker(runtime.planEvents, getSessionEntries(ctx));
 	if (persistedState) {
 		runtime.phase = persistedState.phase;
 		runtime.attachedPlanPath = persistedState.attachedPlanPath
@@ -475,7 +478,7 @@ function registerLeaderHandler(runtime: Runtime): void {
 export default function nplan(pi: ExtensionAPI): void {
 	const runtime = createRuntime(pi);
 	registerFlags(pi);
-	registerPlanEventRenderer(pi);
+	registerPlanEventRenderer(pi, runtime.planEvents);
 	registerCommands(runtime);
 	registerSubmitTool(runtime);
 	registerToolCallHandler(runtime);

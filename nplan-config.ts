@@ -61,8 +61,6 @@ const BUNDLED_PLAN_TEMPLATE_PATH = join(
 
 const INTERNAL_CONFIG: PlanConfig = {
 	markers: {
-		resumed: "Planning resumed for ${planFilePath}.",
-		stopped: "Planning disabled for ${planFilePath}.",
 		abandoned: "Planning detached from ${planFilePath}.",
 	},
 	planTemplate: readFileSync(BUNDLED_PLAN_TEMPLATE_PATH, "utf-8"),

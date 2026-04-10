@@ -16,6 +16,55 @@ import { createTempTracker } from "./test-temp.ts";
 const temp = createTempTracker();
 const DEFAULT_ACTIVE_TOOLS = ["read", "bash", "edit", "write"];
 
+function createTheme() {
+	return {
+		fg: (_color: string, text: string) => text,
+		bg: (_color: string, text: string) => text,
+		bold: (text: string) => text,
+	};
+}
+
+type PlanEventRenderer = (
+	message: Record<string, unknown>,
+	options: { expanded: boolean },
+	theme: ReturnType<typeof createTheme>,
+) => { invalidate(): void; render(width: number): string[] };
+
+function isPlanEventRenderer(value: unknown): value is PlanEventRenderer {
+	return typeof value === "function";
+}
+
+function renderPlanEventMessages(
+	harness: Harness,
+	options: { expanded: boolean },
+): string[] {
+	const renderer = harness.messageRenderers.get("plan-event");
+	if (!isPlanEventRenderer(renderer)) {
+		throw new Error("plan-event renderer was not registered");
+	}
+
+	return harness.sentMessages.filter((message) => message.customType === "plan-event").map((
+		message,
+	) => renderer(message, options, createTheme()).render(160).join("\n").trim()).filter(Boolean);
+}
+
+async function runToggleSequence(count: number): Promise<{ harness: Harness; planPath: string }> {
+	const homeDir = temp.makeTempDir(`nplan-runtime-home-toggle-${count}-`);
+	const cwd = temp.makeTempDir(`nplan-runtime-cwd-toggle-${count}-`);
+	process.env.HOME = homeDir;
+	const planPath = writePlanFile(homeDir, "toggle-plan");
+	const harness = createHarness(cwd);
+	appendPersistedPlanState(harness, createPlanningState(planPath, { includeModel: false }));
+	nplan(harness.api);
+
+	await harness.emit("session_start", { type: "session_start", reason: "resume" });
+	for (let i = 0; i < count; i += 1) {
+		await harness.runCommand("plan");
+	}
+
+	return { harness, planPath };
+}
+
 function createSavedState(includeModel = true): Record<string, unknown> {
 	if (includeModel) {
 		return {
@@ -243,4 +292,22 @@ void test("fresh start after an earlier start stays Started while the body downg
 	assertPlanningState(harness, planPath);
 	assert.match(getLastMessageContent(harness), new RegExp(`^Plan Mode: Started ${planPath}`));
 	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), false);
+});
+
+void test("stop resume stop compacts to the surviving stopped transition for the current plan", async () => {
+	const { harness, planPath } = await runToggleSequence(3);
+
+	assert.deepEqual(renderPlanEventMessages(harness, { expanded: false }), [
+		`Plan Mode: Stopped ${planPath}`,
+	]);
+	assert.deepEqual(renderPlanEventMessages(harness, { expanded: true }), [
+		`Plan Mode: Stopped ${planPath}`,
+	]);
+});
+
+void test("stop resume stop resume compacts away the entire toggle sequence for the current plan", async () => {
+	const { harness } = await runToggleSequence(4);
+
+	assert.deepEqual(renderPlanEventMessages(harness, { expanded: false }), []);
+	assert.deepEqual(renderPlanEventMessages(harness, { expanded: true }), []);
 });

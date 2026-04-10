@@ -247,8 +247,7 @@ void test("loadPlanConfig resolves marker overrides from plan.json", () => {
 
 	assert.equal(resolvePlanMarker(loaded.config, "resumed"),
 		"Back in planning for ${planFilePath}.");
-	assert.equal(resolvePlanMarker(loaded.config, "stopped"),
-		"Planning disabled for ${planFilePath}.");
+	assert.equal(resolvePlanMarker(loaded.config, "stopped"), undefined);
 });
 
 void test("loadPlanConfig warns when deprecated planning systemPrompt config is used", () => {

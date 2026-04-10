@@ -46,7 +46,7 @@ Plan review is handled through the `plannotator` CLI.
 - CLI denial returns revision feedback and keeps the extension in planning mode
 - when review is unavailable, `nplan` preserves the current auto-approve fallback behavior
 
-Planning lifecycle rows render as collapsed transcript entries headed by `Plan Mode: Started ...`, `Resumed ...`, `Stopped ...`, or `Abandoned ...`. The first real `Started` entry in a session expands with `Ctrl+O` to show the full planning prompt; later starts and all resumes use the smaller body.
+Planning lifecycle rows render as collapsed transcript entries headed by `Plan Mode: Started ...`, `Resumed ...`, `Stopped ...`, or `Abandoned ...`. The first real `Started` entry in a session expands with `Ctrl+O` to show the full planning prompt. Later same-plan `Resumed`/`Stopped` toggles compact to the surviving net transition instead of accumulating a noisy on/off audit trail.
 
 ## Config
 

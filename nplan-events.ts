@@ -1,14 +1,58 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, SessionEntry } from "@mariozechner/pi-coding-agent";
 import { Box, Text } from "@mariozechner/pi-tui";
 
 export type PlanEventKind = "started" | "resumed" | "stopped" | "abandoned";
+type TogglePlanEventKind = Extract<PlanEventKind, "resumed" | "stopped">;
 
 export type PlanEventDetails = {
 	kind: PlanEventKind;
 	planFilePath: string;
 	title: string;
 	body: string;
+	seq?: number;
 };
+
+export type PlanEventTracker = {
+	nextSeq: number;
+	visibleToggleByPlan: Map<string, { kind: TogglePlanEventKind; seq: number }>;
+};
+
+const HIDDEN_COMPONENT = {
+	invalidate() {},
+	render() {
+		return [];
+	},
+};
+
+function isTogglePlanEventKind(kind: PlanEventKind): kind is TogglePlanEventKind {
+	return kind === "resumed" || kind === "stopped";
+}
+
+function clearPlanEventTracker(tracker: PlanEventTracker): void {
+	tracker.nextSeq = 1;
+	tracker.visibleToggleByPlan.clear();
+}
+
+function applyPlanEventToTracker(tracker: PlanEventTracker, details: PlanEventDetails): void {
+	if (typeof details.seq === "number") {
+		tracker.nextSeq = Math.max(tracker.nextSeq, details.seq + 1);
+	}
+	if (!isTogglePlanEventKind(details.kind) || typeof details.seq !== "number") {
+		tracker.visibleToggleByPlan.delete(details.planFilePath);
+		return;
+	}
+
+	const current = tracker.visibleToggleByPlan.get(details.planFilePath);
+	if (current && current.kind !== details.kind) {
+		tracker.visibleToggleByPlan.delete(details.planFilePath);
+		return;
+	}
+
+	tracker.visibleToggleByPlan.set(details.planFilePath, {
+		kind: details.kind,
+		seq: details.seq,
+	});
+}
 
 function getPlanEventTitle(kind: PlanEventKind, planFilePath: string): string {
 	if (kind === "started") {
@@ -32,6 +76,9 @@ function isPlanEventDetails(value: unknown): value is PlanEventDetails {
 	) {
 		return false;
 	}
+	if ("seq" in value && value.seq !== undefined && typeof value.seq !== "number") {
+		return false;
+	}
 
 	return typeof value.kind === "string" && typeof value.planFilePath === "string"
 		&& typeof value.title === "string" && typeof value.body === "string";
@@ -47,9 +94,51 @@ function getHeaderColor(kind: PlanEventKind): "accent" | "warning" | "success" {
 	return "warning";
 }
 
-export function registerPlanEventRenderer(pi: ExtensionAPI): void {
+function isPlanEventMessageEntry(entry: SessionEntry): entry is SessionEntry & {
+	type: "custom_message";
+	customType: "plan-event";
+	details?: unknown;
+} {
+	return entry.type === "custom_message" && entry.customType === "plan-event";
+}
+
+export function createPlanEventTracker(): PlanEventTracker {
+	return {
+		nextSeq: 1,
+		visibleToggleByPlan: new Map(),
+	};
+}
+
+export function restorePlanEventTracker(
+	tracker: PlanEventTracker,
+	entries: SessionEntry[],
+): void {
+	clearPlanEventTracker(tracker);
+	for (const entry of entries) {
+		if (!isPlanEventMessageEntry(entry)) {
+			continue;
+		}
+		const details = isPlanEventDetails(entry.details) ? entry.details : undefined;
+		if (!details) {
+			continue;
+		}
+		applyPlanEventToTracker(tracker, details);
+	}
+}
+
+export function registerPlanEventRenderer(
+	pi: ExtensionAPI,
+	tracker: PlanEventTracker,
+): void {
 	pi.registerMessageRenderer("plan-event", (message, { expanded }, theme) => {
 		const details = isPlanEventDetails(message.details) ? message.details : undefined;
+		if (
+			details && isTogglePlanEventKind(details.kind) && typeof details.seq === "number"
+			&& tracker.visibleToggleByPlan.get(details.planFilePath)?.seq !== details.seq
+		) {
+			return HIDDEN_COMPONENT;
+		}
+
 		const title = details?.title
 			?? (typeof message.content === "string" ? message.content : "Plan event");
 		let text = theme.fg(getHeaderColor(details?.kind ?? "started"), theme.bold(title));
@@ -68,18 +157,23 @@ export function registerPlanEventRenderer(pi: ExtensionAPI): void {
 
 export function emitPlanEvent(
 	pi: ExtensionAPI,
+	tracker: PlanEventTracker,
 	input: { kind: PlanEventKind; planFilePath: string; body: string },
 ): void {
 	const title = getPlanEventTitle(input.kind, input.planFilePath);
+	const details: PlanEventDetails = {
+		kind: input.kind,
+		planFilePath: input.planFilePath,
+		title,
+		body: input.body,
+		seq: tracker.nextSeq,
+	};
+	applyPlanEventToTracker(tracker, details);
+	const content = input.body ? `${title}\n\n${input.body}` : title;
 	pi.sendMessage({
 		customType: "plan-event",
-		content: `${title}\n\n${input.body}`,
+		content,
 		display: true,
-		details: {
-			kind: input.kind,
-			planFilePath: input.planFilePath,
-			title,
-			body: input.body,
-		},
+		details,
 	}, { triggerTurn: false });
 }

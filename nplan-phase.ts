@@ -4,6 +4,7 @@ import {
 	resolvePhaseProfile,
 	resolvePlanTemplate,
 } from "./nplan-config.ts";
+import { createPlanEventTracker, type PlanEventTracker } from "./nplan-events.ts";
 import {
 	clearPhaseStatus,
 	getDefaultPlanPath,
@@ -21,6 +22,7 @@ export type Runtime = {
 	planConfig: PlanConfig;
 	lastPromptWarning: string | null;
 	fullPromptShownInSession: boolean;
+	planEvents: PlanEventTracker;
 };
 
 function getPhaseProfile(runtime: Runtime): ReturnType<typeof resolvePhaseProfile> | undefined {
@@ -74,6 +76,7 @@ export function createRuntime(pi: ExtensionAPI): Runtime {
 		planConfig: {},
 		lastPromptWarning: null,
 		fullPromptShownInSession: false,
+		planEvents: createPlanEventTracker(),
 	};
 }
 
