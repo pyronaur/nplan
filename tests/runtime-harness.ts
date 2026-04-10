@@ -179,6 +179,99 @@ function appendCustomEntry(
 	});
 }
 
+function appendCustomMessageEntry(
+	input: {
+		entries: Array<Record<string, unknown>>;
+		entryCount: { current: number };
+		message: Record<string, unknown>;
+	},
+): void {
+	input.entryCount.current += 1;
+	input.entries.push({
+		type: "custom_message",
+		customType: input.message.customType,
+		content: input.message.content,
+		display: input.message.display,
+		details: input.message.details,
+		id: `entry-${input.entryCount.current}`,
+		parentId: null,
+		timestamp: new Date(0).toISOString(),
+	});
+}
+
+function createEventsApi() {
+	return {
+		on(...args: any[]) {
+			void args;
+			return () => {};
+		},
+		emit() {},
+	};
+}
+
+function getReturnedMessage(result: unknown): Record<string, unknown> | undefined {
+	if (!result || typeof result !== "object" || !("message" in result)) {
+		return undefined;
+	}
+
+	const { message } = result;
+	if (!message || typeof message !== "object") {
+		return undefined;
+	}
+
+	return { ...message };
+}
+
+function createMessageApi(state: {
+	entries: Array<Record<string, unknown>>;
+	sentMessages: Array<Record<string, unknown>>;
+	entryCount: { current: number };
+}) {
+	return {
+		sendMessage(message: Record<string, unknown>) {
+			statefulPushMessage({
+				sentMessages: state.sentMessages,
+				entries: state.entries,
+				entryCount: state.entryCount,
+				message,
+			});
+		},
+		sendUserMessage() {},
+		appendEntry(customType: string, data?: unknown) {
+			appendCustomEntry({ entries: state.entries, entryCount: state.entryCount, customType, data });
+		},
+	};
+}
+
+function createToolStateApi(state: {
+	activeTools: { current: string[] };
+	thinkingLevel: { current: ThinkingLevel };
+}) {
+	return {
+		getActiveTools() {
+			return [...state.activeTools.current];
+		},
+		getAllTools() {
+			return [];
+		},
+		setActiveTools(toolNames: string[]) {
+			state.activeTools.current = [...toolNames];
+		},
+		getCommands() {
+			return [];
+		},
+		async setModel() {
+			return true;
+		},
+		getThinkingLevel() {
+			return state.thinkingLevel.current;
+		},
+		setThinkingLevel(level: ThinkingLevel) {
+			state.thinkingLevel.current = level;
+		},
+	};
+}
+
 function createExtensionApi(state: {
 	commands: Map<string, { handler: (args: string, ctx: any) => Promise<void> | void }>;
 	flags: Map<string, boolean | string | undefined>;
@@ -214,20 +307,8 @@ function createExtensionApi(state: {
 			const [name, handler] = args;
 			addEventHandler(state.eventHandlers, name, handler);
 		},
-		events: {
-			on(...args: any[]) {
-				void args;
-				return () => {};
-			},
-			emit() {},
-		},
-		sendMessage(message: Record<string, unknown>) {
-			state.sentMessages.push(message);
-		},
-		sendUserMessage() {},
-		appendEntry(customType: string, data?: unknown) {
-			appendCustomEntry({ entries: state.entries, entryCount: state.entryCount, customType, data });
-		},
+		events: createEventsApi(),
+		...createMessageApi(state),
 		setSessionName() {},
 		getSessionName() {
 			return undefined;
@@ -236,29 +317,25 @@ function createExtensionApi(state: {
 		async exec() {
 			throw new Error("exec() not implemented in runtime test api");
 		},
-		getActiveTools() {
-			return [...state.activeTools.current];
-		},
-		getAllTools() {
-			return [];
-		},
-		setActiveTools(toolNames: string[]) {
-			state.activeTools.current = [...toolNames];
-		},
-		getCommands() {
-			return [];
-		},
-		async setModel() {
-			return true;
-		},
-		getThinkingLevel() {
-			return state.thinkingLevel.current;
-		},
-		setThinkingLevel(level: ThinkingLevel) {
-			state.thinkingLevel.current = level;
-		},
+		...createToolStateApi(state),
 	};
 }
+
+function statefulPushMessage(input: {
+	sentMessages: Array<Record<string, unknown>>;
+	entries: Array<Record<string, unknown>>;
+	entryCount: { current: number };
+	message: Record<string, unknown>;
+}): void {
+	input.sentMessages.push(input.message);
+	appendCustomMessageEntry({
+		entries: input.entries,
+		entryCount: input.entryCount,
+		message: input.message,
+	});
+}
+
+type Harness = ReturnType<typeof createHarness>;
 
 export function writePlanFile(homeDir: string, slug: string, content = "# Plan\n"): string {
 	const planPath = join(homeDir, ".n", "pi", "plans", `${slug}.md`);
@@ -291,10 +368,18 @@ export function createHarness(cwd: string) {
 	});
 	const ctx = createContext(cwd, entries, ui);
 
-	async function emit(name: string, event: unknown): Promise<void> {
+	async function emit(name: string, event: unknown): Promise<unknown[]> {
+		const results: unknown[] = [];
 		for (const handler of eventHandlers.get(name) ?? []) {
-			await handler(event, ctx);
+			const result = await handler(event, ctx);
+			results.push(result);
+			const message = getReturnedMessage(result);
+			if (!message) {
+				continue;
+			}
+			statefulPushMessage({ sentMessages, entries, entryCount, message });
 		}
+		return results;
 	}
 
 	async function runCommand(name: string, args = ""): Promise<void> {
@@ -308,17 +393,17 @@ export function createHarness(cwd: string) {
 	return { api, commands, flags, entries, messageRenderers, sentMessages, ui, emit, runCommand };
 }
 
-export type Harness = ReturnType<typeof createHarness>;
-
 export function appendPersistedPlanState(harness: Harness, data: Record<string, unknown>): void {
 	harness.api.appendEntry("plan", data);
 }
 
 export function getLastPlanState(harness: Harness): unknown {
-	return harness.entries.at(-1)?.data;
+	return [...harness.entries].reverse().find((entry) => entry.customType === "plan")?.data;
 }
 
 export function getLastMessageContent(harness: Harness): string {
 	const content = harness.sentMessages.at(-1)?.content;
 	return typeof content === "string" ? content : "";
 }
+
+export type { Harness };

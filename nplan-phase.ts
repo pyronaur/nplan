@@ -4,7 +4,11 @@ import {
 	resolvePhaseProfile,
 	resolvePlanTemplate,
 } from "./nplan-config.ts";
-import { createPlanEventTracker, type PlanEventTracker } from "./nplan-events.ts";
+import {
+	createPlanEventTracker,
+	type PlanEventKind,
+	type PlanEventTracker,
+} from "./nplan-events.ts";
 import {
 	clearPhaseStatus,
 	getDefaultPlanPath,
@@ -23,6 +27,8 @@ export type Runtime = {
 	lastPromptWarning: string | null;
 	fullPromptShownInSession: boolean;
 	planEvents: PlanEventTracker;
+	pendingPlanEvent: Extract<PlanEventKind, "started" | "resumed"> | null;
+	showPlanEventThisTurn: boolean;
 };
 
 function getPhaseProfile(runtime: Runtime): ReturnType<typeof resolvePhaseProfile> | undefined {
@@ -77,6 +83,8 @@ export function createRuntime(pi: ExtensionAPI): Runtime {
 		lastPromptWarning: null,
 		fullPromptShownInSession: false,
 		planEvents: createPlanEventTracker(),
+		pendingPlanEvent: null,
+		showPlanEventThisTurn: false,
 	};
 }
 

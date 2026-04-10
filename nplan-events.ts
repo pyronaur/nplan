@@ -160,6 +160,18 @@ export function emitPlanEvent(
 	tracker: PlanEventTracker,
 	input: { kind: PlanEventKind; planFilePath: string; body: string },
 ): void {
+	pi.sendMessage(createPlanEventMessage(tracker, input), { triggerTurn: false });
+}
+
+export function createPlanEventMessage(
+	tracker: PlanEventTracker,
+	input: { kind: PlanEventKind; planFilePath: string; body: string },
+): {
+	customType: "plan-event";
+	content: string;
+	display: true;
+	details: PlanEventDetails;
+} {
 	const title = getPlanEventTitle(input.kind, input.planFilePath);
 	const details: PlanEventDetails = {
 		kind: input.kind,
@@ -169,11 +181,11 @@ export function emitPlanEvent(
 		seq: tracker.nextSeq,
 	};
 	applyPlanEventToTracker(tracker, details);
-	const content = input.body ? `${title}\n\n${input.body}` : title;
-	pi.sendMessage({
+
+	return {
 		customType: "plan-event",
-		content,
+		content: input.body ? `${title}\n\n${input.body}` : title,
 		display: true,
 		details,
-	}, { triggerTurn: false });
+	};
 }

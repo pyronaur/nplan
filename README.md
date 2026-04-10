@@ -26,7 +26,7 @@ Keep the current local `nplan` interaction surface focused and explicit:
 - `nplan-phase.ts` owns runtime phase state, prompt rendering inputs, and tool/model restore behavior
 - `nplan-config.ts` owns config loading, phase profile resolution, bundled/default planning prompt loading, scaffold loading, and marker resolution
 - `nplan-template.ts` owns `${...}` prompt/template interpolation
-- `nplan-events.ts` owns legacy plan lifecycle message rendering for existing session history
+- `nplan-events.ts` owns plan-mode transcript message rendering
 - `nplan-status.ts` owns user-facing status text helpers
 - `nplan-policy.ts` owns global plan-path rules, planning context message shaping, planning tool restrictions, and phase UI rendering
 - `nplan-review.ts` owns the CLI review transport
@@ -46,7 +46,7 @@ Plan review is handled through the `plannotator` CLI.
 - CLI denial returns revision feedback and keeps the extension in planning mode
 - when review is unavailable, `nplan` preserves the current auto-approve fallback behavior
 
-Plan-mode toggles update the live footer/widget UI and persisted plan state, but they do not append visible transcript messages. The `plan_submit` tool row remains the only durable approval or rejection transcript record.
+Plan-mode toggles update the live footer/widget UI and persisted plan state without appending visible transcript messages. The next real prompt sent while planning appends one visible `Plan Mode: Started ...` or `Plan Mode: Resumed ...` transcript row for that turn. Later planning turns stay silent until plan mode changes again. The `plan_submit` tool row remains the only durable approval or rejection transcript record.
 
 ## Config
 
