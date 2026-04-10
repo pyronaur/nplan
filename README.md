@@ -15,7 +15,7 @@ Keep the current local `nplan` interaction surface focused and explicit:
 - restricted planning tools with `plan_submit`
 - editor-prefilled implementation handoff after approval
 
-`/plan <slug>` attaches or resumes `~/.n/pi/plans/<slug>.md`. Bare `/plan` or `pi-leader` follow-up `p` resumes the currently attached plan when one exists, otherwise it prompts for a slug. `/plan-clear` detaches the current plan and exits planning when necessary. `--plan` enters the same planning-start flow during session startup, including scaffold bootstrapping and the durable start marker.
+`/plan <slug>` attaches or resumes `~/.n/pi/plans/<slug>.md`. Missing targets start a new plan immediately; existing foreign targets ask for confirmation and then resume. Bare `/plan` or `pi-leader` follow-up `p` resumes the currently attached plan when one exists, otherwise it prompts for a slug. `/plan-clear` detaches the current plan and exits planning when necessary. `--plan` enters the same planning-start flow during session startup, including scaffold bootstrapping and the durable start marker.
 
 ## Architecture
 
@@ -41,10 +41,12 @@ Plan review is handled through the `plannotator` CLI.
 
 - while planning, the agent writes to the active global plan file
 - `plan_submit` reads that file and submits the plan body to `plannotator` on stdin
-- the `plan_submit` tool row itself is the single durable approval/rejection record; approvals render as success and denials render as failure without a duplicate follow-up message
+- the `plan_submit` tool row itself is the single durable approval/rejection record; approvals render as `Plan Mode: Approved <absolute-plan-path>` and denials render as `Plan Mode: Rejected <absolute-plan-path>` without a duplicate follow-up message
 - CLI approval exits plan mode, restores normal access, and prefills the input editor with `Implement the plan @<absolute-plan-path>`
 - CLI denial returns revision feedback and keeps the extension in planning mode
 - when review is unavailable, `nplan` preserves the current auto-approve fallback behavior
+
+Planning lifecycle rows render as collapsed transcript entries headed by `Plan Mode: Started ...`, `Resumed ...`, `Stopped ...`, or `Abandoned ...`. The first real `Started` entry in a session expands with `Ctrl+O` to show the full planning prompt; later starts and all resumes use the smaller body.
 
 ## Config
 

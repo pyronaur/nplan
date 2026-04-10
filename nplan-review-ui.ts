@@ -1,11 +1,15 @@
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
-import { Text } from "@mariozechner/pi-tui";
+import { Box, Markdown, type MarkdownTheme, Text } from "@mariozechner/pi-tui";
 import { PLAN_SUBMIT_TOOL } from "./nplan-tool-scope.ts";
 
-export type PlanSubmitDetails = { approved: boolean; feedback?: string };
+export type PlanSubmitDetails = {
+	approved: boolean;
+	planFilePath: string;
+	feedback?: string;
+};
 
 type ReviewTheme = {
-	fg: (color: "toolTitle" | "muted" | "success" | "warning", text: string) => string;
+	fg: (color: "toolTitle" | "muted" | "success" | "warning" | "error", text: string) => string;
 	bold: (text: string) => string;
 };
 
@@ -16,11 +20,62 @@ function getToolResultText(result: { content: Array<{ type: string; text?: strin
 	return block?.text ?? "";
 }
 
+function isDecisionError(text: string): boolean {
+	return text.trim().startsWith("Error:");
+}
+
+function getPlanSubmitHeader(details: PlanSubmitDetails): string {
+	if (details.approved) {
+		return `Plan Mode: Approved ${details.planFilePath}`;
+	}
+
+	return `Plan Mode: Rejected ${details.planFilePath}`;
+}
+
+function getResultBodyText(input: {
+	details: PlanSubmitDetails;
+	content: Array<{ type: string; text?: string }>;
+}): string {
+	const text = getToolResultText({ content: input.content }).trim();
+	if (!text || text === "Plan approved." || text === "Plan rejected.") {
+		return input.details.feedback?.trim() ?? "";
+	}
+
+	return text;
+}
+
+function createMarkdownTheme(
+	theme: ReviewTheme,
+	color: "success" | "error" | "muted",
+): MarkdownTheme {
+	const style = (text: string) => theme.fg(color, text);
+	const border = (text: string) => theme.fg("muted", text);
+	return {
+		heading: (text) => theme.bold(style(text)),
+		link: style,
+		linkUrl: border,
+		code: style,
+		codeBlock: style,
+		codeBlockBorder: border,
+		quote: style,
+		quoteBorder: border,
+		hr: border,
+		listBullet: style,
+		bold: (text) => theme.bold(style(text)),
+		italic: style,
+		strikethrough: style,
+		underline: style,
+	};
+}
+
 export function isPlanSubmitDetails(value: unknown): value is PlanSubmitDetails {
 	if (!value || typeof value !== "object" || Array.isArray(value)) {
 		return false;
 	}
-	if (!("approved" in value) || typeof value.approved !== "boolean") {
+	if (
+		!("approved" in value) || typeof value.approved !== "boolean"
+		|| !("planFilePath" in value) || typeof value.planFilePath !== "string"
+	) {
 		return false;
 	}
 	if (!("feedback" in value) || value.feedback === undefined) {
@@ -31,9 +86,9 @@ export function isPlanSubmitDetails(value: unknown): value is PlanSubmitDetails 
 
 export function getPlanSubmitCallText(summary: string | undefined): string {
 	if (!summary?.trim()) {
-		return PLAN_SUBMIT_TOOL;
+		return "Plan Review";
 	}
-	return `${PLAN_SUBMIT_TOOL} ${summary.trim()}`;
+	return `Plan Review ${summary.trim()}`;
 }
 
 export function getPlanSubmitResultText(input: {
@@ -41,19 +96,22 @@ export function getPlanSubmitResultText(input: {
 	content: Array<{ type: string; text?: string }>;
 	expanded: boolean;
 }): string {
-	if (!isPlanSubmitDetails(input.details)) {
-		return getToolResultText({ content: input.content });
+	const text = getToolResultText({ content: input.content });
+	if (!isPlanSubmitDetails(input.details) || isDecisionError(text)) {
+		return text;
 	}
-	if (input.details.approved) {
-		if (!input.details.feedback || !input.expanded) {
-			return "Plan approved";
-		}
-		return `Plan approved\n\n${input.details.feedback}`;
+
+	const header = getPlanSubmitHeader(input.details);
+	if (!input.expanded) {
+		return header;
 	}
-	if (!input.details.feedback || !input.expanded) {
-		return "Plan rejected";
+
+	const body = getResultBodyText({ details: input.details, content: input.content });
+	if (!body) {
+		return header;
 	}
-	return `Plan rejected\n\n${input.details.feedback}`;
+
+	return `${header}\n\n${body}`;
 }
 
 export function patchPlanSubmitResult(event: {
@@ -67,7 +125,7 @@ export function patchPlanSubmitResult(event: {
 }
 
 export function renderPlanSubmitCall(args: { summary?: string }, theme: ReviewTheme) {
-	const title = theme.fg("toolTitle", theme.bold(PLAN_SUBMIT_TOOL));
+	const title = theme.fg("toolTitle", theme.bold("Plan Review"));
 	if (!args.summary?.trim()) {
 		return new Text(title, 0, 0);
 	}
@@ -79,15 +137,29 @@ export function renderPlanSubmitResult(
 	options: { expanded: boolean },
 	theme: ReviewTheme,
 ) {
+	const text = getToolResultText(result);
 	const details = isPlanSubmitDetails(result.details) ? result.details : undefined;
-	const color = details?.approved ? "success" : "warning";
-	return new Text(
-		theme.fg(color, theme.bold(getPlanSubmitResultText({
-			details: result.details,
-			content: result.content,
-			expanded: options.expanded,
-		}))),
-		0,
-		0,
+	if (!details || isDecisionError(text)) {
+		return new Text(text, 0, 0);
+	}
+
+	const color = details.approved ? "success" : "error";
+	const header = theme.fg(color, theme.bold(getPlanSubmitHeader(details)));
+	if (!options.expanded) {
+		return new Text(header, 0, 0);
+	}
+
+	const body = getResultBodyText({ details, content: result.content });
+	if (!body) {
+		return new Text(header, 0, 0);
+	}
+
+	const box = new Box();
+	box.addChild(new Text(header, 0, 0));
+	box.addChild(
+		new Markdown(body, 0, 0, createMarkdownTheme(theme, color), {
+			color: (value) => theme.fg(color, value),
+		}),
 	);
+	return box;
 }

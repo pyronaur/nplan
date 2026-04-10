@@ -250,7 +250,7 @@ function startPlanReviewCli(input: StartPlanReviewInput): PlanReviewJob {
 
 function makeToolResult(
 	text: string,
-	details: { approved: boolean; feedback?: string },
+	details: PlanSubmitDetails,
 ): PlanSubmitResult {
 	return {
 		content: [{ type: "text", text }],
@@ -265,7 +265,7 @@ function validatePlanFile(fullPath: string, planFilePath: string): PlanSubmitRes
 	} catch {
 		return makeToolResult(
 			`Error: ${planFilePath} does not exist. Write your plan using the write tool first, then call ${PLAN_SUBMIT_TOOL} again.`,
-			{ approved: false },
+			{ approved: false, planFilePath },
 		);
 	}
 	if (planContent.trim().length > 0) {
@@ -274,7 +274,7 @@ function validatePlanFile(fullPath: string, planFilePath: string): PlanSubmitRes
 
 	return makeToolResult(
 		`Error: ${planFilePath} is empty. Write your plan first, then call ${PLAN_SUBMIT_TOOL} again.`,
-		{ approved: false },
+		{ approved: false, planFilePath },
 	);
 }
 
@@ -301,14 +301,14 @@ async function runSubmitPlanTool(
 	runtime: SubmitPlanToolRuntime,
 	ctx: ExtensionContext,
 ): Promise<PlanSubmitResult> {
+	const planFilePath = runtime.getPlanFilePath();
 	if (!runtime.isPlanning()) {
 		return makeToolResult(
 			"Error: Not in plan mode. Use /plan to enter planning mode first.",
-			{ approved: false },
+			{ approved: false, planFilePath },
 		);
 	}
 
-	const planFilePath = runtime.getPlanFilePath();
 	const fullPath = runtime.resolvePlanPath(ctx.cwd);
 	const invalidPlan = validatePlanFile(fullPath, planFilePath);
 	if (invalidPlan) {
@@ -316,7 +316,7 @@ async function runSubmitPlanTool(
 	}
 	if (!ctx.hasUI || !hasPlannotatorCli()) {
 		await runtime.onPlanApproved(ctx, planFilePath);
-		return makeToolResult(getAutoApproveMessage(ctx.hasUI), { approved: true });
+		return makeToolResult(getAutoApproveMessage(ctx.hasUI), { approved: true, planFilePath });
 	}
 
 	let result: NplanReviewResult;
@@ -329,12 +329,13 @@ async function runSubmitPlanTool(
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		ctx.ui.notify(message, "error");
-		return makeToolResult(message, { approved: false });
+		return makeToolResult(message, { approved: false, planFilePath });
 	}
 	if (result.status === "approved") {
 		await runtime.onPlanApproved(ctx, planFilePath);
 		return makeToolResult(getApprovedPlanMessage(planFilePath, result.feedback), {
 			approved: true,
+			planFilePath,
 			feedback: result.feedback ?? undefined,
 		});
 	}
@@ -342,7 +343,7 @@ async function runSubmitPlanTool(
 	const feedbackText = result.feedback || "Plan rejected. Please revise.";
 	return makeToolResult(
 		planDenyFeedback(feedbackText, PLAN_SUBMIT_TOOL, { planFilePath }),
-		{ approved: false, feedback: feedbackText },
+		{ approved: false, planFilePath, feedback: feedbackText },
 	);
 }
 

@@ -130,6 +130,24 @@ void test("/plan asks to resume a foreign existing plan and cancels when decline
 	assert.equal(harness.sentMessages.length, 0);
 });
 
+void test("accepted foreign existing-plan resume emits Resumed and not the full first-start prompt", async () => {
+	const homeDir = temp.makeTempDir("nplan-runtime-home-foreign-accept-");
+	const cwd = temp.makeTempDir("nplan-runtime-cwd-foreign-accept-");
+	process.env.HOME = homeDir;
+	const planPath = writePlanFile(homeDir, "existing-plan");
+	const harness = createHarness(cwd);
+	harness.ui.confirmResponses.push(true);
+	nplan(harness.api);
+
+	await harness.emit("session_start", { type: "session_start", reason: "startup" });
+	await harness.runCommand("plan", "existing plan");
+
+	assert.equal(harness.ui.confirmCalls.length, 1);
+	assertPlanningState(harness, planPath, { fullPromptShownInSession: false });
+	assert.match(getLastMessageContent(harness), new RegExp(`^Plan Mode: Resumed ${planPath}`));
+	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), false);
+});
+
 void test("/plan-clear exits planning and detaches the current plan", async () => {
 	const homeDir = temp.makeTempDir("nplan-runtime-home-clear-");
 	const cwd = temp.makeTempDir("nplan-runtime-cwd-clear-");
@@ -206,4 +224,23 @@ void test("declining a plan switch while planning keeps the current plan attache
 		type: "info",
 	});
 	assert.equal(harness.sentMessages.length, 0);
+});
+
+void test("fresh start after an earlier start stays Started while the body downgrades to the smaller marker", async () => {
+	const homeDir = temp.makeTempDir("nplan-runtime-home-second-start-");
+	const cwd = temp.makeTempDir("nplan-runtime-cwd-second-start-");
+	process.env.HOME = homeDir;
+	const harness = createHarness(cwd);
+	nplan(harness.api);
+
+	await harness.emit("session_start", { type: "session_start", reason: "startup" });
+	await harness.runCommand("plan", "plan-a");
+	await harness.runCommand("plan");
+	harness.ui.confirmResponses.push(true);
+	await harness.runCommand("plan", "plan-b");
+
+	const planPath = join(homeDir, ".n", "pi", "plans", "plan-b.md");
+	assertPlanningState(harness, planPath);
+	assert.match(getLastMessageContent(harness), new RegExp(`^Plan Mode: Started ${planPath}`));
+	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), false);
 });

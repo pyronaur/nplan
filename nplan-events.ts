@@ -10,6 +10,19 @@ export type PlanEventDetails = {
 	body: string;
 };
 
+function getPlanEventTitle(kind: PlanEventKind, planFilePath: string): string {
+	if (kind === "started") {
+		return `Plan Mode: Started ${planFilePath}`;
+	}
+	if (kind === "resumed") {
+		return `Plan Mode: Resumed ${planFilePath}`;
+	}
+	if (kind === "stopped") {
+		return `Plan Mode: Stopped ${planFilePath}`;
+	}
+	return `Plan Mode: Abandoned ${planFilePath}`;
+}
+
 function isPlanEventDetails(value: unknown): value is PlanEventDetails {
 	if (!value || typeof value !== "object" || Array.isArray(value)) {
 		return false;
@@ -40,6 +53,9 @@ export function registerPlanEventRenderer(pi: ExtensionAPI): void {
 		const title = details?.title
 			?? (typeof message.content === "string" ? message.content : "Plan event");
 		let text = theme.fg(getHeaderColor(details?.kind ?? "started"), theme.bold(title));
+		if (!expanded && details?.body) {
+			text += `\n${theme.fg("muted", "Ctrl+O to expand")}`;
+		}
 		if (expanded && details?.body) {
 			text += `\n\n${details.body}`;
 		}
@@ -48,4 +64,22 @@ export function registerPlanEventRenderer(pi: ExtensionAPI): void {
 		box.addChild(new Text(text, 0, 0));
 		return box;
 	});
+}
+
+export function emitPlanEvent(
+	pi: ExtensionAPI,
+	input: { kind: PlanEventKind; planFilePath: string; body: string },
+): void {
+	const title = getPlanEventTitle(input.kind, input.planFilePath);
+	pi.sendMessage({
+		customType: "plan-event",
+		content: `${title}\n\n${input.body}`,
+		display: true,
+		details: {
+			kind: input.kind,
+			planFilePath: input.planFilePath,
+			title,
+			body: input.body,
+		},
+	}, { triggerTurn: false });
 }

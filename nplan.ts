@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadPlanConfig, resolvePlanMarker, resolvePlanTemplate } from "./nplan-config.ts";
 import { filterContextMessages, syncPlanningContextMessages } from "./nplan-context.ts";
-import { type PlanEventKind, registerPlanEventRenderer } from "./nplan-events.ts";
+import { emitPlanEvent, type PlanEventKind, registerPlanEventRenderer } from "./nplan-events.ts";
 import { ensureTextFile } from "./nplan-files.ts";
 import { isRecord } from "./nplan-guards.ts";
 import {
@@ -41,6 +41,8 @@ type PiLeaderOpenEvent = {
 	add: (key: string, label: string, run: () => void | Promise<void>) => void;
 };
 
+type PlanningEntryKind = Extract<PlanEventKind, "started" | "resumed">;
+
 function isPiLeaderOpenEvent(event: unknown): event is PiLeaderOpenEvent {
 	return isRecord(event) && typeof event.add === "function";
 }
@@ -58,37 +60,6 @@ function notifyReviewAvailability(ctx: ExtensionContext): void {
 	if (warning) {
 		ctx.ui.notify(warning, "warning");
 	}
-}
-
-function getPlanEventTitle(kind: PlanEventKind, planFilePath: string): string {
-	if (kind === "started") {
-		return `Plan Mode: Started ${planFilePath}`;
-	}
-	if (kind === "resumed") {
-		return `Plan Mode: Resumed ${planFilePath}`;
-	}
-	if (kind === "stopped") {
-		return `Plan Mode: Stopped ${planFilePath}`;
-	}
-	return `Plan Mode: Abandoned ${planFilePath}`;
-}
-
-function emitPlanEvent(
-	runtime: Runtime,
-	input: { kind: PlanEventKind; planFilePath: string; body: string },
-): void {
-	const title = getPlanEventTitle(input.kind, input.planFilePath);
-	runtime.pi.sendMessage({
-		customType: "plan-event",
-		content: `${title}\n\n${input.body}`,
-		display: true,
-		details: {
-			kind: input.kind,
-			planFilePath: input.planFilePath,
-			title,
-			body: input.body,
-		},
-	}, { triggerTurn: false });
 }
 
 function getPlanEventBody(
@@ -113,21 +84,33 @@ function ensureAttachedPlanFile(runtime: Runtime): void {
 		resolvePlanTemplate(runtime.planConfig) ?? "# Plan\n");
 }
 
-async function enterPlanning(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
+function getStartedEventBody(planFilePath: string): string {
+	return `Planning started for ${planFilePath}.`;
+}
+
+async function enterPlanning(
+	runtime: Runtime,
+	ctx: ExtensionContext,
+	entryKind: PlanningEntryKind,
+): Promise<void> {
 	runtime.phase = "planning";
 	ensureAttachedPlanFile(runtime);
 	captureSavedState(runtime, ctx);
 	await applyPhaseConfig(runtime, ctx, { restoreSavedState: false });
 	const planFilePath = getCurrentPlanPath(runtime);
 	const planningPrompt = renderPlanningPrompt(runtime, ctx);
-	const firstPrompt = !runtime.fullPromptShownInSession;
-	runtime.fullPromptShownInSession = true;
+	const showFullPrompt = entryKind === "started" && !runtime.fullPromptShownInSession;
+	if (showFullPrompt) {
+		runtime.fullPromptShownInSession = true;
+	}
 	persistState(runtime);
-	emitPlanEvent(runtime, {
-		kind: firstPrompt ? "started" : "resumed",
+	emitPlanEvent(runtime.pi, {
+		kind: entryKind,
 		planFilePath,
-		body: firstPrompt
-			? planningPrompt ?? `Planning started for ${planFilePath}.`
+		body: showFullPrompt
+			? planningPrompt ?? getStartedEventBody(planFilePath)
+			: entryKind === "started"
+			? getStartedEventBody(planFilePath)
 			: getPlanEventBody(runtime, "resumed", planFilePath),
 	});
 	notifyReviewAvailability(ctx);
@@ -156,7 +139,7 @@ async function exitToIdle(
 	}
 	persistState(runtime);
 	if (options.eventKind && planFilePath) {
-		emitPlanEvent(runtime, {
+		emitPlanEvent(runtime.pi, {
 			kind: options.eventKind,
 			planFilePath,
 			body: getPlanEventBody(runtime, options.eventKind, planFilePath),
@@ -202,6 +185,7 @@ async function attachRequestedPlan(
 	targetPath: string,
 ): Promise<void> {
 	const currentPlanPath = runtime.attachedPlanPath;
+	const targetExists = existsSync(targetPath);
 	if (currentPlanPath && currentPlanPath !== targetPath) {
 		const shouldAbandon = await confirmAbandonPlan(ctx, currentPlanPath);
 		if (!shouldAbandon) {
@@ -209,15 +193,14 @@ async function attachRequestedPlan(
 		}
 		runtime.attachedPlanPath = null;
 		persistState(runtime);
-		emitPlanEvent(runtime, {
+		emitPlanEvent(runtime.pi, {
 			kind: "abandoned",
 			planFilePath: currentPlanPath,
 			body: getPlanEventBody(runtime, "abandoned", currentPlanPath),
 		});
 	}
 
-	const shouldConfirmResume = existsSync(targetPath)
-		&& (!currentPlanPath || currentPlanPath !== targetPath);
+	const shouldConfirmResume = targetExists && (!currentPlanPath || currentPlanPath !== targetPath);
 	if (shouldConfirmResume) {
 		const shouldResume = await confirmResumePlan(ctx, targetPath);
 		if (!shouldResume) {
@@ -225,8 +208,9 @@ async function attachRequestedPlan(
 		}
 	}
 
+	const entryKind: PlanningEntryKind = targetExists ? "resumed" : "started";
 	runtime.attachedPlanPath = targetPath;
-	await enterPlanning(runtime, ctx);
+	await enterPlanning(runtime, ctx, entryKind);
 }
 
 async function preparePlanningSwitch(
@@ -272,7 +256,7 @@ async function handlePlanCommand(
 		if (runtime.phase === "planning") {
 			return;
 		}
-		await enterPlanning(runtime, ctx);
+		await enterPlanning(runtime, ctx, "resumed");
 		return;
 	}
 
@@ -303,7 +287,7 @@ async function handlePlanClearCommand(runtime: Runtime, ctx: ExtensionContext): 
 	const planFilePath = runtime.attachedPlanPath;
 	runtime.attachedPlanPath = null;
 	persistState(runtime);
-	emitPlanEvent(runtime, {
+	emitPlanEvent(runtime.pi, {
 		kind: "abandoned",
 		planFilePath,
 		body: getPlanEventBody(runtime, "abandoned", planFilePath),
@@ -442,7 +426,10 @@ async function handleSessionStart(runtime: Runtime, ctx: ExtensionContext): Prom
 		const wasPlanning = runtime.phase === "planning";
 		runtime.attachedPlanPath ??= getDefaultPlanPath();
 		if (!wasPlanning) {
-			await enterPlanning(runtime, ctx);
+			const entryKind: PlanningEntryKind = existsSync(runtime.attachedPlanPath)
+				? "resumed"
+				: "started";
+			await enterPlanning(runtime, ctx, entryKind);
 			return;
 		}
 		runtime.phase = "planning";
