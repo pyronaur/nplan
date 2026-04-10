@@ -10,7 +10,7 @@ import {
 	resolvePlanMarker,
 	resolvePlanTemplate,
 } from "./nplan-config.ts";
-import { filterContextMessages } from "./nplan-context.ts";
+import { filterContextMessages, syncPlanningContextMessages } from "./nplan-context.ts";
 import {
 	emitPlanEvent,
 	type PlanEventKind,
@@ -24,6 +24,7 @@ import {
 	createRuntime,
 	getCurrentPlanPath,
 	persistState,
+	renderPlanningPrompt,
 	restoreSavedState,
 	type Runtime,
 	syncSessionPhase,
@@ -358,7 +359,7 @@ function registerToolCallHandler(runtime: Runtime): void {
 }
 
 function registerContextHandler(runtime: Runtime): void {
-	runtime.pi.on("context", async (event) => {
+	runtime.pi.on("context", async (event, ctx) => {
 		if (runtime.phase !== "planning") {
 			if (runtime.phase !== "idle") {
 				return;
@@ -369,8 +370,15 @@ function registerContextHandler(runtime: Runtime): void {
 			};
 		}
 
+		const planningPrompt = renderPlanningPrompt(runtime, ctx);
+		if (!planningPrompt) {
+			return {
+				messages: filterContextMessages(event.messages, { includeLatestPlanEvent: false }),
+			};
+		}
+
 		return {
-			messages: filterContextMessages(event.messages, { includeLatestPlanEvent: true }),
+			messages: syncPlanningContextMessages(event.messages, planningPrompt),
 		};
 	});
 }

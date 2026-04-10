@@ -7,11 +7,7 @@ import {
 	type PlanEventKind,
 } from "./nplan-events.ts";
 import { renderPlanningPrompt, type Runtime } from "./nplan-phase.ts";
-import {
-	getPersistedPlanState,
-	type PersistedPlanState,
-	type SavedPhaseState,
-} from "./nplan-policy.ts";
+import { getPersistedPlanState, type PersistedPlanState } from "./nplan-policy.ts";
 
 type PlanTurnEvent = { kind: PlanEventKind; planFilePath: string };
 
@@ -29,21 +25,18 @@ function getPlanEventBody(
 }
 
 function getCurrentState(
-	runtime: Runtime,
 	entries: ReturnType<ExtensionContext["sessionManager"]["getBranch"]>,
 ): {
 	phase: "idle" | "planning";
 	attachedPlanPath: string | null;
 	planningKind: "started" | "resumed" | null;
-	savedState: SavedPhaseState | null;
 } {
 	const persisted = getPersistedPlanState(entries);
 	if (!persisted) {
 		return {
-			phase: runtime.phase,
-			attachedPlanPath: runtime.attachedPlanPath,
-			planningKind: runtime.planningKind,
-			savedState: runtime.savedState,
+			phase: "idle",
+			attachedPlanPath: null,
+			planningKind: null,
 		};
 	}
 
@@ -51,7 +44,6 @@ function getCurrentState(
 		phase: persisted.phase,
 		attachedPlanPath: persisted.attachedPlanPath ?? null,
 		planningKind: persisted.planningKind ?? (persisted.phase === "planning" ? "resumed" : null),
-		savedState: persisted.savedState ?? null,
 	};
 }
 
@@ -131,7 +123,7 @@ export function buildPlanTurnMessage(
 ): { message: ReturnType<typeof createPlanEventMessage> } | undefined {
 	const entries = ctx.sessionManager.getBranch();
 	const delivered = getLatestPlanDeliveryState(entries);
-	const current = getCurrentState(runtime, entries);
+	const current = getCurrentState(entries);
 	const events = getTurnEvents(delivered, current);
 	if (events.length === 0) {
 		return undefined;
