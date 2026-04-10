@@ -313,6 +313,11 @@ function registerSubmitTool(runtime: Runtime): void {
 		resolvePlanPath: (cwd) => resolve(cwd, getCurrentPlanPath(runtime)),
 		onPlanApproved: async (ctx, planFilePath) => {
 			await exitToIdle(runtime, ctx);
+			emitPlanEvent(runtime.pi, {
+				kind: "stopped",
+				planFilePath,
+				body: getIdlePlanEventBody(runtime, "stopped", planFilePath),
+			});
 			if (!ctx.hasUI) {
 				return;
 			}
@@ -377,25 +382,7 @@ function registerBeforeAgentStartHandler(runtime: Runtime): void {
 }
 
 function registerToolResultHandler(runtime: Runtime): void {
-	runtime.pi.on("tool_result", async (event) => {
-		const patch = patchPlanSubmitResult(event);
-		if (event.toolName !== "plan_submit") {
-			return patch;
-		}
-		if (!isRecord(event.details) || event.details.approved !== true) {
-			return patch;
-		}
-		if (typeof event.details.planFilePath !== "string") {
-			return patch;
-		}
-
-		emitPlanEvent(runtime.pi, {
-			kind: "stopped",
-			planFilePath: event.details.planFilePath,
-			body: getIdlePlanEventBody(runtime, "stopped", event.details.planFilePath),
-		});
-		return patch;
-	});
+	runtime.pi.on("tool_result", async (event) => patchPlanSubmitResult(event));
 }
 
 async function handleSessionStart(runtime: Runtime, ctx: ExtensionContext): Promise<void> {

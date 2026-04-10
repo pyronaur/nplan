@@ -463,6 +463,10 @@ void test("plan_submit approval exits planning and emits the stop marker in the 
 		planningKind: null,
 		savedState: null,
 	});
+
+	await emitBeforeAgentStart(harness, "Normal prompt after approval");
+
+	assert.equal(harness.sentMessages.length, 2);
 });
 
 void test("plan-clear outside planning emits an abandoned marker on the next real turn", async () => {
