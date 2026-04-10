@@ -6,6 +6,7 @@ import {
 } from "./nplan-config.ts";
 import {
 	createPlanEventTracker,
+	type PlanDeliveryState,
 	type PlanEventKind,
 	type PlanEventTracker,
 } from "./nplan-events.ts";
@@ -27,7 +28,9 @@ export type Runtime = {
 	lastPromptWarning: string | null;
 	fullPromptShownInSession: boolean;
 	planEvents: PlanEventTracker;
-	pendingPlanEvent: Extract<PlanEventKind, "started" | "resumed"> | null;
+	lastDeliveredPlanState: PlanDeliveryState;
+	pendingPlanEvent: { kind: PlanEventKind; planFilePath: string } | null;
+	undeliveredStartedPlanPath: string | null;
 	showPlanEventThisTurn: boolean;
 };
 
@@ -83,7 +86,9 @@ export function createRuntime(pi: ExtensionAPI): Runtime {
 		lastPromptWarning: null,
 		fullPromptShownInSession: false,
 		planEvents: createPlanEventTracker(),
+		lastDeliveredPlanState: { phase: "idle", attachedPlanPath: null },
 		pendingPlanEvent: null,
+		undeliveredStartedPlanPath: null,
 		showPlanEventThisTurn: false,
 	};
 }

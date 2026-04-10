@@ -46,7 +46,7 @@ Plan review is handled through the `plannotator` CLI.
 - CLI denial returns revision feedback and keeps the extension in planning mode
 - when review is unavailable, `nplan` preserves the current auto-approve fallback behavior
 
-Plan-mode toggles update the live footer/widget UI and persisted plan state without appending visible transcript messages. The next real prompt sent while planning appends one visible `Plan Mode: Started ...` or `Plan Mode: Resumed ...` transcript row for that turn. Later planning turns stay silent until plan mode changes again. The `plan_submit` tool row remains the only durable approval or rejection transcript record.
+Plan-mode toggles update the live footer/widget UI and persisted plan state without appending visible transcript messages on their own. Real submitted turns render the plan context the agent actually receives: planning turns append one visible collapsed `Plan Mode: Started ...` or `Plan Mode: Resumed ...` row with the planning prompt behind `Ctrl+O`, and the first idle turn after stopping or detaching a delivered plan appends the corresponding `Stopped` or `Abandoned` row. The `plan_submit` tool row remains the only durable approval or rejection transcript record.
 
 ## Config
 

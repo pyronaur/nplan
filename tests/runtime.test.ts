@@ -122,7 +122,7 @@ void test("bare /plan resumes the attached plan without prompting for a slug", a
 	await emitBeforeAgentStart(harness, "Continue");
 
 	assert.match(getLastMessageContent(harness), new RegExp(`^Plan Mode: Resumed ${planPath}`));
-	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), false);
+	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), true);
 });
 
 void test("/plan asks to resume a foreign existing plan and cancels when declined", async () => {
@@ -166,8 +166,8 @@ void test("accepted foreign existing-plan resume stays silent until the next sub
 	await emitBeforeAgentStart(harness, "Continue");
 
 	assert.match(getLastMessageContent(harness), new RegExp(`^Plan Mode: Resumed ${planPath}`));
-	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), false);
-	assertPlanningState(harness, planPath, { fullPromptShownInSession: false });
+	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), true);
+	assertPlanningState(harness, planPath);
 });
 
 void test("/plan-clear exits planning and detaches the current plan", async () => {
@@ -299,7 +299,7 @@ void test("repeated plan toggles do not append transcript messages", async () =>
 	});
 });
 
-void test("later planning turns do not append another plan message without a new toggle", async () => {
+void test("later planning turns append one resumed plan message per real prompt", async () => {
 	const homeDir = temp.makeTempDir("nplan-runtime-home-single-send-");
 	const cwd = temp.makeTempDir("nplan-runtime-cwd-single-send-");
 	process.env.HOME = homeDir;
@@ -312,5 +312,66 @@ void test("later planning turns do not append another plan message without a new
 	await harness.emit("agent_end", { type: "agent_end", messages: [] });
 	await emitBeforeAgentStart(harness, "Second planning prompt");
 
+	assert.equal(harness.sentMessages.length, 2);
+	assert.match(getLastMessageContent(harness), /^Plan Mode: Resumed /);
+	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), true);
+});
+
+void test("stopping planning stays silent on toggle and emits a stopped message on the next real turn", async () => {
+	const homeDir = temp.makeTempDir("nplan-runtime-home-stop-turn-");
+	const cwd = temp.makeTempDir("nplan-runtime-cwd-stop-turn-");
+	process.env.HOME = homeDir;
+	const harness = createHarness(cwd);
+	nplan(harness.api);
+
+	await harness.emit("session_start", { type: "session_start", reason: "startup" });
+	await harness.runCommand("plan", "stop-turn");
+	await emitBeforeAgentStart(harness, "First planning prompt");
+	await harness.emit("agent_end", { type: "agent_end", messages: [] });
+
 	assert.equal(harness.sentMessages.length, 1);
+
+	await harness.runCommand("plan");
+
+	assert.equal(harness.sentMessages.length, 1);
+
+	await emitBeforeAgentStart(harness, "Normal prompt after stopping planning");
+
+	assert.equal(harness.sentMessages.length, 2);
+	assert.match(getLastMessageContent(harness), /^Plan Mode: Stopped /);
+	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), false);
+	assert.deepEqual(getLastPlanState(harness), {
+		phase: "idle",
+		attachedPlanPath: join(homeDir, ".n", "pi", "plans", "stop-turn.md"),
+		savedState: null,
+		fullPromptShownInSession: true,
+	});
+});
+
+void test("repeated off-on toggles stay silent until the next real turn and then emit one planning message", async () => {
+	const homeDir = temp.makeTempDir("nplan-runtime-home-toggle-net-");
+	const cwd = temp.makeTempDir("nplan-runtime-cwd-toggle-net-");
+	process.env.HOME = homeDir;
+	const harness = createHarness(cwd);
+	nplan(harness.api);
+
+	await harness.emit("session_start", { type: "session_start", reason: "startup" });
+	await harness.runCommand("plan", "net-state");
+	await emitBeforeAgentStart(harness, "First planning prompt");
+	await harness.emit("agent_end", { type: "agent_end", messages: [] });
+
+	assert.equal(harness.sentMessages.length, 1);
+
+	await harness.runCommand("plan");
+	await harness.runCommand("plan");
+	await harness.runCommand("plan");
+	await harness.runCommand("plan");
+
+	assert.equal(harness.sentMessages.length, 1);
+
+	await emitBeforeAgentStart(harness, "Second planning prompt after net-zero toggles");
+
+	assert.equal(harness.sentMessages.length, 2);
+	assert.match(getLastMessageContent(harness), /^Plan Mode: Resumed /);
+	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), true);
 });

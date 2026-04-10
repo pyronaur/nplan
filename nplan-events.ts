@@ -2,6 +2,10 @@ import type { ExtensionAPI, SessionEntry } from "@mariozechner/pi-coding-agent";
 import { Box, Text } from "@mariozechner/pi-tui";
 
 export type PlanEventKind = "started" | "resumed" | "stopped" | "abandoned";
+export type PlanDeliveryState = {
+	phase: "idle" | "planning";
+	attachedPlanPath: string | null;
+};
 type TogglePlanEventKind = Extract<PlanEventKind, "resumed" | "stopped">;
 
 export type PlanEventDetails = {
@@ -102,6 +106,18 @@ function isPlanEventMessageEntry(entry: SessionEntry): entry is SessionEntry & {
 	return entry.type === "custom_message" && entry.customType === "plan-event";
 }
 
+function getPlanDeliveryState(details: PlanEventDetails): PlanDeliveryState {
+	if (details.kind === "started" || details.kind === "resumed") {
+		return { phase: "planning", attachedPlanPath: details.planFilePath };
+	}
+
+	if (details.kind === "stopped") {
+		return { phase: "idle", attachedPlanPath: details.planFilePath };
+	}
+
+	return { phase: "idle", attachedPlanPath: null };
+}
+
 export function createPlanEventTracker(): PlanEventTracker {
 	return {
 		nextSeq: 1,
@@ -124,6 +140,24 @@ export function restorePlanEventTracker(
 		}
 		applyPlanEventToTracker(tracker, details);
 	}
+}
+
+export function getLatestPlanDeliveryState(
+	entries: SessionEntry[],
+): PlanDeliveryState {
+	for (let i = entries.length - 1; i >= 0; i -= 1) {
+		const entry = entries[i];
+		if (!isPlanEventMessageEntry(entry)) {
+			continue;
+		}
+		const details = isPlanEventDetails(entry.details) ? entry.details : undefined;
+		if (!details) {
+			continue;
+		}
+		return getPlanDeliveryState(details);
+	}
+
+	return { phase: "idle", attachedPlanPath: null };
 }
 
 export function registerPlanEventRenderer(
