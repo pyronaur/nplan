@@ -6,6 +6,7 @@ import {
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadPlanConfig, resolvePlanMarker, resolvePlanTemplate } from "./nplan-config.ts";
+import { filterContextMessages, syncPlanningContextMessages } from "./nplan-context.ts";
 import { type PlanEventKind, registerPlanEventRenderer } from "./nplan-events.ts";
 import { ensureTextFile } from "./nplan-files.ts";
 import { isRecord } from "./nplan-guards.ts";
@@ -27,8 +28,6 @@ import {
 	getPlanningToolBlockResult,
 	getSessionEntries,
 	resolveGlobalPlanPath,
-	shouldKeepContextMessage,
-	syncPlanningContextMessages,
 } from "./nplan-policy.ts";
 import { patchPlanSubmitResult } from "./nplan-review-ui.ts";
 import {
@@ -38,9 +37,9 @@ import {
 } from "./nplan-review.ts";
 import { getPlanStatusLines } from "./nplan-status.ts";
 
-type PiLeaderAdd = (key: string, label: string, run: () => void | Promise<void>) => void;
-
-type PiLeaderOpenEvent = { add: PiLeaderAdd };
+type PiLeaderOpenEvent = {
+	add: (key: string, label: string, run: () => void | Promise<void>) => void;
+};
 
 function isPiLeaderOpenEvent(event: unknown): event is PiLeaderOpenEvent {
 	return isRecord(event) && typeof event.add === "function";
@@ -52,10 +51,6 @@ function registerFlags(pi: ExtensionAPI): void {
 		type: "boolean",
 		default: false,
 	});
-}
-
-function resolvePlanPath(runtime: Runtime, cwd: string): string {
-	return resolve(cwd, getCurrentPlanPath(runtime));
 }
 
 function notifyReviewAvailability(ctx: ExtensionContext): void {
@@ -234,6 +229,34 @@ async function attachRequestedPlan(
 	await enterPlanning(runtime, ctx);
 }
 
+async function preparePlanningSwitch(
+	runtime: Runtime,
+	ctx: ExtensionContext,
+	targetPath: string,
+): Promise<boolean> {
+	if (runtime.phase !== "planning") {
+		return true;
+	}
+	if (runtime.attachedPlanPath === targetPath) {
+		return false;
+	}
+
+	const attachedPlanPath = runtime.attachedPlanPath;
+	if (!attachedPlanPath) {
+		await exitPlanningSilently(runtime, ctx);
+		persistState(runtime);
+		return true;
+	}
+
+	const shouldAbandon = await confirmAbandonPlan(ctx, attachedPlanPath);
+	if (!shouldAbandon) {
+		return false;
+	}
+
+	await exitToIdle(runtime, ctx, { detach: true, eventKind: "abandoned" });
+	return true;
+}
+
 async function handlePlanCommand(
 	runtime: Runtime,
 	args: string,
@@ -244,11 +267,11 @@ async function handlePlanCommand(
 		await exitToIdle(runtime, ctx, { eventKind: "stopped" });
 		return;
 	}
-	if (runtime.phase === "planning") {
-		await exitPlanningSilently(runtime, ctx);
-	}
 
 	if (!targetArg && runtime.attachedPlanPath) {
+		if (runtime.phase === "planning") {
+			return;
+		}
 		await enterPlanning(runtime, ctx);
 		return;
 	}
@@ -258,7 +281,13 @@ async function handlePlanCommand(
 		return;
 	}
 
-	await attachRequestedPlan(runtime, ctx, resolveGlobalPlanPath(targetInput));
+	const targetPath = resolveGlobalPlanPath(targetInput);
+	const shouldContinue = await preparePlanningSwitch(runtime, ctx, targetPath);
+	if (!shouldContinue) {
+		return;
+	}
+
+	await attachRequestedPlan(runtime, ctx, targetPath);
 }
 
 async function handlePlanClearCommand(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
@@ -322,7 +351,7 @@ function registerSubmitTool(runtime: Runtime): void {
 	runtime.pi.registerTool(createPlanSubmitTool({
 		isPlanning: () => runtime.phase === "planning",
 		getPlanFilePath: () => getCurrentPlanPath(runtime),
-		resolvePlanPath: (cwd) => resolvePlanPath(runtime, cwd),
+		resolvePlanPath: (cwd) => resolve(cwd, getCurrentPlanPath(runtime)),
 		onPlanApproved: async (ctx, planFilePath) => {
 			await exitToIdle(runtime, ctx, { eventKind: null });
 			if (!ctx.hasUI) {
@@ -341,7 +370,7 @@ function registerToolCallHandler(runtime: Runtime): void {
 		}
 
 		const planFilePath = getCurrentPlanPath(runtime);
-		const allowedPath = resolvePlanPath(runtime, ctx.cwd);
+		const allowedPath = resolve(ctx.cwd, planFilePath);
 		if (isToolCallEventType("write", event) || isToolCallEventType("edit", event)) {
 			const targetPath = resolve(ctx.cwd, event.input.path);
 			if (targetPath !== allowedPath) {
@@ -371,12 +400,16 @@ function registerContextHandler(runtime: Runtime): void {
 				return;
 			}
 
-			return { messages: event.messages.filter(shouldKeepContextMessage) };
+			return {
+				messages: filterContextMessages(event.messages, { includeLatestPlanEvent: true }),
+			};
 		}
 
 		const planningPrompt = renderPlanningPrompt(runtime, ctx);
 		if (!planningPrompt) {
-			return { messages: event.messages.filter(shouldKeepContextMessage) };
+			return {
+				messages: filterContextMessages(event.messages, { includeLatestPlanEvent: false }),
+			};
 		}
 
 		return {
@@ -406,8 +439,13 @@ async function handleSessionStart(runtime: Runtime, ctx: ExtensionContext): Prom
 		runtime.fullPromptShownInSession = persistedState.fullPromptShownInSession ?? false;
 	}
 	if (runtime.pi.getFlag("plan") === true) {
-		runtime.phase = "planning";
+		const wasPlanning = runtime.phase === "planning";
 		runtime.attachedPlanPath ??= getDefaultPlanPath();
+		if (!wasPlanning) {
+			await enterPlanning(runtime, ctx);
+			return;
+		}
+		runtime.phase = "planning";
 	}
 	if (runtime.phase === "planning") {
 		notifyReviewAvailability(ctx);

@@ -15,7 +15,7 @@ Keep the current local `nplan` interaction surface focused and explicit:
 - restricted planning tools with `plan_submit`
 - editor-prefilled implementation handoff after approval
 
-`/plan <slug>` attaches or resumes `~/.n/pi/plans/<slug>.md`. Bare `/plan` or `pi-leader` follow-up `p` resumes the currently attached plan when one exists, otherwise it prompts for a slug. `/plan-clear` detaches the current plan and exits planning when necessary.
+`/plan <slug>` attaches or resumes `~/.n/pi/plans/<slug>.md`. Bare `/plan` or `pi-leader` follow-up `p` resumes the currently attached plan when one exists, otherwise it prompts for a slug. `/plan-clear` detaches the current plan and exits planning when necessary. `--plan` enters the same planning-start flow during session startup, including scaffold bootstrapping and the durable start marker.
 
 ## Architecture
 

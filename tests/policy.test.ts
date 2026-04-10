@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { filterContextMessages, syncPlanningContextMessages } from "../nplan-context.ts";
 import {
 	getDefaultPlanPath,
 	getPersistedPlanState,
 	getPlanningToolBlockResult,
 	resolveGlobalPlanPath,
-	syncPlanningContextMessages,
 } from "../nplan-policy.ts";
 import { getPhaseNotification } from "../nplan-status.ts";
 import { formatPhaseWidgetLines } from "../nplan-widget.ts";
@@ -193,6 +193,53 @@ void test("syncPlanningContextMessages replaces stale planning prompts without d
 	assert.equal(messages.length, 2);
 	assert.deepEqual(messages[0], createUserMessage("hello"));
 	assertPlanContextMessage(messages[1], "[PLAN - PLANNING PHASE]\nCurrent plan prompt");
+});
+
+void test("syncPlanningContextMessages removes historical plan events before appending the current prompt", () => {
+	const messages = syncPlanningContextMessages([
+		createUserMessage("hello"),
+		{
+			role: "custom",
+			customType: "plan-event",
+			content: "Plan Mode: Started /abs/path/plan.md\n\n[PLAN - PLANNING PHASE]\nOld plan prompt",
+			display: true,
+			timestamp: 2,
+		},
+	], "[PLAN - PLANNING PHASE]\nCurrent plan prompt");
+
+	assert.equal(messages.length, 2);
+	assert.deepEqual(messages[0], createUserMessage("hello"));
+	assertPlanContextMessage(messages[1], "[PLAN - PLANNING PHASE]\nCurrent plan prompt");
+});
+
+void test("filterContextMessages keeps only the latest plan event outside planning", () => {
+	const messages = filterContextMessages([
+		createUserMessage("hello"),
+		{
+			role: "custom",
+			customType: "plan-event",
+			content: "Plan Mode: Started /abs/path/plan-a.md",
+			display: true,
+			timestamp: 2,
+		},
+		{
+			role: "custom",
+			customType: "plan-event",
+			content: "Plan Mode: Stopped /abs/path/plan-b.md",
+			display: true,
+			timestamp: 3,
+		},
+	], { includeLatestPlanEvent: true });
+
+	assert.equal(messages.length, 2);
+	assert.deepEqual(messages[0], createUserMessage("hello"));
+	assert.deepEqual(messages[1], {
+		role: "custom",
+		customType: "plan-event",
+		content: "Plan Mode: Stopped /abs/path/plan-b.md",
+		display: true,
+		timestamp: 3,
+	});
 });
 
 void test("formatPhaseWidgetLines right-aligns the plan path when there is enough width", () => {

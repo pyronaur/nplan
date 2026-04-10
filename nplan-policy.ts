@@ -1,5 +1,5 @@
 import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
-import type { ContextEvent, ExtensionContext, SessionEntry } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext, SessionEntry } from "@mariozechner/pi-coding-agent";
 import { homedir } from "node:os";
 import { basename, extname, isAbsolute, join, normalize, parse, resolve, sep } from "node:path";
 import { expandHome } from "./nplan-files.ts";
@@ -36,20 +36,6 @@ type ApplyPatchAction = {
 	kind: "update" | "add" | "delete";
 	path: string;
 };
-
-type PlanContextMessage = {
-	role: "custom";
-	customType: "plan-context";
-	content: string;
-	display: false;
-	timestamp: number;
-};
-
-declare module "@mariozechner/pi-agent-core" {
-	interface CustomAgentMessages {
-		planContext: PlanContextMessage;
-	}
-}
 
 const STATUS_KEY = "plan";
 const WIDGET_KEY = "plan-progress";
@@ -232,21 +218,6 @@ function normalizePersistedPlanState(value: unknown): PersistedPlanState | undef
 	};
 }
 
-function hasPlanBanner(content: unknown): boolean {
-	if (typeof content === "string") {
-		return content.includes("[PLAN -");
-	}
-	if (!Array.isArray(content)) {
-		return false;
-	}
-	return content.some((item) => {
-		if (!isRecord(item) || item.type !== "text") {
-			return false;
-		}
-		return typeof item.text === "string" && item.text.includes("[PLAN -");
-	});
-}
-
 function slugifyPlanName(input: string): string {
 	const base = parse(basename(input)).name;
 	const slug = base.normalize("NFKD").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(
@@ -378,16 +349,6 @@ function getApplyPatchBlockResult(check: PlanningToolCheck): PlanningBlockResult
 	return undefined;
 }
 
-function createPlanContextMessage(planningPrompt: string): PlanContextMessage {
-	return {
-		role: "custom",
-		customType: "plan-context",
-		content: planningPrompt,
-		display: false,
-		timestamp: Date.now(),
-	};
-}
-
 export function getPlanStorageRoot(): string {
 	return join(homedir(), ".n", "pi", "plans");
 }
@@ -472,28 +433,4 @@ export function getPersistedPlanState(entries: SessionEntry[]): PersistedPlanSta
 	}
 
 	return undefined;
-}
-
-export function shouldKeepContextMessage(message: unknown): boolean {
-	if (!isRecord(message)) {
-		return true;
-	}
-	if (message.customType === "plan-context") {
-		return false;
-	}
-	if (message.role !== "user") {
-		return true;
-	}
-
-	return !hasPlanBanner(message.content);
-}
-
-export function syncPlanningContextMessages(
-	messages: ContextEvent["messages"],
-	planningPrompt: string,
-): ContextEvent["messages"] {
-	return [
-		...messages.filter(shouldKeepContextMessage),
-		createPlanContextMessage(planningPrompt),
-	];
 }

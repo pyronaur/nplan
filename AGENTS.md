@@ -27,9 +27,9 @@ Do not reintroduce vendored upstream extension code, git submodules, or a fork-s
 
 ## Interaction Surface To Preserve
 
-- Commands: `plan`, `plan-status`, `plan-file`
+- Commands: `plan`, `plan-status`, `plan-clear`
 - Leader follow-up: `p` toggles plan mode when `pi-leader` is installed
-- Flags: `plan`, `plan-file`
+- Flags: `plan`
 - Plan storage root: `~/.n/pi/plans/`
 - Planning restrictions:
 	- `write` only to the active plan file
