@@ -42,12 +42,12 @@ Plan review is handled through the `plannotator` CLI.
 
 - while planning, the agent writes to the active global plan file
 - `plan_submit` reads that file and submits the plan body to `plannotator` on stdin
-- the `plan_submit` tool row itself is the single durable approval/rejection record; approvals render as `Plan Mode: Approved <absolute-plan-path>` and denials render as `Plan Mode: Rejected <absolute-plan-path>` without a duplicate follow-up message
+- the `plan_submit` tool row itself is the single durable approval/rejection record; approvals render as `Plan Approved <absolute-plan-path>` and denials render as `Plan Rejected <absolute-plan-path>` without a duplicate follow-up message
 - CLI approval exits plan mode, restores normal access, and prefills the input editor with `Implement the plan @<absolute-plan-path>`
 - CLI denial returns revision feedback and keeps the extension in planning mode
 - when review is unavailable, `nplan` preserves the current auto-approve fallback behavior
 
-Plan-mode toggles update the live footer/widget UI and persisted plan state without appending visible transcript messages on their own. Every real submitted planning turn renders a visible collapsed `Plan Mode: Started ...` or `Plan Mode: Resumed ...` row, and expanding that row with `Ctrl+O` reveals the full planning prompt for that turn. Silent stops and detaches surface on the first later real submitted turn whose history reflects the change, plan switches can emit `Abandoned <old>` followed by `Started` or `Resumed <new>` on that same turn, and approved `plan_submit` turns append the corresponding `Stopped` marker in that same submitted turn. The `plan_submit` tool row remains the only durable approval or rejection transcript record.
+Plan-mode toggles update the live footer/widget UI and persisted plan state without appending visible transcript messages on their own. Every real submitted planning turn renders a visible collapsed `Plan Started ...` or `Plan Resumed ...` row, and expanding that row with `Ctrl+O` reveals the full planning prompt for that turn. Manual exits surface as `Planning Ended <path>` on the first later ordinary turn whose history reflects the exit, detaches and plan switches surface as `Plan Abandoned <old>` followed by `Plan Started <new>` or `Plan Resumed <new>` on that same turn, and approved `plan_submit` turns do not append a second completion row. The `plan_submit` tool row remains the only durable approval or rejection transcript record.
 
 ## Config
 

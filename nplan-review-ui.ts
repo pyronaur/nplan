@@ -26,10 +26,10 @@ function isDecisionError(text: string): boolean {
 
 function getPlanSubmitHeader(details: PlanSubmitDetails): string {
 	if (details.approved) {
-		return `Plan Mode: Approved ${details.planFilePath}`;
+		return `Plan Approved ${details.planFilePath}`;
 	}
 
-	return `Plan Mode: Rejected ${details.planFilePath}`;
+	return `Plan Rejected ${details.planFilePath}`;
 }
 
 function getResultBodyText(input: {

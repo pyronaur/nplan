@@ -37,7 +37,7 @@ export function assertPlanningMessage(input: {
 	const content = getMessageContentAt(input.harness, input.index ?? -1);
 	assert.match(
 		content,
-		new RegExp(`^Plan Mode: ${input.kind === "started" ? "Started" : "Resumed"} ${input.planPath}`),
+		new RegExp(`^Plan ${input.kind === "started" ? "Started" : "Resumed"} ${input.planPath}`),
 	);
 	assert.equal(content.includes("[PLAN - PLANNING PHASE]"), true);
 }

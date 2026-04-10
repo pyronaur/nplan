@@ -170,7 +170,7 @@ void test("getPlanSubmitResultText renders approved and rejected states without 
 			content: [{ type: "text", text: "Plan approved." }],
 			expanded: false,
 		}),
-		"Plan Mode: Approved /abs/path/plan.md",
+		"Plan Approved /abs/path/plan.md",
 	);
 	assert.equal(
 		getPlanSubmitResultText({
@@ -182,7 +182,7 @@ void test("getPlanSubmitResultText renders approved and rejected states without 
 			content: [{ type: "text", text: "Plan rejected." }],
 			expanded: true,
 		}),
-		"Plan Mode: Rejected /abs/path/plan.md\n\nAdd rollback guidance.",
+		"Plan Rejected /abs/path/plan.md\n\nAdd rollback guidance.",
 	);
 });
 
@@ -239,7 +239,7 @@ void test("rejected plan_submit review record uses failed semantics and the exac
 	);
 	const rendered = renderComponentText(result);
 
-	assert.match(rendered, /Plan Mode: Rejected \/abs\/path\/plan\.md/);
+	assert.match(rendered, /Plan Rejected \/abs\/path\/plan\.md/);
 	assert.match(rendered, /Revise the rollout section\./);
 	assert.match(rendered, /Add rollback guidance\./);
 	assert.deepEqual(
@@ -267,10 +267,10 @@ void test("collapsed plan-event renderer shows the Ctrl+O expand affordance", ()
 		details: {
 			kind: "started",
 			planFilePath: "/abs/path/plan.md",
-			title: "Plan Mode: Started /abs/path/plan.md",
+			title: "Plan Started /abs/path/plan.md",
 			body: "[PLAN - PLANNING PHASE]",
 		},
-		content: "Plan Mode: Started /abs/path/plan.md\n\n[PLAN - PLANNING PHASE]",
+		content: "Plan Started /abs/path/plan.md\n\n[PLAN - PLANNING PHASE]",
 	};
 	const collapsed = renderComponentText(renderer(message, { expanded: false }, createTheme()));
 	const expanded = renderComponentText(renderer(message, { expanded: true }, createTheme()));

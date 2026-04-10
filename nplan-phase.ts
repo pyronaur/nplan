@@ -18,6 +18,7 @@ export type Runtime = {
 	phase: Phase;
 	attachedPlanPath: string | null;
 	planningKind: "started" | "resumed" | null;
+	idleKind: "manual" | "approved" | null;
 	skipNextBeforeAgentPlanMessage: boolean;
 	savedState: SavedPhaseState | null;
 	planConfig: PlanConfig;
@@ -72,6 +73,7 @@ export function createRuntime(pi: ExtensionAPI): Runtime {
 		phase: "idle",
 		attachedPlanPath: null,
 		planningKind: null,
+		idleKind: null,
 		skipNextBeforeAgentPlanMessage: false,
 		savedState: null,
 		planConfig: {},
@@ -126,6 +128,7 @@ export function persistState(runtime: Runtime): void {
 		phase: runtime.phase,
 		attachedPlanPath: runtime.attachedPlanPath,
 		planningKind: runtime.planningKind,
+		idleKind: runtime.idleKind,
 		savedState: runtime.savedState,
 	});
 }

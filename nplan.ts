@@ -7,15 +7,10 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import {
 	loadPlanConfig,
-	resolvePlanMarker,
 	resolvePlanTemplate,
 } from "./nplan-config.ts";
-import { filterContextMessages, syncPlanningContextMessages } from "./nplan-context.ts";
-import {
-	emitPlanEvent,
-	type PlanEventKind,
-	registerPlanEventRenderer,
-} from "./nplan-events.ts";
+import { filterContextMessages } from "./nplan-context.ts";
+import { type PlanEventKind, registerPlanEventRenderer } from "./nplan-events.ts";
 import { ensureTextFile } from "./nplan-files.ts";
 import { isRecord } from "./nplan-guards.ts";
 import {
@@ -24,7 +19,6 @@ import {
 	createRuntime,
 	getCurrentPlanPath,
 	persistState,
-	renderPlanningPrompt,
 	restoreSavedState,
 	type Runtime,
 	syncSessionPhase,
@@ -76,19 +70,6 @@ function ensureAttachedPlanFile(runtime: Runtime): void {
 		resolvePlanTemplate(runtime.planConfig) ?? "# Plan\n");
 }
 
-function getIdlePlanEventBody(
-	runtime: Runtime,
-	kind: Extract<PlanEventKind, "stopped" | "abandoned">,
-	planFilePath: string,
-): string {
-	const marker = resolvePlanMarker(runtime.planConfig, kind);
-	if (!marker) {
-		return kind === "abandoned" ? `Planning detached from ${planFilePath}.` : "";
-	}
-
-	return marker.replaceAll("${planFilePath}", planFilePath);
-}
-
 async function enterPlanning(
 	runtime: Runtime,
 	ctx: ExtensionContext,
@@ -96,6 +77,7 @@ async function enterPlanning(
 ): Promise<void> {
 	runtime.phase = "planning";
 	runtime.planningKind = entryKind;
+	runtime.idleKind = null;
 	ensureAttachedPlanFile(runtime);
 	captureSavedState(runtime, ctx);
 	await applyPhaseConfig(runtime, ctx, { restoreSavedState: false });
@@ -103,13 +85,18 @@ async function enterPlanning(
 	notifyReviewAvailability(ctx);
 }
 
-async function exitPlanningSilently(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
+async function exitPlanningSilently(
+	runtime: Runtime,
+	ctx: ExtensionContext,
+	idleKind: Runtime["idleKind"],
+): Promise<void> {
 	if (runtime.phase !== "planning") {
 		return;
 	}
 
 	runtime.phase = "idle";
 	runtime.planningKind = null;
+	runtime.idleKind = idleKind;
 	await restoreSavedState(runtime, ctx);
 	runtime.savedState = null;
 	updateUi(runtime, ctx);
@@ -118,11 +105,12 @@ async function exitPlanningSilently(runtime: Runtime, ctx: ExtensionContext): Pr
 async function exitToIdle(
 	runtime: Runtime,
 	ctx: ExtensionContext,
-	options: { detach?: boolean } = {},
+	options: { detach?: boolean; idleKind?: Runtime["idleKind"] } = {},
 ): Promise<void> {
-	await exitPlanningSilently(runtime, ctx);
+	await exitPlanningSilently(runtime, ctx, options.idleKind ?? "manual");
 	if (options.detach) {
 		runtime.attachedPlanPath = null;
+		runtime.idleKind = null;
 		persistState(runtime);
 		return;
 	}
@@ -175,6 +163,7 @@ async function attachRequestedPlan(
 			return;
 		}
 		runtime.attachedPlanPath = null;
+		runtime.idleKind = null;
 		persistState(runtime);
 	}
 
@@ -209,7 +198,7 @@ async function preparePlanningSwitch(
 
 	const attachedPlanPath = runtime.attachedPlanPath;
 	if (!attachedPlanPath) {
-		await exitPlanningSilently(runtime, ctx);
+		await exitPlanningSilently(runtime, ctx, null);
 		persistState(runtime);
 		return true;
 	}
@@ -268,6 +257,7 @@ async function handlePlanClearCommand(runtime: Runtime, ctx: ExtensionContext): 
 
 	runtime.attachedPlanPath = null;
 	runtime.planningKind = null;
+	runtime.idleKind = null;
 	persistState(runtime);
 }
 
@@ -314,12 +304,7 @@ function registerSubmitTool(runtime: Runtime): void {
 		getPlanFilePath: () => getCurrentPlanPath(runtime),
 		resolvePlanPath: (cwd) => resolve(cwd, getCurrentPlanPath(runtime)),
 		onPlanApproved: async (ctx, planFilePath) => {
-			await exitToIdle(runtime, ctx);
-			emitPlanEvent(runtime.pi, {
-				kind: "stopped",
-				planFilePath,
-				body: getIdlePlanEventBody(runtime, "stopped", planFilePath),
-			});
+			await exitToIdle(runtime, ctx, { idleKind: "approved" });
 			if (!ctx.hasUI) {
 				return;
 			}
@@ -360,26 +345,13 @@ function registerToolCallHandler(runtime: Runtime): void {
 }
 
 function registerContextHandler(runtime: Runtime): void {
-	runtime.pi.on("context", async (event, ctx) => {
-		if (runtime.phase !== "planning") {
-			if (runtime.phase !== "idle") {
-				return;
-			}
-
-			return {
-				messages: filterContextMessages(event.messages, { includeLatestPlanEvent: true }),
-			};
-		}
-
-		const planningPrompt = renderPlanningPrompt(runtime, ctx);
-		if (!planningPrompt) {
-			return {
-				messages: filterContextMessages(event.messages, { includeLatestPlanEvent: false }),
-			};
+	runtime.pi.on("context", async (event) => {
+		if (runtime.phase !== "planning" && runtime.phase !== "idle") {
+			return;
 		}
 
 		return {
-			messages: syncPlanningContextMessages(event.messages, planningPrompt),
+			messages: filterContextMessages(event.messages, { includeLatestPlanEvent: true }),
 		};
 	});
 }
@@ -414,6 +386,7 @@ async function handleSessionStart(runtime: Runtime, ctx: ExtensionContext): Prom
 			: null;
 		runtime.planningKind = persistedState.planningKind
 			?? (persistedState.phase === "planning" ? "resumed" : null);
+		runtime.idleKind = persistedState.idleKind ?? null;
 		runtime.savedState = persistedState.savedState ?? null;
 	}
 	if (runtime.pi.getFlag("plan") === true) {

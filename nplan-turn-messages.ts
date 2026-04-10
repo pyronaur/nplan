@@ -30,6 +30,7 @@ function getCurrentState(
 	phase: "idle" | "planning";
 	attachedPlanPath: string | null;
 	planningKind: "started" | "resumed" | null;
+	idleKind: PersistedPlanState["idleKind"];
 } {
 	const persisted = getPersistedPlanState(entries);
 	if (!persisted) {
@@ -37,6 +38,7 @@ function getCurrentState(
 			phase: "idle",
 			attachedPlanPath: null,
 			planningKind: null,
+			idleKind: null,
 		};
 	}
 
@@ -44,6 +46,7 @@ function getCurrentState(
 		phase: persisted.phase,
 		attachedPlanPath: persisted.attachedPlanPath ?? null,
 		planningKind: persisted.planningKind ?? (persisted.phase === "planning" ? "resumed" : null),
+		idleKind: persisted.idleKind ?? null,
 	};
 }
 
@@ -78,7 +81,11 @@ function getTurnEvents(
 	if (!delivered.attachedPlanPath) {
 		return [];
 	}
-	if (delivered.phase === "planning" && current.attachedPlanPath === delivered.attachedPlanPath) {
+	if (
+		delivered.phase === "planning"
+		&& current.attachedPlanPath === delivered.attachedPlanPath
+		&& current.idleKind === "manual"
+	) {
 		return [{ kind: "stopped", planFilePath: delivered.attachedPlanPath }];
 	}
 	if (current.attachedPlanPath !== delivered.attachedPlanPath) {

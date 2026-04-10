@@ -19,6 +19,7 @@ export type PersistedPlanState = {
 	phase: Phase;
 	attachedPlanPath?: string | null;
 	planningKind?: "started" | "resumed" | null;
+	idleKind?: "manual" | "approved" | null;
 	savedState?: SavedPhaseState | null;
 };
 
@@ -177,6 +178,12 @@ function isPersistedPlanState(value: unknown): value is PersistedPlanState {
 		return false;
 	}
 	if (
+		value.idleKind !== undefined && value.idleKind !== null
+		&& value.idleKind !== "manual" && value.idleKind !== "approved"
+	) {
+		return false;
+	}
+	if (
 		value.attachedPlanPath !== undefined && value.attachedPlanPath !== null
 		&& typeof value.attachedPlanPath !== "string"
 	) {
@@ -214,6 +221,7 @@ function normalizePersistedPlanState(value: unknown): PersistedPlanState | undef
 		phase: value.phase,
 		attachedPlanPath: typeof value.planFilePath === "string" ? value.planFilePath : null,
 		planningKind: value.phase === "planning" ? "resumed" : null,
+		idleKind: null,
 		savedState: value.savedState ?? null,
 	};
 }

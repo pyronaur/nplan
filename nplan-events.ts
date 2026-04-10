@@ -17,15 +17,15 @@ export type PlanEventDetails = {
 
 function getPlanEventTitle(kind: PlanEventKind, planFilePath: string): string {
 	if (kind === "started") {
-		return `Plan Mode: Started ${planFilePath}`;
+		return `Plan Started ${planFilePath}`;
 	}
 	if (kind === "resumed") {
-		return `Plan Mode: Resumed ${planFilePath}`;
+		return `Plan Resumed ${planFilePath}`;
 	}
 	if (kind === "stopped") {
-		return `Plan Mode: Stopped ${planFilePath}`;
+		return `Planning Ended ${planFilePath}`;
 	}
-	return `Plan Mode: Abandoned ${planFilePath}`;
+	return `Plan Abandoned ${planFilePath}`;
 }
 
 function isPlanEventDetails(value: unknown): value is PlanEventDetails {
@@ -42,12 +42,15 @@ function isPlanEventDetails(value: unknown): value is PlanEventDetails {
 		&& typeof value.title === "string" && typeof value.body === "string";
 }
 
-function getHeaderColor(kind: PlanEventKind): "accent" | "warning" | "success" {
+function getHeaderColor(kind: PlanEventKind): "accent" | "warning" | "success" | "muted" {
 	if (kind === "started") {
 		return "accent";
 	}
 	if (kind === "resumed") {
 		return "success";
+	}
+	if (kind === "stopped") {
+		return "muted";
 	}
 	return "warning";
 }

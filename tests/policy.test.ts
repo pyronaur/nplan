@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { filterContextMessages, syncPlanningContextMessages } from "../nplan-context.ts";
+import { filterContextMessages } from "../nplan-context.ts";
 import {
 	getDefaultPlanPath,
 	getPersistedPlanState,
@@ -34,20 +34,6 @@ function createPlanEntry(data: unknown, id: string, parentId: string | null): Se
 		parentId,
 		timestamp: "2026-04-09T16:51:00.000Z",
 	};
-}
-
-function assertPlanContextMessage(message: unknown, content: string): void {
-	assert.equal(typeof message, "object");
-	assert.notEqual(message, null);
-	if (typeof message !== "object" || message === null) {
-		return;
-	}
-
-	assert.equal("role" in message ? message.role : undefined, "custom");
-	assert.equal("customType" in message ? message.customType : undefined, "plan-context");
-	assert.equal("content" in message ? message.content : undefined, content);
-	assert.equal("display" in message ? message.display : undefined, false);
-	assert.equal(typeof ("timestamp" in message ? message.timestamp : undefined), "number");
 }
 
 void test("resolveGlobalPlanPath maps empty input to the default global plan", () => {
@@ -168,64 +154,36 @@ void test("getPersistedPlanState keeps the latest idle plan state with a null sa
 	});
 });
 
-void test("syncPlanningContextMessages appends the current planning prompt once", () => {
-	const messages = syncPlanningContextMessages([createUserMessage("hello")],
-		"[PLAN - PLANNING PHASE]\nCurrent plan prompt");
-
-	assert.equal(messages.length, 2);
-	assert.deepEqual(messages[0], createUserMessage("hello"));
-	assertPlanContextMessage(messages[1], "[PLAN - PLANNING PHASE]\nCurrent plan prompt");
-});
-
-void test("syncPlanningContextMessages replaces stale planning prompts without duplication", () => {
-	const messages = syncPlanningContextMessages([
+void test("filterContextMessages removes hidden plan-context messages entirely", () => {
+	const messages = filterContextMessages([
 		createUserMessage("hello"),
 		{
 			role: "custom",
 			customType: "plan-context",
-			content: "[PLAN - PLANNING PHASE]\nOld plan prompt",
+			content: "[PLAN - PLANNING PHASE]\nHidden plan prompt",
 			display: false,
 			timestamp: 2,
 		},
-		createUserMessage("[PLAN - PLANNING PHASE]\nOld plan prompt"),
-	], "[PLAN - PLANNING PHASE]\nCurrent plan prompt");
+	], { includeLatestPlanEvent: true });
 
-	assert.equal(messages.length, 2);
+	assert.equal(messages.length, 1);
 	assert.deepEqual(messages[0], createUserMessage("hello"));
-	assertPlanContextMessage(messages[1], "[PLAN - PLANNING PHASE]\nCurrent plan prompt");
 });
 
-void test("syncPlanningContextMessages removes historical plan events before appending the current prompt", () => {
-	const messages = syncPlanningContextMessages([
-		createUserMessage("hello"),
-		{
-			role: "custom",
-			customType: "plan-event",
-			content: "Plan Mode: Started /abs/path/plan.md\n\n[PLAN - PLANNING PHASE]\nOld plan prompt",
-			display: true,
-			timestamp: 2,
-		},
-	], "[PLAN - PLANNING PHASE]\nCurrent plan prompt");
-
-	assert.equal(messages.length, 2);
-	assert.deepEqual(messages[0], createUserMessage("hello"));
-	assertPlanContextMessage(messages[1], "[PLAN - PLANNING PHASE]\nCurrent plan prompt");
-});
-
-void test("filterContextMessages keeps only the latest plan event outside planning", () => {
+void test("filterContextMessages keeps only the latest visible plan event", () => {
 	const messages = filterContextMessages([
 		createUserMessage("hello"),
 		{
 			role: "custom",
 			customType: "plan-event",
-			content: "Plan Mode: Started /abs/path/plan-a.md",
+			content: "Plan Started /abs/path/plan-a.md",
 			display: true,
 			timestamp: 2,
 		},
 		{
 			role: "custom",
 			customType: "plan-event",
-			content: "Plan Mode: Stopped /abs/path/plan-b.md",
+			content: "Planning Ended /abs/path/plan-b.md",
 			display: true,
 			timestamp: 3,
 		},
@@ -236,7 +194,7 @@ void test("filterContextMessages keeps only the latest plan event outside planni
 	assert.deepEqual(messages[1], {
 		role: "custom",
 		customType: "plan-event",
-		content: "Plan Mode: Stopped /abs/path/plan-b.md",
+		content: "Planning Ended /abs/path/plan-b.md",
 		display: true,
 		timestamp: 3,
 	});

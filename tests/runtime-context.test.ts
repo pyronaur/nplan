@@ -27,24 +27,24 @@ function getContextMessages(result: unknown): unknown[] {
 	return messages;
 }
 
-function assertPlanContextMessage(message: unknown, planPath: string): void {
+function assertPlanEventMessage(message: unknown, planPath: string): void {
 	assert.equal(typeof message, "object");
 	assert.notEqual(message, null);
 	if (!message || typeof message !== "object") {
 		return;
 	}
 
-	assert.equal("role" in message ? message.role : undefined, "custom");
-	assert.equal("customType" in message ? message.customType : undefined, "plan-context");
-	assert.equal("display" in message ? message.display : undefined, false);
+	assert.equal("customType" in message ? message.customType : undefined, "plan-event");
+	assert.equal("display" in message ? message.display : undefined, true);
 	assert.equal(typeof ("content" in message ? message.content : undefined), "string");
 	assert.match(
 		String("content" in message ? message.content : ""),
-		new RegExp(planPath.replaceAll("/", "\\/")),
+		new RegExp(`Plan Started ${planPath.replaceAll("/", "\\/")}`),
 	);
+	assert.match(String("content" in message ? message.content : ""), /\[PLAN - PLANNING PHASE\]/);
 }
 
-void test("planning context replaces visible plan events with a hidden planning prompt", async () => {
+void test("planning context keeps the visible planning row and does not inject hidden plan context", async () => {
 	const homeDir = temp.makeTempDir("nplan-runtime-context-home-");
 	const cwd = temp.makeTempDir("nplan-runtime-context-cwd-");
 	process.env.HOME = homeDir;
@@ -68,11 +68,11 @@ void test("planning context replaces visible plan events with a hidden planning 
 
 	assert.equal(messages.length, 2);
 	assert.deepEqual(messages[0], { role: "user", content: "hello", timestamp: 1 });
-	assertPlanContextMessage(messages[1], planPath);
+	assertPlanEventMessage(messages[1], planPath);
 	assert.equal(
 		messages.some((message) =>
 			typeof message === "object" && message !== null && "customType" in message
-			&& message.customType === "plan-event"
+			&& message.customType === "plan-context"
 		),
 		false,
 	);
