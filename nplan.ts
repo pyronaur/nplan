@@ -3,25 +3,28 @@ import {
 	type ExtensionContext,
 	isToolCallEventType,
 } from "@mariozechner/pi-coding-agent";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import {
-	buildPromptVariables,
-	loadPlanConfig,
-	type PlanConfig,
-	renderTemplate,
-	resolvePhaseProfile,
-} from "./nplan-config.ts";
+import { loadPlanConfig } from "./nplan-config.ts";
 import { isRecord } from "./nplan-guards.ts";
 import {
-	clearPhaseStatus,
+	applyPhaseConfig,
+	captureSavedState,
+	createRuntime,
+	getCurrentPlanPath,
+	persistState,
+	renderPlanningPrompt,
+	restoreSavedState,
+	syncSessionPhase,
+	type Runtime,
+	updateUi,
+} from "./nplan-phase.ts";
+import {
 	getDefaultPlanPath,
 	getPersistedPlanState,
-	getPhaseNotification,
 	getPlanningToolBlockResult,
 	getSessionEntries,
-	renderPhaseWidget,
 	resolveGlobalPlanPath,
-	type SavedPhaseState,
 	shouldKeepContextMessage,
 	syncPlanningContextMessages,
 } from "./nplan-policy.ts";
@@ -30,31 +33,13 @@ import {
 	getImplementationHandoffText,
 	getPlanReviewAvailabilityWarning,
 } from "./nplan-review.ts";
-import { getToolsForPhase, type Phase, stripPlanningOnlyTools } from "./nplan-tool-scope.ts";
+import { getPlanStatusLines } from "./nplan-status.ts";
 
-type Runtime = {
-	pi: ExtensionAPI;
-	phase: Phase;
-	planFilePath: string;
-	savedState: SavedPhaseState | null;
-	planConfig: PlanConfig;
-	lastPromptWarning: string | null;
-};
+type PlanEventKind = "started" | "resumed" | "stopped" | "abandoned";
 
 type PiLeaderAdd = (key: string, label: string, run: () => void | Promise<void>) => void;
 
 type PiLeaderOpenEvent = { add: PiLeaderAdd };
-
-function createRuntime(pi: ExtensionAPI): Runtime {
-	return {
-		pi,
-		phase: "idle",
-		planFilePath: getDefaultPlanPath(),
-		savedState: null,
-		planConfig: {},
-		lastPromptWarning: null,
-	};
-}
 
 function isPiLeaderOpenEvent(event: unknown): event is PiLeaderOpenEvent {
 	return isRecord(event) && typeof event.add === "function";
@@ -66,136 +51,10 @@ function registerFlags(pi: ExtensionAPI): void {
 		type: "boolean",
 		default: false,
 	});
-	pi.registerFlag("plan-file", {
-		description: "Global plan name or path under ~/.n/pi/plans/",
-		type: "string",
-		default: getDefaultPlanPath(),
-	});
 }
 
 function resolvePlanPath(runtime: Runtime, cwd: string): string {
-	return resolve(cwd, runtime.planFilePath);
-}
-
-function getPhaseProfile(runtime: Runtime): ReturnType<typeof resolvePhaseProfile> | undefined {
-	if (runtime.phase !== "planning") {
-		return undefined;
-	}
-
-	return resolvePhaseProfile(runtime.planConfig, runtime.phase);
-}
-
-function renderPlanningPrompt(runtime: Runtime, ctx: ExtensionContext): string | undefined {
-	const profile = getPhaseProfile(runtime);
-	if (!profile?.planningPrompt) {
-		runtime.lastPromptWarning = null;
-		return undefined;
-	}
-
-	const rendered = renderTemplate(
-		profile.planningPrompt,
-		buildPromptVariables({
-			planFilePath: runtime.planFilePath,
-			phase: runtime.phase,
-			completedCount: 0,
-			totalCount: 0,
-		}),
-	);
-	const warning = rendered.unknownVariables.length > 0
-		? `Plan mode: unknown template variables in ${runtime.phase} prompt: ${
-			rendered.unknownVariables.join(", ")
-		}`
-		: null;
-	if (warning && warning !== runtime.lastPromptWarning) {
-		ctx.ui.notify(warning, "warning");
-	}
-	runtime.lastPromptWarning = warning;
-	return rendered.text;
-}
-
-function updateUi(runtime: Runtime, ctx: ExtensionContext): void {
-	clearPhaseStatus(ctx);
-	renderPhaseWidget(ctx, runtime.phase, runtime.planFilePath);
-}
-
-function persistState(runtime: Runtime): void {
-	runtime.pi.appendEntry("plan", {
-		phase: runtime.phase,
-		planFilePath: runtime.planFilePath,
-		savedState: runtime.savedState,
-	});
-}
-
-function captureSavedState(runtime: Runtime, ctx: ExtensionContext): void {
-	runtime.savedState = {
-		activeTools: runtime.pi.getActiveTools(),
-		model: ctx.model ? { provider: ctx.model.provider, id: ctx.model.id } : undefined,
-		thinkingLevel: runtime.pi.getThinkingLevel(),
-	};
-}
-
-async function applyModelRef(input: {
-	runtime: Runtime;
-	ref: { provider: string; id: string };
-	ctx: ExtensionContext;
-	reason: string;
-}): Promise<void> {
-	const model = input.ctx.modelRegistry.find(input.ref.provider, input.ref.id);
-	if (!model) {
-		input.ctx.ui.notify(
-			`Plan mode: ${input.reason} model ${input.ref.provider}/${input.ref.id} not found.`,
-			"warning",
-		);
-		return;
-	}
-
-	const success = await input.runtime.pi.setModel(model);
-	if (!success) {
-		input.ctx.ui.notify(
-			`Plan mode: no API key for ${input.ref.provider}/${input.ref.id}.`,
-			"warning",
-		);
-	}
-}
-
-async function restoreSavedState(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
-	if (!runtime.savedState) {
-		return;
-	}
-
-	runtime.pi.setActiveTools(runtime.savedState.activeTools);
-	if (runtime.savedState.model) {
-		await applyModelRef({ runtime, ref: runtime.savedState.model, ctx, reason: "restore" });
-	}
-	runtime.pi.setThinkingLevel(runtime.savedState.thinkingLevel);
-}
-
-async function applyPhaseConfig(
-	runtime: Runtime,
-	ctx: ExtensionContext,
-	opts: { restoreSavedState?: boolean } = {},
-): Promise<void> {
-	const profile = getPhaseProfile(runtime);
-	if (opts.restoreSavedState !== false && runtime.savedState) {
-		await restoreSavedState(runtime, ctx);
-	}
-	if (runtime.phase === "planning") {
-		const baseTools = stripPlanningOnlyTools(
-			runtime.savedState?.activeTools ?? runtime.pi.getActiveTools(),
-		);
-		const toolSet = new Set(baseTools);
-		for (const tool of profile?.activeTools ?? []) {
-			toolSet.add(tool);
-		}
-		runtime.pi.setActiveTools(getToolsForPhase([...toolSet], runtime.phase));
-	}
-	if (profile?.model) {
-		await applyModelRef({ runtime, ref: profile.model, ctx, reason: runtime.phase });
-	}
-	if (profile?.thinking) {
-		runtime.pi.setThinkingLevel(profile.thinking);
-	}
-	updateUi(runtime, ctx);
+	return resolve(cwd, getCurrentPlanPath(runtime));
 }
 
 function notifyReviewAvailability(ctx: ExtensionContext): void {
@@ -205,85 +64,152 @@ function notifyReviewAvailability(ctx: ExtensionContext): void {
 	}
 }
 
-function notifyPhase(runtime: Runtime, ctx: ExtensionContext): void {
-	const message = getPhaseNotification(runtime.phase, runtime.planFilePath);
-	if (message) {
-		ctx.ui.notify(message);
+function getPlanEventTitle(kind: PlanEventKind, planFilePath: string): string {
+	if (kind === "started") {
+		return `Plan Mode: Started ${planFilePath}`;
 	}
+	if (kind === "resumed") {
+		return `Plan Mode: Resumed ${planFilePath}`;
+	}
+	if (kind === "stopped") {
+		return `Plan Mode: Stopped ${planFilePath}`;
+	}
+	return `Plan Mode: Abandoned ${planFilePath}`;
+}
+
+function emitPlanEvent(
+	runtime: Runtime,
+	input: { kind: PlanEventKind; planFilePath: string; body: string },
+): void {
+	const title = getPlanEventTitle(input.kind, input.planFilePath);
+	runtime.pi.sendMessage({
+		customType: "plan-event",
+		content: `${title}\n\n${input.body}`,
+		display: true,
+		details: {
+			kind: input.kind,
+			planFilePath: input.planFilePath,
+			title,
+			body: input.body,
+		},
+	}, { triggerTurn: false });
 }
 
 async function enterPlanning(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
 	runtime.phase = "planning";
 	captureSavedState(runtime, ctx);
 	await applyPhaseConfig(runtime, ctx, { restoreSavedState: false });
+	const planFilePath = getCurrentPlanPath(runtime);
+	const planningPrompt = renderPlanningPrompt(runtime, ctx);
+	const firstPrompt = !runtime.fullPromptShownInSession;
+	runtime.fullPromptShownInSession = true;
 	persistState(runtime);
-	notifyPhase(runtime, ctx);
+	emitPlanEvent(runtime, {
+		kind: firstPrompt ? "started" : "resumed",
+		planFilePath,
+		body: firstPrompt
+			? planningPrompt ?? `Planning started for ${planFilePath}.`
+			: `Planning resumed for ${planFilePath}.`,
+	});
 	notifyReviewAvailability(ctx);
+}
+
+async function exitPlanningSilently(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
+	if (runtime.phase !== "planning") {
+		return;
+	}
+
+	runtime.phase = "idle";
+	await restoreSavedState(runtime, ctx);
+	runtime.savedState = null;
+	updateUi(runtime, ctx);
 }
 
 async function exitToIdle(
 	runtime: Runtime,
 	ctx: ExtensionContext,
-	options: { notify?: boolean } = {},
+	options: { detach?: boolean; eventKind?: PlanEventKind | null } = {},
 ): Promise<void> {
-	runtime.phase = "idle";
-	await restoreSavedState(runtime, ctx);
-	runtime.savedState = null;
-	updateUi(runtime, ctx);
+	const planFilePath = runtime.attachedPlanPath;
+	await exitPlanningSilently(runtime, ctx);
+	if (options.detach) {
+		runtime.attachedPlanPath = null;
+	}
 	persistState(runtime);
-	if (options.notify !== false) {
-		ctx.ui.notify("Plan mode disabled. Full access restored.");
+	if (options.eventKind && planFilePath) {
+		emitPlanEvent(runtime, {
+			kind: options.eventKind,
+			planFilePath,
+			body: options.eventKind === "stopped"
+				? `Planning disabled for ${planFilePath}.`
+				: `Planning detached from ${planFilePath}.`,
+		});
 	}
 }
 
-async function togglePlanMode(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
-	if (runtime.phase === "idle") {
-		await enterPlanning(runtime, ctx);
-		return;
-	}
-
-	await exitToIdle(runtime, ctx);
-}
-
-async function restoreIdleTools(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
-	if (runtime.savedState) {
-		await restoreSavedState(runtime, ctx);
-		runtime.savedState = null;
-		return;
-	}
-
-	runtime.pi.setActiveTools(stripPlanningOnlyTools(runtime.pi.getActiveTools()));
-}
-
-async function syncSessionPhase(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
-	if (runtime.phase === "idle") {
-		await restoreIdleTools(runtime, ctx);
-		return;
-	}
-	if (runtime.phase === "planning") {
-		await applyPhaseConfig(runtime, ctx, { restoreSavedState: true });
-	}
-}
-
-async function readPlanPathArg(
+async function promptForPlanTarget(
 	runtime: Runtime,
-	args: string | undefined,
 	ctx: ExtensionContext,
-): Promise<string | null | undefined> {
-	const targetPath = args?.trim() || undefined;
-	if (targetPath) {
-		return targetPath;
-	}
+): Promise<string | null> {
 	if (!ctx.hasUI) {
-		return undefined;
+		return getDefaultPlanPath();
 	}
 
-	const input = await ctx.ui.input("Plan file path", runtime.planFilePath);
+	const input = await ctx.ui.input("Plan name", getCurrentPlanPath(runtime));
 	if (input === undefined) {
 		return null;
 	}
 
-	return input.trim() || undefined;
+	return input.trim() || getDefaultPlanPath();
+}
+
+async function confirmResumePlan(ctx: ExtensionContext, planFilePath: string): Promise<boolean> {
+	if (!ctx.hasUI) {
+		return true;
+	}
+
+	return await ctx.ui.confirm("Resume planning", `Resume planning in ${planFilePath}?`);
+}
+
+async function confirmAbandonPlan(ctx: ExtensionContext, planFilePath: string): Promise<boolean> {
+	if (!ctx.hasUI) {
+		return true;
+	}
+
+	return await ctx.ui.confirm("Abandon plan", `Abandon the attached plan ${planFilePath}?`);
+}
+
+async function attachRequestedPlan(
+	runtime: Runtime,
+	ctx: ExtensionContext,
+	targetPath: string,
+): Promise<void> {
+	const currentPlanPath = runtime.attachedPlanPath;
+	if (currentPlanPath && currentPlanPath !== targetPath) {
+		const shouldAbandon = await confirmAbandonPlan(ctx, currentPlanPath);
+		if (!shouldAbandon) {
+			return;
+		}
+		runtime.attachedPlanPath = null;
+		persistState(runtime);
+		emitPlanEvent(runtime, {
+			kind: "abandoned",
+			planFilePath: currentPlanPath,
+			body: `Planning detached from ${currentPlanPath}.`,
+		});
+	}
+
+	const shouldConfirmResume = existsSync(targetPath)
+		&& (!currentPlanPath || currentPlanPath !== targetPath);
+	if (shouldConfirmResume) {
+		const shouldResume = await confirmResumePlan(ctx, targetPath);
+		if (!shouldResume) {
+			return;
+		}
+	}
+
+	runtime.attachedPlanPath = targetPath;
+	await enterPlanning(runtime, ctx);
 }
 
 async function handlePlanCommand(
@@ -291,49 +217,61 @@ async function handlePlanCommand(
 	args: string,
 	ctx: ExtensionContext,
 ): Promise<void> {
-	if (runtime.phase !== "idle") {
-		await togglePlanMode(runtime, ctx);
+	const targetArg = args.trim();
+	if (runtime.phase === "planning" && !targetArg) {
+		await exitToIdle(runtime, ctx, { eventKind: "stopped" });
+		return;
+	}
+	if (runtime.phase === "planning") {
+		await exitPlanningSilently(runtime, ctx);
+	}
+
+	if (!targetArg && runtime.attachedPlanPath) {
+		await enterPlanning(runtime, ctx);
 		return;
 	}
 
-	const targetPath = await readPlanPathArg(runtime, args, ctx);
-	if (targetPath === null) {
+	const targetInput = targetArg || await promptForPlanTarget(runtime, ctx);
+	if (targetInput === null) {
 		return;
 	}
-	if (targetPath) {
-		runtime.planFilePath = resolveGlobalPlanPath(targetPath);
-	}
 
-	await enterPlanning(runtime, ctx);
+	await attachRequestedPlan(runtime, ctx, resolveGlobalPlanPath(targetInput));
 }
 
-function getPlanLeaderLabel(phase: Phase): string {
-	return phase === "idle" ? "Enable plan mode" : "Disable plan mode";
-}
-
-async function handlePlanFileCommand(
-	runtime: Runtime,
-	args: string,
-	ctx: ExtensionContext,
-): Promise<void> {
-	const targetPath = await readPlanPathArg(runtime, args, ctx);
-	if (targetPath === null) {
+async function handlePlanClearCommand(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
+	if (!runtime.attachedPlanPath) {
+		persistState(runtime);
 		return;
 	}
-	if (!targetPath) {
-		ctx.ui.notify(`Current plan file: ${runtime.planFilePath}`, "info");
+	if (runtime.phase === "planning") {
+		await exitToIdle(runtime, ctx, { detach: true, eventKind: "abandoned" });
 		return;
 	}
 
-	runtime.planFilePath = resolveGlobalPlanPath(targetPath);
+	const planFilePath = runtime.attachedPlanPath;
+	runtime.attachedPlanPath = null;
 	persistState(runtime);
-	updateUi(runtime, ctx);
-	ctx.ui.notify(`Plan file changed to: ${runtime.planFilePath}`);
+	emitPlanEvent(runtime, {
+		kind: "abandoned",
+		planFilePath,
+		body: `Planning detached from ${planFilePath}.`,
+	});
+}
+
+function getPlanLeaderLabel(runtime: Runtime): string {
+	if (runtime.phase === "planning") {
+		return "Disable plan mode";
+	}
+	if (runtime.attachedPlanPath) {
+		return "Resume plan mode";
+	}
+	return "Enable plan mode";
 }
 
 function registerCommands(runtime: Runtime): void {
 	runtime.pi.registerCommand("plan", {
-		description: "Toggle plan mode",
+		description: "Enter or exit plan mode",
 		handler: async (args, ctx) => {
 			await handlePlanCommand(runtime, args, ctx);
 		},
@@ -342,15 +280,18 @@ function registerCommands(runtime: Runtime): void {
 		description: "Show current plan status",
 		handler: async (_args, ctx) => {
 			ctx.ui.notify(
-				[`Phase: ${runtime.phase}`, `Plan file: ${runtime.planFilePath}`].join("\n"),
+				getPlanStatusLines({
+					phase: runtime.phase,
+					attachedPlanPath: runtime.attachedPlanPath,
+				}).join("\n"),
 				"info",
 			);
 		},
 	});
-	runtime.pi.registerCommand("plan-file", {
-		description: "Change the global plan file",
-		handler: async (args, ctx) => {
-			await handlePlanFileCommand(runtime, args, ctx);
+	runtime.pi.registerCommand("plan-clear", {
+		description: "Detach the current plan",
+		handler: async (_args, ctx) => {
+			await handlePlanClearCommand(runtime, ctx);
 		},
 	});
 }
@@ -358,10 +299,10 @@ function registerCommands(runtime: Runtime): void {
 function registerSubmitTool(runtime: Runtime): void {
 	runtime.pi.registerTool(createPlanSubmitTool({
 		isPlanning: () => runtime.phase === "planning",
-		getPlanFilePath: () => runtime.planFilePath,
+		getPlanFilePath: () => getCurrentPlanPath(runtime),
 		resolvePlanPath: (cwd) => resolvePlanPath(runtime, cwd),
 		onPlanApproved: async (ctx, planFilePath) => {
-			await exitToIdle(runtime, ctx, { notify: false });
+			await exitToIdle(runtime, ctx, { eventKind: null });
 			if (!ctx.hasUI) {
 				return;
 			}
@@ -377,6 +318,7 @@ function registerToolCallHandler(runtime: Runtime): void {
 			return;
 		}
 
+		const planFilePath = getCurrentPlanPath(runtime);
 		const allowedPath = resolvePlanPath(runtime, ctx.cwd);
 		if (isToolCallEventType("write", event) || isToolCallEventType("edit", event)) {
 			const targetPath = resolve(ctx.cwd, event.input.path);
@@ -385,7 +327,7 @@ function registerToolCallHandler(runtime: Runtime): void {
 				return {
 					block: true,
 					reason:
-						`Plan mode: ${kind} are restricted to ${runtime.planFilePath} during planning. Blocked: ${event.input.path}`,
+						`Plan mode: ${kind} are restricted to ${planFilePath} during planning. Blocked: ${event.input.path}`,
 				};
 			}
 		}
@@ -395,7 +337,7 @@ function registerToolCallHandler(runtime: Runtime): void {
 			input: event.input,
 			cwd: ctx.cwd,
 			allowedPath,
-			planFilePath: runtime.planFilePath,
+			planFilePath,
 		});
 	});
 }
@@ -422,27 +364,24 @@ function registerContextHandler(runtime: Runtime): void {
 }
 
 async function handleSessionStart(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
-	const flagPlanFile = runtime.pi.getFlag("plan-file");
-	if (typeof flagPlanFile === "string" && flagPlanFile) {
-		runtime.planFilePath = resolveGlobalPlanPath(flagPlanFile);
-	}
-
 	const loadedConfig = loadPlanConfig(ctx.cwd);
 	runtime.planConfig = loadedConfig.config;
 	for (const warning of loadedConfig.warnings) {
 		ctx.ui.notify(`Plan config: ${warning}`, "warning");
 	}
-	if (runtime.pi.getFlag("plan") === true) {
-		runtime.phase = "planning";
-	}
 
 	const persistedState = getPersistedPlanState(getSessionEntries(ctx));
 	if (persistedState) {
-		runtime.phase = persistedState.phase ?? runtime.phase;
-		runtime.planFilePath = resolveGlobalPlanPath(
-			persistedState.planFilePath ?? runtime.planFilePath,
-		);
+		runtime.phase = persistedState.phase;
+		runtime.attachedPlanPath = persistedState.attachedPlanPath
+			? resolveGlobalPlanPath(persistedState.attachedPlanPath)
+			: null;
 		runtime.savedState = persistedState.savedState ?? null;
+		runtime.fullPromptShownInSession = persistedState.fullPromptShownInSession ?? false;
+	}
+	if (runtime.pi.getFlag("plan") === true) {
+		runtime.phase = "planning";
+		runtime.attachedPlanPath ??= getDefaultPlanPath();
 	}
 	if (runtime.phase === "planning") {
 		notifyReviewAvailability(ctx);
@@ -450,7 +389,6 @@ async function handleSessionStart(runtime: Runtime, ctx: ExtensionContext): Prom
 
 	await syncSessionPhase(runtime, ctx);
 	updateUi(runtime, ctx);
-	notifyPhase(runtime, ctx);
 	persistState(runtime);
 }
 
@@ -465,11 +403,11 @@ function registerLeaderHandler(runtime: Runtime): void {
 			return;
 		}
 
-		event.add("p", getPlanLeaderLabel(runtime.phase), async () => {
+		event.add("p", getPlanLeaderLabel(runtime), async () => {
 			if (!ctx) {
 				return;
 			}
-			await togglePlanMode(runtime, ctx);
+			await handlePlanCommand(runtime, "", ctx);
 		});
 	});
 

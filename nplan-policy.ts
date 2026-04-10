@@ -17,8 +17,9 @@ export type SavedPhaseState = {
 
 export type PersistedPlanState = {
 	phase: Phase;
-	planFilePath?: string;
+	attachedPlanPath?: string | null;
 	savedState?: SavedPhaseState | null;
+	fullPromptShownInSession?: boolean;
 };
 
 type PlanningBlockResult = { block: true; reason: string };
@@ -183,7 +184,10 @@ function isPersistedPlanState(value: unknown): value is PersistedPlanState {
 	if (value.phase !== "idle" && value.phase !== "planning") {
 		return false;
 	}
-	if (value.planFilePath !== undefined && typeof value.planFilePath !== "string") {
+	if (
+		value.attachedPlanPath !== undefined && value.attachedPlanPath !== null
+		&& typeof value.attachedPlanPath !== "string"
+	) {
 		return false;
 	}
 	if (
@@ -192,8 +196,40 @@ function isPersistedPlanState(value: unknown): value is PersistedPlanState {
 	) {
 		return false;
 	}
-
+	if (
+		value.fullPromptShownInSession !== undefined
+		&& typeof value.fullPromptShownInSession !== "boolean"
+	) {
+		return false;
+	}
 	return true;
+}
+
+function normalizePersistedPlanState(value: unknown): PersistedPlanState | undefined {
+	if (isPersistedPlanState(value)) {
+		return value;
+	}
+	if (!isRecord(value)) {
+		return undefined;
+	}
+	if (value.phase !== "idle" && value.phase !== "planning") {
+		return undefined;
+	}
+	if (value.planFilePath !== undefined && typeof value.planFilePath !== "string") {
+		return undefined;
+	}
+	if (
+		value.savedState !== undefined && value.savedState !== null
+		&& !isSavedPhaseState(value.savedState)
+	) {
+		return undefined;
+	}
+	return {
+		phase: value.phase,
+		attachedPlanPath: typeof value.planFilePath === "string" ? value.planFilePath : null,
+		savedState: value.savedState ?? null,
+		fullPromptShownInSession: false,
+	};
 }
 
 function hasPlanBanner(content: unknown): boolean {
@@ -203,12 +239,10 @@ function hasPlanBanner(content: unknown): boolean {
 	if (!Array.isArray(content)) {
 		return false;
 	}
-
 	return content.some((item) => {
 		if (!isRecord(item) || item.type !== "text") {
 			return false;
 		}
-
 		return typeof item.text === "string" && item.text.includes("[PLAN -");
 	});
 }
@@ -232,12 +266,10 @@ function getPlanNameFromPath(input: string | undefined): string {
 	if (!input?.trim()) {
 		return DEFAULT_PLAN_NAME;
 	}
-
 	const trimmed = expandHome(input.trim());
 	if (isStoredPlanPath(trimmed)) {
 		return parse(trimmed).name || DEFAULT_PLAN_NAME;
 	}
-
 	return slugifyPlanName(trimmed);
 }
 
@@ -433,8 +465,9 @@ export function getPersistedPlanState(entries: SessionEntry[]): PersistedPlanSta
 		if (entry.type !== "custom" || entry.customType !== "plan") {
 			continue;
 		}
-		if (isPersistedPlanState(entry.data)) {
-			return entry.data;
+		const state = normalizePersistedPlanState(entry.data);
+		if (state) {
+			return state;
 		}
 	}
 
@@ -465,9 +498,3 @@ export function syncPlanningContextMessages(
 	];
 }
 
-export function getPhaseNotification(phase: Phase, planFilePath: string): string | undefined {
-	if (phase === "planning") {
-		return `Plan mode enabled. Plan file: ${planFilePath}`;
-	}
-	return undefined;
-}

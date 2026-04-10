@@ -1,0 +1,463 @@
+import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, test } from "node:test";
+import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import nplan from "../nplan.ts";
+
+type NotificationCall = { message: string; type?: "info" | "warning" | "error" };
+
+type UiState = {
+	confirmResponses: boolean[];
+	inputResponses: Array<string | undefined>;
+	confirmCalls: Array<{ title: string; message: string }>;
+	inputCalls: Array<{ title: string; placeholder?: string }>;
+	notifications: NotificationCall[];
+	statuses: Map<string, string | undefined>;
+	widgets: Map<string, unknown>;
+	editorText: string | undefined;
+};
+
+type Harness = ReturnType<typeof createHarness>;
+
+const originalHome = process.env.HOME;
+const tempDirs: string[] = [];
+
+function makeTempDir(prefix: string): string {
+	const dir = mkdtempSync(join(tmpdir(), prefix));
+	tempDirs.push(dir);
+	return dir;
+}
+
+function writePlanFile(homeDir: string, slug: string, content = "# Plan\n"): string {
+	const planPath = join(homeDir, ".n", "pi", "plans", `${slug}.md`);
+	mkdirSync(join(homeDir, ".n", "pi", "plans"), { recursive: true });
+	writeFileSync(planPath, content, "utf-8");
+	return planPath;
+}
+
+function createTheme() {
+	return {
+		fgColors: {},
+		bgColors: {},
+		mode: "dark",
+		fg: (_color: string, text: string) => text,
+		bg: (_color: string, text: string) => text,
+		bold: (text: string) => text,
+		italic: (text: string) => text,
+		underline: (text: string) => text,
+		strikethrough: (text: string) => text,
+		dim: (text: string) => text,
+		inverse: (text: string) => text,
+		blink: (text: string) => text,
+		hidden: (text: string) => text,
+		reset: (text: string) => text,
+	};
+}
+
+function createUiState(): UiState {
+	return {
+		confirmResponses: [],
+		inputResponses: [],
+		confirmCalls: [],
+		inputCalls: [],
+		notifications: [],
+		statuses: new Map<string, string | undefined>(),
+		widgets: new Map<string, unknown>(),
+		editorText: undefined,
+	};
+}
+
+function createUiApi(state: UiState) {
+	const theme = createTheme();
+
+	return {
+		async select() {
+			throw new Error("select() not implemented in runtime test UI");
+		},
+		async confirm(title: string, message: string) {
+			state.confirmCalls.push({ title, message });
+			return state.confirmResponses.shift() ?? false;
+		},
+		async input(title: string, placeholder?: string) {
+			state.inputCalls.push({ title, placeholder });
+			return state.inputResponses.shift();
+		},
+		notify(message: string, type?: "info" | "warning" | "error") {
+			state.notifications.push({ message, type });
+		},
+		onTerminalInput() {
+			return () => {};
+		},
+		setStatus(key: string, text: string | undefined) {
+			state.statuses.set(key, text);
+		},
+		setWorkingMessage() {},
+		setHiddenThinkingLabel() {},
+		setWidget(key: string, content: unknown) {
+			state.widgets.set(key, content);
+		},
+		setFooter() {},
+		setHeader() {},
+		setTitle() {},
+		async custom() {
+			throw new Error("custom() not implemented in runtime test UI");
+		},
+		pasteToEditor(text: string) {
+			state.editorText = `${state.editorText ?? ""}${text}`;
+		},
+		setEditorText(text: string) {
+			state.editorText = text;
+		},
+		getEditorText() {
+			return state.editorText ?? "";
+		},
+		async editor() {
+			throw new Error("editor() not implemented in runtime test UI");
+		},
+		setEditorComponent() {},
+		theme,
+		getAllThemes() {
+			return [];
+		},
+		getTheme() {
+			return undefined;
+		},
+		setTheme() {
+			return { success: true };
+		},
+		getToolsExpanded() {
+			return false;
+		},
+		setToolsExpanded() {},
+	};
+}
+
+function createSessionManager(cwd: string, entries: Array<Record<string, unknown>>) {
+	return {
+		getCwd: () => cwd,
+		getSessionDir: () => cwd,
+		getSessionId: () => "session",
+		getSessionFile: () => join(cwd, "session.jsonl"),
+		getLeafId: () => null,
+		getLeafEntry: () => undefined,
+		getEntry: () => undefined,
+		getLabel: () => undefined,
+		getBranch: () => entries,
+		getHeader: () => undefined,
+		getEntries: () => entries,
+		getTree: () => ({ rootId: null, nodes: [] }),
+		getSessionName: () => undefined,
+	};
+}
+
+function createModelRegistry() {
+	return {
+		find: () => undefined,
+	};
+}
+
+function createContext(cwd: string, entries: Array<Record<string, unknown>>, uiState: UiState) {
+	return {
+		ui: createUiApi(uiState),
+		hasUI: true,
+		cwd,
+		sessionManager: createSessionManager(cwd, entries),
+		modelRegistry: createModelRegistry(),
+		model: undefined,
+		isIdle: () => true,
+		signal: undefined,
+		abort: () => {},
+		hasPendingMessages: () => false,
+		shutdown: () => {},
+		getContextUsage: () => undefined,
+		compact: () => {},
+		getSystemPrompt: () => "",
+	};
+}
+
+function addEventHandler(
+	eventHandlers: Map<string, Array<(event: unknown, ctx: unknown) => unknown>>,
+	name: string,
+	handler: (event: unknown, ctx: unknown) => unknown,
+): void {
+	const handlers = eventHandlers.get(name) ?? [];
+	handlers.push(handler);
+	eventHandlers.set(name, handlers);
+}
+
+function appendCustomEntry(
+	input: {
+		entries: Array<Record<string, unknown>>;
+		entryCount: { current: number };
+		customType: string;
+		data?: unknown;
+	},
+): void {
+	input.entryCount.current += 1;
+	input.entries.push({
+		type: "custom",
+		customType: input.customType,
+		data: input.data,
+		id: `entry-${input.entryCount.current}`,
+		parentId: null,
+		timestamp: new Date(0).toISOString(),
+	});
+}
+
+function createExtensionApi(state: {
+	commands: Map<string, { handler: (args: string, ctx: any) => Promise<void> | void }>;
+	flags: Map<string, boolean | string | undefined>;
+	entries: Array<Record<string, unknown>>;
+	sentMessages: unknown[];
+	eventHandlers: Map<string, Array<(event: unknown, ctx: unknown) => unknown>>;
+	thinkingLevel: { current: ThinkingLevel };
+	activeTools: { current: string[] };
+	entryCount: { current: number };
+}): ExtensionAPI {
+	return {
+		registerFlag(name: string, options: { default?: boolean | string }) {
+			state.flags.set(name, options.default);
+		},
+		getFlag(name: string) {
+			return state.flags.get(name);
+		},
+		registerCommand(
+			name: string,
+			command: { handler: (args: string, ctx: any) => Promise<void> | void },
+		) {
+			state.commands.set(name, command);
+		},
+		registerShortcut() {},
+		registerTool() {},
+		registerProvider() {},
+		unregisterProvider() {},
+		registerMessageRenderer() {},
+		on(...args: any[]) {
+			const [name, handler] = args;
+			addEventHandler(state.eventHandlers, name, handler);
+		},
+		events: {
+			on(...args: any[]) {
+				void args;
+				return () => {};
+			},
+			emit() {},
+		},
+		sendMessage(message: unknown) {
+			state.sentMessages.push(message);
+		},
+		sendUserMessage() {},
+		appendEntry(customType: string, data?: unknown) {
+			appendCustomEntry({ entries: state.entries, entryCount: state.entryCount, customType, data });
+		},
+		setSessionName() {},
+		getSessionName() {
+			return undefined;
+		},
+		setLabel() {},
+		async exec() {
+			throw new Error("exec() not implemented in runtime test api");
+		},
+		getActiveTools() {
+			return [...state.activeTools.current];
+		},
+		getAllTools() {
+			return [];
+		},
+		setActiveTools(toolNames: string[]) {
+			state.activeTools.current = [...toolNames];
+		},
+		getCommands() {
+			return [];
+		},
+		async setModel() {
+			return true;
+		},
+		getThinkingLevel() {
+			return state.thinkingLevel.current;
+		},
+		setThinkingLevel(level: string) {
+			state.thinkingLevel.current = level;
+		},
+	};
+}
+
+function createHarness(cwd: string) {
+	const commands = new Map<string, { handler: (args: string, ctx: any) => Promise<void> | void }>();
+	const flags = new Map<string, boolean | string | undefined>();
+	const entries: Array<Record<string, unknown>> = [];
+	const sentMessages: unknown[] = [];
+	const eventHandlers = new Map<string, Array<(event: unknown, ctx: unknown) => unknown>>();
+	const thinkingLevel: { current: ThinkingLevel } = { current: "medium" };
+	const activeTools = { current: ["read", "bash", "edit", "write"] };
+	const entryCount = { current: 0 };
+	const ui = createUiState();
+	const api = createExtensionApi({
+		commands,
+		flags,
+		entries,
+		sentMessages,
+		eventHandlers,
+		thinkingLevel,
+		activeTools,
+		entryCount,
+	});
+	const ctx = createContext(cwd, entries, ui);
+
+	async function emit(name: string, event: unknown): Promise<void> {
+		for (const handler of eventHandlers.get(name) ?? []) {
+			await handler(event, ctx);
+		}
+	}
+
+	async function runCommand(name: string, args = ""): Promise<void> {
+		const command = commands.get(name);
+		if (!command) {
+			throw new Error(`Unknown command: ${name}`);
+		}
+		await command.handler(args, ctx);
+	}
+
+	return { api, commands, flags, entries, sentMessages, ui, emit, runCommand };
+}
+
+function appendPersistedPlanState(harness: Harness, data: Record<string, unknown>): void {
+	harness.api.appendEntry("plan", data);
+}
+
+function getLastPlanState(harness: Harness): unknown {
+	return harness.entries.at(-1)?.data;
+}
+
+afterEach(() => {
+	if (originalHome === undefined) {
+		delete process.env.HOME;
+	}
+	if (originalHome !== undefined) {
+		process.env.HOME = originalHome;
+	}
+
+	for (const dir of tempDirs.splice(0)) {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+void test("registers plan-clear and removes the legacy plan-file command", () => {
+	const harness = createHarness(makeTempDir("nplan-runtime-cwd-register-"));
+	nplan(harness.api);
+
+	assert.ok(harness.commands.has("plan"));
+	assert.ok(harness.commands.has("plan-status"));
+	assert.ok(harness.commands.has("plan-clear"));
+	assert.equal(harness.commands.has("plan-file"), false);
+	assert.equal(harness.flags.has("plan-file"), false);
+});
+
+void test("/plan with a new slug attaches the normalized plan path and enters planning", async () => {
+	const homeDir = makeTempDir("nplan-runtime-home-new-");
+	const cwd = makeTempDir("nplan-runtime-cwd-new-");
+	process.env.HOME = homeDir;
+	const harness = createHarness(cwd);
+	nplan(harness.api);
+
+	await harness.emit("session_start", { type: "session_start", reason: "startup" });
+	await harness.runCommand("plan", "Auth Plan");
+
+	assert.deepEqual(getLastPlanState(harness), {
+		phase: "planning",
+		attachedPlanPath: join(homeDir, ".n", "pi", "plans", "auth-plan.md"),
+		savedState: {
+			activeTools: ["read", "bash", "edit", "write"],
+			model: undefined,
+			thinkingLevel: "medium",
+		},
+		fullPromptShownInSession: true,
+	});
+	assert.equal(harness.ui.inputCalls.length, 0);
+	assert.equal(harness.sentMessages.length > 0, true);
+});
+
+void test("bare /plan resumes the attached plan without prompting for a slug", async () => {
+	const homeDir = makeTempDir("nplan-runtime-home-resume-");
+	const cwd = makeTempDir("nplan-runtime-cwd-resume-");
+	process.env.HOME = homeDir;
+	const planPath = writePlanFile(homeDir, "resume-me");
+	const harness = createHarness(cwd);
+	appendPersistedPlanState(harness, {
+		phase: "idle",
+		attachedPlanPath: planPath,
+		savedState: null,
+		fullPromptShownInSession: true,
+	});
+	nplan(harness.api);
+
+	await harness.emit("session_start", { type: "session_start", reason: "resume" });
+	await harness.runCommand("plan");
+
+	assert.equal(harness.ui.inputCalls.length, 0);
+	assert.deepEqual(getLastPlanState(harness), {
+		phase: "planning",
+		attachedPlanPath: planPath,
+		savedState: {
+			activeTools: ["read", "bash", "edit", "write"],
+			model: undefined,
+			thinkingLevel: "medium",
+		},
+		fullPromptShownInSession: true,
+	});
+});
+
+void test("/plan asks to resume a foreign existing plan and cancels when declined", async () => {
+	const homeDir = makeTempDir("nplan-runtime-home-foreign-");
+	const cwd = makeTempDir("nplan-runtime-cwd-foreign-");
+	process.env.HOME = homeDir;
+	writePlanFile(homeDir, "existing-plan");
+	const harness = createHarness(cwd);
+	harness.ui.confirmResponses.push(false);
+	nplan(harness.api);
+
+	await harness.emit("session_start", { type: "session_start", reason: "startup" });
+	await harness.runCommand("plan", "existing plan");
+
+	assert.equal(harness.ui.confirmCalls.length, 1);
+	assert.deepEqual(getLastPlanState(harness), {
+		phase: "idle",
+		attachedPlanPath: null,
+		savedState: null,
+		fullPromptShownInSession: false,
+	});
+	assert.equal(harness.sentMessages.length, 0);
+});
+
+void test("/plan-clear exits planning and detaches the current plan", async () => {
+	const homeDir = makeTempDir("nplan-runtime-home-clear-");
+	const cwd = makeTempDir("nplan-runtime-cwd-clear-");
+	process.env.HOME = homeDir;
+	const planPath = writePlanFile(homeDir, "clear-me");
+	const harness = createHarness(cwd);
+	appendPersistedPlanState(harness, {
+		phase: "planning",
+		attachedPlanPath: planPath,
+		savedState: {
+			activeTools: ["read", "bash", "edit", "write"],
+			thinkingLevel: "medium",
+		},
+		fullPromptShownInSession: true,
+	});
+	nplan(harness.api);
+
+	await harness.emit("session_start", { type: "session_start", reason: "resume" });
+	await harness.runCommand("plan-clear");
+
+	assert.deepEqual(getLastPlanState(harness), {
+		phase: "idle",
+		attachedPlanPath: null,
+		savedState: null,
+		fullPromptShownInSession: true,
+	});
+	assert.equal(harness.ui.editorText, undefined);
+	assert.equal(harness.sentMessages.length > 0, true);
+});

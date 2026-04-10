@@ -6,11 +6,11 @@ import { test } from "node:test";
 import {
 	getDefaultPlanPath,
 	getPersistedPlanState,
-	getPhaseNotification,
 	getPlanningToolBlockResult,
 	resolveGlobalPlanPath,
 	syncPlanningContextMessages,
 } from "../nplan-policy.ts";
+import { getPhaseNotification } from "../nplan-status.ts";
 import { formatPhaseWidgetLines } from "../nplan-widget.ts";
 
 function createUserMessage(content: string): {
