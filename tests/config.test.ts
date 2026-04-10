@@ -6,6 +6,7 @@ import { afterEach, test } from "node:test";
 import {
 	formatTodoList,
 	loadPlanConfig,
+	resolvePlanMarker,
 	renderTemplate,
 	resolvePlanTemplate,
 	resolvePhaseProfile,
@@ -241,6 +242,28 @@ void test("loadPlanConfig resolves explicit planTemplateFile paths from plan.jso
 
 	assert.deepEqual(loaded.warnings, []);
 	assert.equal(resolvePlanTemplate(loaded.config), "# Custom Template");
+});
+
+void test("loadPlanConfig resolves marker overrides from plan.json", () => {
+	const homeDir = makeTempDir("nplan-config-home-markers-");
+	const cwdDir = makeTempDir("nplan-config-cwd-markers-");
+	process.env.HOME = homeDir;
+
+	writeConfigPair({
+		homeDir,
+		cwdDir,
+		globalConfig: {},
+		projectConfig: {
+			markers: {
+				resumed: "Back in planning for ${planFilePath}.",
+			},
+		},
+	});
+
+	const loaded = loadPlanConfig(cwdDir);
+
+	assert.equal(resolvePlanMarker(loaded.config, "resumed"), "Back in planning for ${planFilePath}.");
+	assert.equal(resolvePlanMarker(loaded.config, "stopped"), "Planning disabled for ${planFilePath}.");
 });
 
 void test("loadPlanConfig warns when deprecated planning systemPrompt config is used", () => {
