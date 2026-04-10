@@ -47,10 +47,6 @@ Do not reintroduce vendored upstream extension code, git submodules, or a fork-s
 - Do not add new commands, flags, or review fallbacks unless explicitly requested.
 - If a change alters the planning contract, update or add tests against that interaction surface.
 
-## Workflow
-
-- Before handoff: Ensure `gate` is green.
-
 ## Decision Rule
 
 If code is about:
