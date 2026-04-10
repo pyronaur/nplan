@@ -4,29 +4,34 @@ Local Pi extension that provides file-based plan mode with CLI review.
 
 ## Goal
 
-Keep the current `nplan` interaction surface intact while removing the vendored upstream fork and git submodule:
+Keep the current local `nplan` interaction surface focused and explicit:
 
 - `/plan`
 - `/plan-status`
-- `/plan-file`
+- `/plan-clear`
 - `leader` then `p` when `pi-leader` is installed
 - `--plan`
-- `--plan-file`
 - global plan storage under `~/.n/pi/plans/`
 - restricted planning tools with `plan_submit`
 - editor-prefilled implementation handoff after approval
 
-The leader action uses the current remembered plan file. Set the plan once with `/plan-file`, then `leader` + `p` toggles plan mode on and off without prompting for the path again.
+`/plan <slug>` attaches or resumes `~/.n/pi/plans/<slug>.md`. Bare `/plan` or `pi-leader` follow-up `p` resumes the currently attached plan when one exists, otherwise it prompts for a slug. `/plan-clear` detaches the current plan and exits planning when necessary.
 
 ## Architecture
 
 `nplan` is now fully local code. There is no vendored upstream extension tree and no git submodule.
 
 - `index.ts` loads `nplan.ts`
-- `nplan.ts` owns the extension lifecycle, commands, flags, state restore, tool gating, and plan submission flow
-- `nplan-config.ts` owns config loading, phase profile resolution, bundled/default planning prompt loading, and prompt rendering
+- `nplan.ts` owns the extension lifecycle, commands, state restore, tool gating, and plan submission flow
+- `nplan-phase.ts` owns runtime phase state, prompt rendering inputs, and tool/model restore behavior
+- `nplan-config.ts` owns config loading, phase profile resolution, bundled/default planning prompt loading, scaffold loading, and marker resolution
+- `nplan-template.ts` owns `${...}` prompt/template interpolation
+- `nplan-events.ts` owns visible plan lifecycle message rendering
+- `nplan-status.ts` owns user-facing status text helpers
 - `nplan-policy.ts` owns global plan-path rules, planning context message shaping, planning tool restrictions, and phase UI rendering
 - `nplan-review.ts` owns the CLI review transport
+- `nplan-review-ui.ts` owns `plan_submit` review rendering and result patch helpers
+- `nplan-marker-config.ts` owns marker config normalization and merging
 - `nplan-tool-scope.ts` owns the planning tool surface
 - `nplan-feedback.ts` owns the plan-denial message template
 
@@ -36,6 +41,7 @@ Plan review is handled through the `plannotator` CLI.
 
 - while planning, the agent writes to the active global plan file
 - `plan_submit` reads that file and submits the plan body to `plannotator` on stdin
+- the `plan_submit` tool row itself is the single durable approval/rejection record; approvals render as success and denials render as failure without a duplicate follow-up message
 - CLI approval exits plan mode, restores normal access, and prefills the input editor with `Implement the plan @<absolute-plan-path>`
 - CLI denial returns revision feedback and keeps the extension in planning mode
 - when review is unavailable, `nplan` preserves the current auto-approve fallback behavior
@@ -58,10 +64,26 @@ Planning prompt resolution is file-backed and follows the same project-over-glob
 4. `~/.pi/agent/nplan/planning-prompt.md`
 5. bundled `prompts/planning-prompt.md`
 
+Plan scaffold resolution is also file-backed and follows the same precedence:
+
+1. `planTemplateFile` in `.pi/plan.json`
+2. `.pi/nplan/plan-template.md`
+3. `planTemplateFile` in `~/.pi/agent/plan.json`
+4. `~/.pi/agent/nplan/plan-template.md`
+5. bundled `prompts/plan-template.md`
+
+When a selected plan file does not exist yet, `nplan` creates it from that scaffold before planning begins.
+
+Lifecycle markers can be overridden in `plan.json` under `markers.resumed`, `markers.stopped`, and `markers.abandoned`. These strings support `${planFilePath}` interpolation.
+
 Example project config:
 
 ```json
 {
+  "planTemplateFile": "prompts/my-plan-template.md",
+  "markers": {
+    "resumed": "Back in planning for ${planFilePath}."
+  },
   "phases": {
     "planning": {
       "planningPromptFile": "prompts/my-planning-prompt.md"
@@ -103,7 +125,7 @@ npm test
 
 The test suite covers:
 
-- config merge, prompt rendering, and planning prompt file resolution behavior
+- config merge, prompt rendering, scaffold loading, and planning prompt file resolution behavior
 - planning tool scoping
-- global plan-path resolution, planning context shaping, and planning tool restrictions
-- CLI request/response handling through `plannotator`
+- global plan-path resolution, attached-plan command flows, planning context shaping, and planning tool restrictions
+- CLI request/response handling through `plannotator` and `plan_submit` result semantics
