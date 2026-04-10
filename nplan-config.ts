@@ -6,6 +6,13 @@ import { fileURLToPath } from "node:url";
 import { readJsonFile } from "./nplan-files.ts";
 import { isRecord, isThinkingLevel } from "./nplan-guards.ts";
 import { loadDefaultText, normalizeTextFile } from "./nplan-config-text.ts";
+import {
+	mergeMarkers,
+	normalizeMarkers,
+	type PlanMarkerName,
+	type PlanMarkersConfig,
+	resolvePlanMarkerTemplate,
+} from "./nplan-marker-config.ts";
 export type PhaseName = "planning" | "reviewing";
 export interface PhaseModelRef {
 	provider: string;
@@ -17,12 +24,6 @@ export interface PhaseProfile {
 	activeTools?: string[] | null;
 	statusLabel?: string | null;
 	planningPrompt?: string | null;
-}
-export type PlanMarkerName = "resumed" | "stopped" | "abandoned";
-export interface PlanMarkersConfig {
-	resumed?: string | null;
-	stopped?: string | null;
-	abandoned?: string | null;
 }
 export interface PlanConfig {
 	defaults?: PhaseProfile | null;
@@ -219,21 +220,6 @@ function normalizePlanTemplateFile(
 	});
 }
 
-function normalizeMarkers(value: unknown): PlanMarkersConfig | null | undefined {
-	if (value === null) {
-		return null;
-	}
-	if (!isRecord(value)) {
-		return undefined;
-	}
-
-	return {
-		resumed: normalizeOptionalString(value.resumed),
-		stopped: normalizeOptionalString(value.stopped),
-		abandoned: normalizeOptionalString(value.abandoned),
-	};
-}
-
 function cloneProfile(profile: PhaseProfile | null | undefined): PhaseProfile | null | undefined {
 	if (profile === null || profile === undefined) {
 		return profile;
@@ -241,24 +227,6 @@ function cloneProfile(profile: PhaseProfile | null | undefined): PhaseProfile | 
 	return {
 		...profile,
 		activeTools: profile.activeTools ? [...profile.activeTools] : profile.activeTools,
-	};
-}
-
-function mergeMarkers(
-	base: PlanMarkersConfig | null | undefined,
-	override: PlanMarkersConfig | null | undefined,
-): PlanMarkersConfig | null | undefined {
-	if (override === null) {
-		return null;
-	}
-	if (override === undefined) {
-		return base ? { ...base } : base;
-	}
-
-	return {
-		resumed: override.resumed !== undefined ? override.resumed : base?.resumed,
-		stopped: override.stopped !== undefined ? override.stopped : base?.stopped,
-		abandoned: override.abandoned !== undefined ? override.abandoned : base?.abandoned,
 	};
 }
 
@@ -336,29 +304,29 @@ function applyDefaultPlanTemplate(config: PlanConfig, template: string | undefin
 	};
 }
 
-function applyTopLevelConfig(
-	config: PlanConfig,
-	raw: Record<string, unknown> | undefined,
-	options: ConfigSourceOptions,
-	warnings: string[],
-): PlanConfig {
-	if (raw?.planTemplateFile !== undefined) {
-		config.planTemplate = normalizePlanTemplateFile(raw.planTemplateFile, {
-			baseDir: options.baseDir,
-			warnings,
-			keyPath: `${options.sourceName}.planTemplateFile`,
+function applyTopLevelConfig(input: {
+	config: PlanConfig;
+	raw: Record<string, unknown> | undefined;
+	options: ConfigSourceOptions;
+	warnings: string[];
+}): PlanConfig {
+	if (input.raw?.planTemplateFile !== undefined) {
+		input.config.planTemplate = normalizePlanTemplateFile(input.raw.planTemplateFile, {
+			baseDir: input.options.baseDir,
+			warnings: input.warnings,
+			keyPath: `${input.options.sourceName}.planTemplateFile`,
 		});
 	}
-	if (raw?.planTemplate !== undefined) {
-		warnings.push(
-			`${options.sourceName}.planTemplate: inline planTemplate is not supported; use planTemplateFile instead.`,
+	if (input.raw?.planTemplate !== undefined) {
+		input.warnings.push(
+			`${input.options.sourceName}.planTemplate: inline planTemplate is not supported; use planTemplateFile instead.`,
 		);
 	}
-	if (raw?.markers !== undefined) {
-		config.markers = normalizeMarkers(raw.markers);
+	if (input.raw?.markers !== undefined) {
+		input.config.markers = normalizeMarkers(input.raw.markers, normalizeOptionalString);
 	}
 
-	return config;
+	return input.config;
 }
 
 function loadConfigSource(options: ConfigSourceOptions): LoadedPlanConfig {
@@ -394,7 +362,7 @@ function loadConfigSource(options: ConfigSourceOptions): LoadedPlanConfig {
 			config.phases = phases;
 		}
 	}
- 	config = applyTopLevelConfig(config, raw, options, warnings);
+	config = applyTopLevelConfig({ config, raw, options, warnings });
 
 	config = applyDefaultPlanningPrompt(
 		config,
@@ -503,9 +471,9 @@ export function resolvePlanMarker(
 	config: PlanConfig,
 	name: PlanMarkerName,
 ): string | undefined {
-	return resolveString(undefined, config.markers?.[name]);
+	return resolvePlanMarkerTemplate(config.markers, name, resolveString);
 }
 
 export { formatTodoList } from "./nplan-todo.ts";
 export { buildPromptVariables, renderTemplate } from "./nplan-template.ts";
-export type { PromptRenderResult, PromptVariables, RuntimePhase } from "./nplan-template.ts";
+export type { PlanMarkerName, PlanMarkersConfig } from "./nplan-marker-config.ts";
