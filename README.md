@@ -27,6 +27,7 @@ Keep the current local `nplan` interaction surface focused and explicit:
 - `nplan-config.ts` owns config loading, phase profile resolution, bundled/default planning prompt loading, scaffold loading, and marker resolution
 - `nplan-template.ts` owns `${...}` prompt/template interpolation
 - `nplan-events.ts` owns plan-mode transcript message rendering
+- `nplan-turn-messages.ts` owns turn-time lifecycle message sequencing between delivered plan state and current runtime state
 - `nplan-status.ts` owns user-facing status text helpers
 - `nplan-policy.ts` owns global plan-path rules, planning context message shaping, planning tool restrictions, and phase UI rendering
 - `nplan-review.ts` owns the CLI review transport
@@ -46,7 +47,7 @@ Plan review is handled through the `plannotator` CLI.
 - CLI denial returns revision feedback and keeps the extension in planning mode
 - when review is unavailable, `nplan` preserves the current auto-approve fallback behavior
 
-Plan-mode toggles update the live footer/widget UI and persisted plan state without appending visible transcript messages on their own. Real submitted turns render the plan context the agent actually receives: planning turns append one visible collapsed `Plan Mode: Started ...` or `Plan Mode: Resumed ...` row with the planning prompt behind `Ctrl+O`, and the first idle turn after stopping or detaching a delivered plan appends the corresponding `Stopped` or `Abandoned` row. The `plan_submit` tool row remains the only durable approval or rejection transcript record.
+Plan-mode toggles update the live footer/widget UI and persisted plan state without appending visible transcript messages on their own. The next real submitted turn emits the minimal lifecycle history needed to match what the agent now receives: first planning starts render `Plan Mode: Started ...` with the full planning prompt behind `Ctrl+O`, re-entry and stop/detach flows render the smaller `Resumed`, `Stopped`, and `Abandoned` markers, and plan switches can emit `Abandoned <old>` followed by `Started` or `Resumed <new>` on that same turn. The `plan_submit` tool row remains the only durable approval or rejection transcript record.
 
 ## Config
 

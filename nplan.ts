@@ -51,7 +51,6 @@ import {
 type PiLeaderOpenEvent = {
 	add: (key: string, label: string, run: () => void | Promise<void>) => void;
 };
-
 type PlanningEntryKind = Extract<PlanEventKind, "started" | "resumed">;
 
 function isPiLeaderOpenEvent(event: unknown): event is PiLeaderOpenEvent {
@@ -83,6 +82,14 @@ async function enterPlanning(
 	ctx: ExtensionContext,
 	entryKind: PlanningEntryKind,
 ): Promise<void> {
+	if (entryKind === "started") {
+		runtime.undeliveredStartedPlanPath = getCurrentPlanPath(runtime);
+	}
+	if (
+		entryKind === "resumed" && runtime.undeliveredStartedPlanPath !== getCurrentPlanPath(runtime)
+	) {
+		runtime.undeliveredStartedPlanPath = null;
+	}
 	runtime.phase = "planning";
 	ensureAttachedPlanFile(runtime);
 	captureSavedState(runtime, ctx);

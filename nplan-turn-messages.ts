@@ -9,7 +9,12 @@ import {
 } from "./nplan-phase.ts";
 
 type PlanningEntryKind = Extract<PlanEventKind, "started" | "resumed">;
-type IdleEntryKind = Extract<PlanEventKind, "stopped" | "abandoned">;
+type PlanTurnEvent = { kind: PlanEventKind; planFilePath: string };
+
+type DeliveredPlanState = {
+	phase: "idle" | "planning";
+	attachedPlanPath: string | null;
+};
 
 function getPlanEventBody(
 	runtime: Runtime,
@@ -24,16 +29,119 @@ function getPlanEventBody(
 	return marker.replaceAll("${planFilePath}", planFilePath);
 }
 
-export function clearPlanTurnMessage(runtime: Runtime): void {
+function clearPendingEvent(runtime: Runtime): void {
 	runtime.pendingPlanEvent = null;
-	runtime.showPlanEventThisTurn = false;
 }
 
-export function queuePlanTurnMessage(
+function getDeliveredPlanState(runtime: Runtime): DeliveredPlanState {
+	if (runtime.phase !== "planning") {
+		return {
+			phase: "idle",
+			attachedPlanPath: runtime.attachedPlanPath,
+		};
+	}
+
+	return {
+		phase: "planning",
+		attachedPlanPath: getCurrentPlanPath(runtime),
+	};
+}
+
+function getPlanningEntryKind(runtime: Runtime, planFilePath: string): PlanningEntryKind {
+	if (runtime.undeliveredStartedPlanPath === planFilePath) {
+		return "started";
+	}
+
+	return "resumed";
+}
+
+function getTurnEvents(runtime: Runtime): PlanTurnEvent[] {
+	const current = getDeliveredPlanState(runtime);
+	const last = runtime.lastDeliveredPlanState;
+	if (current.phase === "planning") {
+		const planFilePath = current.attachedPlanPath;
+		if (!planFilePath) {
+			return [];
+		}
+
+		const events: PlanTurnEvent[] = [];
+		if (last.attachedPlanPath && last.attachedPlanPath !== planFilePath) {
+			events.push({ kind: "abandoned", planFilePath: last.attachedPlanPath });
+		}
+		if (last.phase === "planning" && last.attachedPlanPath === planFilePath) {
+			return events;
+		}
+
+		events.push({ kind: getPlanningEntryKind(runtime, planFilePath), planFilePath });
+		return events;
+	}
+
+	if (!last.attachedPlanPath) {
+		return [];
+	}
+	if (current.attachedPlanPath === null) {
+		return [{ kind: "abandoned", planFilePath: last.attachedPlanPath }];
+	}
+	if (last.phase === "planning" && last.attachedPlanPath === current.attachedPlanPath) {
+		return [{ kind: "stopped", planFilePath: current.attachedPlanPath }];
+	}
+	if (current.attachedPlanPath !== last.attachedPlanPath) {
+		return [{ kind: "abandoned", planFilePath: last.attachedPlanPath }];
+	}
+
+	return [];
+}
+
+function createTurnMessage(
 	runtime: Runtime,
-	event: { kind: PlanEventKind; planFilePath: string } | null,
+	ctx: ExtensionContext,
+	event: PlanTurnEvent,
+): ReturnType<typeof createPlanEventMessage> {
+	if (event.kind === "started") {
+		const body = !runtime.fullPromptShownInSession ? renderPlanningPrompt(runtime, ctx) ?? "" : "";
+		return createPlanEventMessage(runtime.planEvents, {
+			kind: event.kind,
+			planFilePath: event.planFilePath,
+			body,
+		});
+	}
+
+	return createPlanEventMessage(runtime.planEvents, {
+		kind: event.kind,
+		planFilePath: event.planFilePath,
+		body: getPlanEventBody(runtime, event.kind, event.planFilePath),
+	});
+}
+
+function sendEarlierTurnMessages(
+	runtime: Runtime,
+	messages: Array<ReturnType<typeof createPlanEventMessage>>,
 ): void {
-	runtime.pendingPlanEvent = event;
+	for (const message of messages) {
+		runtime.pi.sendMessage(message, { triggerTurn: false });
+	}
+}
+
+function finalizeDeliveredTurnState(runtime: Runtime, current: DeliveredPlanState): void {
+	clearPendingEvent(runtime);
+	runtime.showPlanEventThisTurn = true;
+	runtime.lastDeliveredPlanState = current;
+	if (runtime.phase !== "planning") {
+		return;
+	}
+
+	const planFilePath = current.attachedPlanPath;
+	if (runtime.undeliveredStartedPlanPath === planFilePath) {
+		runtime.undeliveredStartedPlanPath = null;
+	}
+	if (!runtime.fullPromptShownInSession) {
+		runtime.fullPromptShownInSession = true;
+		persistState(runtime);
+	}
+}
+
+export function clearPlanTurnMessage(runtime: Runtime): void {
+	clearPendingEvent(runtime);
 	runtime.showPlanEventThisTurn = false;
 }
 
@@ -42,96 +150,39 @@ export function queuePlanningTurnMessage(
 	kind: PlanningEntryKind,
 	planFilePath: string,
 ): void {
-	const nextKind = runtime.undeliveredStartedPlanPath === planFilePath ? "started" : kind;
-	if (
-		runtime.lastDeliveredPlanState.phase === "planning"
-		&& runtime.lastDeliveredPlanState.attachedPlanPath === planFilePath
-	) {
-		clearPlanTurnMessage(runtime);
-		return;
-	}
-
-	queuePlanTurnMessage(runtime, { kind: nextKind, planFilePath });
+	void kind;
+	void planFilePath;
+	clearPlanTurnMessage(runtime);
 }
 
 export function queueIdleTurnMessage(
 	runtime: Runtime,
-	kind: IdleEntryKind,
+	kind: Extract<PlanEventKind, "stopped" | "abandoned">,
 	planFilePath: string,
 ): void {
-	if (kind === "stopped") {
-		if (
-			runtime.lastDeliveredPlanState.phase !== "planning"
-			|| runtime.lastDeliveredPlanState.attachedPlanPath !== planFilePath
-		) {
-			clearPlanTurnMessage(runtime);
-			return;
-		}
-		queuePlanTurnMessage(runtime, { kind, planFilePath });
-		return;
-	}
-
-	if (runtime.lastDeliveredPlanState.attachedPlanPath !== planFilePath) {
-		clearPlanTurnMessage(runtime);
-		return;
-	}
-
-	queuePlanTurnMessage(runtime, { kind, planFilePath });
+	void kind;
+	void planFilePath;
+	clearPlanTurnMessage(runtime);
 }
 
 export function buildPlanTurnMessage(
 	runtime: Runtime,
 	ctx: ExtensionContext,
 ): { message: ReturnType<typeof createPlanEventMessage> } | undefined {
-	if (runtime.phase !== "planning" && !runtime.pendingPlanEvent) {
+	const current = getDeliveredPlanState(runtime);
+	const events = getTurnEvents(runtime);
+	if (events.length === 0) {
+		clearPendingEvent(runtime);
 		return undefined;
 	}
 
-	if (runtime.phase === "planning") {
-		const pending = runtime.pendingPlanEvent;
-		const kind = pending?.kind === "started" || pending?.kind === "resumed"
-			? pending.kind
-			: "resumed";
-		const planFilePath = getCurrentPlanPath(runtime);
-		const body = renderPlanningPrompt(runtime, ctx) ?? "";
-
-		clearPlanTurnMessage(runtime);
-		runtime.showPlanEventThisTurn = true;
-		runtime.lastDeliveredPlanState = { phase: "planning", attachedPlanPath: planFilePath };
-		if (runtime.undeliveredStartedPlanPath === planFilePath) {
-			runtime.undeliveredStartedPlanPath = null;
-		}
-		if (!runtime.fullPromptShownInSession) {
-			runtime.fullPromptShownInSession = true;
-			persistState(runtime);
-		}
-
-		return {
-			message: createPlanEventMessage(runtime.planEvents, {
-				kind,
-				planFilePath,
-				body,
-			}),
-		};
-	}
-
-	const pending = runtime.pendingPlanEvent;
-	if (!pending) {
+	const messages = events.map((event) => createTurnMessage(runtime, ctx, event));
+	sendEarlierTurnMessages(runtime, messages.slice(0, -1));
+	finalizeDeliveredTurnState(runtime, current);
+	const message = messages.at(-1);
+	if (!message) {
 		return undefined;
 	}
 
-	clearPlanTurnMessage(runtime);
-	runtime.showPlanEventThisTurn = true;
-	runtime.lastDeliveredPlanState = pending.kind === "abandoned"
-		? { phase: "idle", attachedPlanPath: null }
-		: { phase: "idle", attachedPlanPath: pending.planFilePath };
-	const bodyKind = pending.kind === "started" ? "resumed" : pending.kind;
-
-	return {
-		message: createPlanEventMessage(runtime.planEvents, {
-			kind: pending.kind,
-			planFilePath: pending.planFilePath,
-			body: getPlanEventBody(runtime, bodyKind, pending.planFilePath),
-		}),
-	};
+	return { message };
 }
