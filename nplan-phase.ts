@@ -1,9 +1,8 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { buildPromptVariables, renderTemplate } from "./nplan-template.ts";
 import {
 	type PlanConfig,
-	resolvePlanTemplate,
 	resolvePhaseProfile,
+	resolvePlanTemplate,
 } from "./nplan-config.ts";
 import {
 	clearPhaseStatus,
@@ -11,7 +10,8 @@ import {
 	renderPhaseWidget,
 	type SavedPhaseState,
 } from "./nplan-policy.ts";
-import { type Phase, getToolsForPhase, stripPlanningOnlyTools } from "./nplan-tool-scope.ts";
+import { buildPromptVariables, renderTemplate } from "./nplan-template.ts";
+import { getToolsForPhase, type Phase, stripPlanningOnlyTools } from "./nplan-tool-scope.ts";
 
 export type Runtime = {
 	pi: ExtensionAPI;

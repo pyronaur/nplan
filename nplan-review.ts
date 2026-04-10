@@ -5,9 +5,9 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { planDenyFeedback } from "./nplan-feedback.ts";
 import {
+	type PlanSubmitDetails,
 	renderPlanSubmitCall,
 	renderPlanSubmitResult,
-	type PlanSubmitDetails,
 } from "./nplan-review-ui.ts";
 import { PLAN_SUBMIT_TOOL } from "./nplan-tool-scope.ts";
 

@@ -45,7 +45,10 @@ export function mergeMarkers(
 export function resolvePlanMarkerTemplate(
 	markers: PlanMarkersConfig | null | undefined,
 	name: PlanMarkerName,
-	resolveString: (base: string | null | undefined, override: string | null | undefined) => string | undefined,
+	resolveString: (
+		base: string | null | undefined,
+		override: string | null | undefined,
+	) => string | undefined,
 ): string | undefined {
 	return resolveString(undefined, markers?.[name]);
 }

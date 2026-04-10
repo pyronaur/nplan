@@ -17,8 +17,8 @@ import {
 	persistState,
 	renderPlanningPrompt,
 	restoreSavedState,
-	syncSessionPhase,
 	type Runtime,
+	syncSessionPhase,
 	updateUi,
 } from "./nplan-phase.ts";
 import {
@@ -30,12 +30,12 @@ import {
 	shouldKeepContextMessage,
 	syncPlanningContextMessages,
 } from "./nplan-policy.ts";
+import { patchPlanSubmitResult } from "./nplan-review-ui.ts";
 import {
 	createPlanSubmitTool,
 	getImplementationHandoffText,
 	getPlanReviewAvailabilityWarning,
 } from "./nplan-review.ts";
-import { patchPlanSubmitResult } from "./nplan-review-ui.ts";
 import { getPlanStatusLines } from "./nplan-status.ts";
 
 type PiLeaderAdd = (key: string, label: string, run: () => void | Promise<void>) => void;
@@ -114,7 +114,8 @@ function getPlanEventBody(
 }
 
 function ensureAttachedPlanFile(runtime: Runtime): void {
-	ensureTextFile(getCurrentPlanPath(runtime), resolvePlanTemplate(runtime.planConfig) ?? "# Plan\n");
+	ensureTextFile(getCurrentPlanPath(runtime),
+		resolvePlanTemplate(runtime.planConfig) ?? "# Plan\n");
 }
 
 async function enterPlanning(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
@@ -132,7 +133,7 @@ async function enterPlanning(runtime: Runtime, ctx: ExtensionContext): Promise<v
 		planFilePath,
 		body: firstPrompt
 			? planningPrompt ?? `Planning started for ${planFilePath}.`
-				: getPlanEventBody(runtime, "resumed", planFilePath),
+			: getPlanEventBody(runtime, "resumed", planFilePath),
 	});
 	notifyReviewAvailability(ctx);
 }

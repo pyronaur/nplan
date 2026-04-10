@@ -4,17 +4,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
 import {
+	getPlanSubmitCallText,
+	getPlanSubmitResultText,
+	patchPlanSubmitResult,
+} from "../nplan-review-ui.ts";
+import {
 	buildPlannotatorRequest,
 	getImplementationHandoffText,
 	parsePlannotatorReviewResult,
 	resetPlannotatorCliAvailabilityCache,
 	runPlanReviewCli,
 } from "../nplan-review.ts";
-import {
-	getPlanSubmitCallText,
-	getPlanSubmitResultText,
-	patchPlanSubmitResult,
-} from "../nplan-review-ui.ts";
 
 const originalPath = process.env.PATH;
 

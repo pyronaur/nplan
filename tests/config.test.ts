@@ -1,25 +1,17 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { afterEach, test } from "node:test";
 import {
 	formatTodoList,
 	loadPlanConfig,
-	resolvePlanMarker,
 	renderTemplate,
-	resolvePlanTemplate,
 	resolvePhaseProfile,
+	resolvePlanMarker,
+	resolvePlanTemplate,
 } from "../nplan-config.ts";
-
-const tempDirs: string[] = [];
-const originalHome = process.env.HOME;
-
-function makeTempDir(prefix: string): string {
-	const dir = mkdtempSync(join(tmpdir(), prefix));
-	tempDirs.push(dir);
-	return dir;
-}
+import { createTempTracker } from "./test-temp.ts";
+const temp = createTempTracker();
 
 function writeConfigPair(input: {
 	homeDir: string;
@@ -41,21 +33,12 @@ function writeTextFile(path: string, content: string): void {
 }
 
 afterEach(() => {
-	if (originalHome === undefined) {
-		delete process.env.HOME;
-	}
-	if (originalHome !== undefined) {
-		process.env.HOME = originalHome;
-	}
-
-	for (const dir of tempDirs.splice(0)) {
-		rmSync(dir, { recursive: true, force: true });
-	}
+	temp.cleanup();
 });
 
 void test("loadPlanConfig loads the shipped internal base config", () => {
-	const cwdDir = makeTempDir("nplan-config-base-");
-	process.env.HOME = makeTempDir("nplan-config-home-base-");
+	const cwdDir = temp.makeTempDir("nplan-config-base-");
+	process.env.HOME = temp.makeTempDir("nplan-config-home-base-");
 
 	const loaded = loadPlanConfig(cwdDir);
 	const planning = resolvePhaseProfile(loaded.config, "planning");
@@ -68,8 +51,8 @@ void test("loadPlanConfig loads the shipped internal base config", () => {
 });
 
 void test("loadPlanConfig allows a project config to clear an inherited phase with null", () => {
-	const homeDir = makeTempDir("nplan-config-home-null-");
-	const cwdDir = makeTempDir("nplan-config-cwd-null-");
+	const homeDir = temp.makeTempDir("nplan-config-home-null-");
+	const cwdDir = temp.makeTempDir("nplan-config-cwd-null-");
 	process.env.HOME = homeDir;
 
 	writeConfigPair({
@@ -92,8 +75,8 @@ void test("loadPlanConfig allows a project config to clear an inherited phase wi
 });
 
 void test("loadPlanConfig gives project config precedence over global config", () => {
-	const homeDir = makeTempDir("nplan-config-home-");
-	const cwdDir = makeTempDir("nplan-config-cwd-");
+	const homeDir = temp.makeTempDir("nplan-config-home-");
+	const cwdDir = temp.makeTempDir("nplan-config-cwd-");
 	process.env.HOME = homeDir;
 
 	writeConfigPair({
@@ -151,8 +134,8 @@ void test("resolvePhaseProfile keeps defaults when a phase is cleared with null"
 });
 
 void test("loadPlanConfig loads project conventional planning prompt files before global files", () => {
-	const homeDir = makeTempDir("nplan-config-home-prompt-files-");
-	const cwdDir = makeTempDir("nplan-config-cwd-prompt-files-");
+	const homeDir = temp.makeTempDir("nplan-config-home-prompt-files-");
+	const cwdDir = temp.makeTempDir("nplan-config-cwd-prompt-files-");
 	process.env.HOME = homeDir;
 
 	writeConfigPair({
@@ -178,8 +161,8 @@ void test("loadPlanConfig loads project conventional planning prompt files befor
 });
 
 void test("loadPlanConfig resolves explicit planningPromptFile paths from plan.json", () => {
-	const homeDir = makeTempDir("nplan-config-home-explicit-prompt-");
-	const cwdDir = makeTempDir("nplan-config-cwd-explicit-prompt-");
+	const homeDir = temp.makeTempDir("nplan-config-home-explicit-prompt-");
+	const cwdDir = temp.makeTempDir("nplan-config-cwd-explicit-prompt-");
 	process.env.HOME = homeDir;
 
 	writeConfigPair({
@@ -204,8 +187,8 @@ void test("loadPlanConfig resolves explicit planningPromptFile paths from plan.j
 });
 
 void test("loadPlanConfig resolves conventional plan template files before global files", () => {
-	const homeDir = makeTempDir("nplan-config-home-template-files-");
-	const cwdDir = makeTempDir("nplan-config-cwd-template-files-");
+	const homeDir = temp.makeTempDir("nplan-config-home-template-files-");
+	const cwdDir = temp.makeTempDir("nplan-config-cwd-template-files-");
 	process.env.HOME = homeDir;
 
 	writeConfigPair({
@@ -224,8 +207,8 @@ void test("loadPlanConfig resolves conventional plan template files before globa
 });
 
 void test("loadPlanConfig resolves explicit planTemplateFile paths from plan.json", () => {
-	const homeDir = makeTempDir("nplan-config-home-explicit-template-");
-	const cwdDir = makeTempDir("nplan-config-cwd-explicit-template-");
+	const homeDir = temp.makeTempDir("nplan-config-home-explicit-template-");
+	const cwdDir = temp.makeTempDir("nplan-config-cwd-explicit-template-");
 	process.env.HOME = homeDir;
 
 	writeConfigPair({
@@ -245,8 +228,8 @@ void test("loadPlanConfig resolves explicit planTemplateFile paths from plan.jso
 });
 
 void test("loadPlanConfig resolves marker overrides from plan.json", () => {
-	const homeDir = makeTempDir("nplan-config-home-markers-");
-	const cwdDir = makeTempDir("nplan-config-cwd-markers-");
+	const homeDir = temp.makeTempDir("nplan-config-home-markers-");
+	const cwdDir = temp.makeTempDir("nplan-config-cwd-markers-");
 	process.env.HOME = homeDir;
 
 	writeConfigPair({
@@ -262,13 +245,15 @@ void test("loadPlanConfig resolves marker overrides from plan.json", () => {
 
 	const loaded = loadPlanConfig(cwdDir);
 
-	assert.equal(resolvePlanMarker(loaded.config, "resumed"), "Back in planning for ${planFilePath}.");
-	assert.equal(resolvePlanMarker(loaded.config, "stopped"), "Planning disabled for ${planFilePath}.");
+	assert.equal(resolvePlanMarker(loaded.config, "resumed"),
+		"Back in planning for ${planFilePath}.");
+	assert.equal(resolvePlanMarker(loaded.config, "stopped"),
+		"Planning disabled for ${planFilePath}.");
 });
 
 void test("loadPlanConfig warns when deprecated planning systemPrompt config is used", () => {
-	const homeDir = makeTempDir("nplan-config-home-system-prompt-");
-	const cwdDir = makeTempDir("nplan-config-cwd-system-prompt-");
+	const homeDir = temp.makeTempDir("nplan-config-home-system-prompt-");
+	const cwdDir = temp.makeTempDir("nplan-config-cwd-system-prompt-");
 	process.env.HOME = homeDir;
 
 	writeConfigPair({

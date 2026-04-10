@@ -3,9 +3,9 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadDefaultText, normalizeTextFile } from "./nplan-config-text.ts";
 import { readJsonFile } from "./nplan-files.ts";
 import { isRecord, isThinkingLevel } from "./nplan-guards.ts";
-import { loadDefaultText, normalizeTextFile } from "./nplan-config-text.ts";
 import {
 	mergeMarkers,
 	normalizeMarkers,
@@ -160,10 +160,18 @@ function normalizePlanningPromptFile(
 	value: unknown,
 	options: { baseDir: string; warnings: string[]; keyPath: string },
 ): string | null | undefined {
+	return normalizeConfigTextFile(value, options, "prompt file not found");
+}
+
+function normalizeConfigTextFile(
+	value: unknown,
+	options: { baseDir: string; warnings: string[]; keyPath: string },
+	missingLabel: string,
+): string | null | undefined {
 	const trimmed = normalizeOptionalString(value);
 	return normalizeTextFile(trimmed, {
 		...options,
-		missingLabel: "prompt file not found",
+		missingLabel,
 	});
 }
 
@@ -213,11 +221,7 @@ function normalizePlanTemplateFile(
 	value: unknown,
 	options: { baseDir: string; warnings: string[]; keyPath: string },
 ): string | null | undefined {
-	const trimmed = normalizeOptionalString(value);
-	return normalizeTextFile(trimmed, {
-		...options,
-		missingLabel: "plan template file not found",
-	});
+	return normalizeConfigTextFile(value, options, "plan template file not found");
 }
 
 function cloneProfile(profile: PhaseProfile | null | undefined): PhaseProfile | null | undefined {
@@ -474,6 +478,6 @@ export function resolvePlanMarker(
 	return resolvePlanMarkerTemplate(config.markers, name, resolveString);
 }
 
-export { formatTodoList } from "./nplan-todo.ts";
-export { buildPromptVariables, renderTemplate } from "./nplan-template.ts";
 export type { PlanMarkerName, PlanMarkersConfig } from "./nplan-marker-config.ts";
+export { buildPromptVariables, renderTemplate } from "./nplan-template.ts";
+export { formatTodoList } from "./nplan-todo.ts";

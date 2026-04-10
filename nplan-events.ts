@@ -14,7 +14,9 @@ function isPlanEventDetails(value: unknown): value is PlanEventDetails {
 	if (!value || typeof value !== "object" || Array.isArray(value)) {
 		return false;
 	}
-	if (!("kind" in value) || !("planFilePath" in value) || !("title" in value) || !("body" in value)) {
+	if (
+		!("kind" in value) || !("planFilePath" in value) || !("title" in value) || !("body" in value)
+	) {
 		return false;
 	}
 
@@ -35,7 +37,8 @@ function getHeaderColor(kind: PlanEventKind): "accent" | "warning" | "success" {
 export function registerPlanEventRenderer(pi: ExtensionAPI): void {
 	pi.registerMessageRenderer("plan-event", (message, { expanded }, theme) => {
 		const details = isPlanEventDetails(message.details) ? message.details : undefined;
-		const title = details?.title ?? (typeof message.content === "string" ? message.content : "Plan event");
+		const title = details?.title
+			?? (typeof message.content === "string" ? message.content : "Plan event");
 		let text = theme.fg(getHeaderColor(details?.kind ?? "started"), theme.bold(title));
 		if (expanded && details?.body) {
 			text += `\n\n${details.body}`;

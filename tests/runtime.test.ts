@@ -1,11 +1,11 @@
-import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, test } from "node:test";
 import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import assert from "node:assert/strict";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { afterEach, test } from "node:test";
 import nplan from "../nplan.ts";
+import { createTempTracker } from "./test-temp.ts";
 
 type NotificationCall = { message: string; type?: "info" | "warning" | "error" };
 
@@ -21,15 +21,7 @@ type UiState = {
 };
 
 type Harness = ReturnType<typeof createHarness>;
-
-const originalHome = process.env.HOME;
-const tempDirs: string[] = [];
-
-function makeTempDir(prefix: string): string {
-	const dir = mkdtempSync(join(tmpdir(), prefix));
-	tempDirs.push(dir);
-	return dir;
-}
+const temp = createTempTracker();
 
 function writePlanFile(homeDir: string, slug: string, content = "# Plan\n"): string {
 	const planPath = join(homeDir, ".n", "pi", "plans", `${slug}.md`);
@@ -343,20 +335,11 @@ function getLastMessageContent(harness: Harness): string {
 }
 
 afterEach(() => {
-	if (originalHome === undefined) {
-		delete process.env.HOME;
-	}
-	if (originalHome !== undefined) {
-		process.env.HOME = originalHome;
-	}
-
-	for (const dir of tempDirs.splice(0)) {
-		rmSync(dir, { recursive: true, force: true });
-	}
+	temp.cleanup();
 });
 
 void test("registers plan-clear and removes the legacy plan-file command", () => {
-	const harness = createHarness(makeTempDir("nplan-runtime-cwd-register-"));
+	const harness = createHarness(temp.makeTempDir("nplan-runtime-cwd-register-"));
 	nplan(harness.api);
 
 	assert.ok(harness.commands.has("plan"));
@@ -368,8 +351,8 @@ void test("registers plan-clear and removes the legacy plan-file command", () =>
 });
 
 void test("/plan with a new slug attaches the normalized plan path and enters planning", async () => {
-	const homeDir = makeTempDir("nplan-runtime-home-new-");
-	const cwd = makeTempDir("nplan-runtime-cwd-new-");
+	const homeDir = temp.makeTempDir("nplan-runtime-home-new-");
+	const cwd = temp.makeTempDir("nplan-runtime-cwd-new-");
 	process.env.HOME = homeDir;
 	const harness = createHarness(cwd);
 	nplan(harness.api);
@@ -395,8 +378,8 @@ void test("/plan with a new slug attaches the normalized plan path and enters pl
 });
 
 void test("bare /plan resumes the attached plan without prompting for a slug", async () => {
-	const homeDir = makeTempDir("nplan-runtime-home-resume-");
-	const cwd = makeTempDir("nplan-runtime-cwd-resume-");
+	const homeDir = temp.makeTempDir("nplan-runtime-home-resume-");
+	const cwd = temp.makeTempDir("nplan-runtime-cwd-resume-");
 	process.env.HOME = homeDir;
 	const planPath = writePlanFile(homeDir, "resume-me");
 	const harness = createHarness(cwd);
@@ -427,8 +410,8 @@ void test("bare /plan resumes the attached plan without prompting for a slug", a
 });
 
 void test("/plan asks to resume a foreign existing plan and cancels when declined", async () => {
-	const homeDir = makeTempDir("nplan-runtime-home-foreign-");
-	const cwd = makeTempDir("nplan-runtime-cwd-foreign-");
+	const homeDir = temp.makeTempDir("nplan-runtime-home-foreign-");
+	const cwd = temp.makeTempDir("nplan-runtime-cwd-foreign-");
 	process.env.HOME = homeDir;
 	writePlanFile(homeDir, "existing-plan");
 	const harness = createHarness(cwd);
@@ -449,8 +432,8 @@ void test("/plan asks to resume a foreign existing plan and cancels when decline
 });
 
 void test("/plan-clear exits planning and detaches the current plan", async () => {
-	const homeDir = makeTempDir("nplan-runtime-home-clear-");
-	const cwd = makeTempDir("nplan-runtime-cwd-clear-");
+	const homeDir = temp.makeTempDir("nplan-runtime-home-clear-");
+	const cwd = temp.makeTempDir("nplan-runtime-cwd-clear-");
 	process.env.HOME = homeDir;
 	const planPath = writePlanFile(homeDir, "clear-me");
 	const harness = createHarness(cwd);
@@ -479,8 +462,8 @@ void test("/plan-clear exits planning and detaches the current plan", async () =
 });
 
 void test("/plan creates a missing plan file from the configured scaffold before planning starts", async () => {
-	const homeDir = makeTempDir("nplan-runtime-home-template-");
-	const cwd = makeTempDir("nplan-runtime-cwd-template-");
+	const homeDir = temp.makeTempDir("nplan-runtime-home-template-");
+	const cwd = temp.makeTempDir("nplan-runtime-cwd-template-");
 	process.env.HOME = homeDir;
 	mkdirSync(join(cwd, ".pi", "nplan"), { recursive: true });
 	writeFileSync(join(cwd, ".pi", "nplan", "plan-template.md"), "# Custom Template\n", "utf-8");
