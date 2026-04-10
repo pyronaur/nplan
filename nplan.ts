@@ -44,6 +44,7 @@ import {
 	getPlanReviewAvailabilityWarning,
 } from "./nplan-review.ts";
 import { getPlanStatusLines } from "./nplan-status.ts";
+import { registerSubmitInterceptor } from "./nplan-submit-interceptor.ts";
 import { buildPlanTurnMessage } from "./nplan-turn-messages.ts";
 
 type PiLeaderOpenEvent = {
@@ -385,6 +386,11 @@ function registerContextHandler(runtime: Runtime): void {
 
 function registerBeforeAgentStartHandler(runtime: Runtime): void {
 	runtime.pi.on("before_agent_start", async (_event, ctx) => {
+		if (runtime.skipNextBeforeAgentPlanMessage) {
+			runtime.skipNextBeforeAgentPlanMessage = false;
+			return undefined;
+		}
+
 		return buildPlanTurnMessage(runtime, ctx);
 	});
 }
@@ -470,6 +476,7 @@ export default function nplan(pi: ExtensionAPI): void {
 	registerToolCallHandler(runtime);
 	registerToolResultHandler(runtime);
 	registerBeforeAgentStartHandler(runtime);
+	registerSubmitInterceptor(runtime);
 	registerContextHandler(runtime);
 	registerSessionStartHandler(runtime);
 	registerLeaderHandler(runtime);

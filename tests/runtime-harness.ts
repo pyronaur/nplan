@@ -1,6 +1,12 @@
 import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { join } from "node:path";
+import {
+	appendCustomEntry,
+	appendUserMessageEntry,
+	getReturnedMessage,
+	statefulPushMessage,
+} from "./runtime-session.ts";
 
 type NotificationCall = { message: string; type?: "info" | "warning" | "error" };
 
@@ -13,6 +19,7 @@ type UiState = {
 	statuses: Map<string, string | undefined>;
 	widgets: Map<string, unknown>;
 	editorText: string | undefined;
+	terminalInputListeners: Array<(data: string) => { consume?: boolean; data?: string } | undefined>;
 };
 
 function createTheme() {
@@ -44,6 +51,7 @@ function createUiState(): UiState {
 		statuses: new Map<string, string | undefined>(),
 		widgets: new Map<string, unknown>(),
 		editorText: undefined,
+		terminalInputListeners: [],
 	};
 }
 
@@ -65,8 +73,14 @@ function createUiApi(state: UiState) {
 		notify(message: string, type?: "info" | "warning" | "error") {
 			state.notifications.push({ message, type });
 		},
-		onTerminalInput() {
-			return () => {};
+		onTerminalInput(handler: (data: string) => { consume?: boolean; data?: string } | undefined) {
+			state.terminalInputListeners.push(handler);
+			return () => {
+				const index = state.terminalInputListeners.indexOf(handler);
+				if (index >= 0) {
+					state.terminalInputListeners.splice(index, 1);
+				}
+			};
 		},
 		setStatus(key: string, text: string | undefined) {
 			state.statuses.set(key, text);
@@ -164,45 +178,6 @@ function addEventHandler(
 	eventHandlers.set(name, handlers);
 }
 
-function appendCustomEntry(
-	input: {
-		entries: Array<Record<string, unknown>>;
-		entryCount: { current: number };
-		customType: string;
-		data?: unknown;
-	},
-): void {
-	input.entryCount.current += 1;
-	input.entries.push({
-		type: "custom",
-		customType: input.customType,
-		data: input.data,
-		id: `entry-${input.entryCount.current}`,
-		parentId: null,
-		timestamp: new Date(0).toISOString(),
-	});
-}
-
-function appendCustomMessageEntry(
-	input: {
-		entries: Array<Record<string, unknown>>;
-		entryCount: { current: number };
-		message: Record<string, unknown>;
-	},
-): void {
-	input.entryCount.current += 1;
-	input.entries.push({
-		type: "custom_message",
-		customType: input.message.customType,
-		content: input.message.content,
-		display: input.message.display,
-		details: input.message.details,
-		id: `entry-${input.entryCount.current}`,
-		parentId: null,
-		timestamp: new Date(0).toISOString(),
-	});
-}
-
 function createEventsApi() {
 	return {
 		on(...args: any[]) {
@@ -211,19 +186,6 @@ function createEventsApi() {
 		},
 		emit() {},
 	};
-}
-
-function getReturnedMessage(result: unknown): Record<string, unknown> | undefined {
-	if (!result || typeof result !== "object" || !("message" in result)) {
-		return undefined;
-	}
-
-	const { message } = result;
-	if (!message || typeof message !== "object") {
-		return undefined;
-	}
-
-	return { ...message };
 }
 
 function createMessageApi(state: {
@@ -328,20 +290,6 @@ function createExtensionApi(state: {
 	};
 }
 
-function statefulPushMessage(input: {
-	sentMessages: Array<Record<string, unknown>>;
-	entries: Array<Record<string, unknown>>;
-	entryCount: { current: number };
-	message: Record<string, unknown>;
-}): void {
-	input.sentMessages.push(input.message);
-	appendCustomMessageEntry({
-		entries: input.entries,
-		entryCount: input.entryCount,
-		message: input.message,
-	});
-}
-
 function createHarnessState(cwd: string, options: { hasUI?: boolean }) {
 	const commands = new Map<string, { handler: (args: string, ctx: any) => Promise<void> | void }>();
 	const flags = new Map<string, boolean | string | undefined>();
@@ -385,7 +333,7 @@ function createHarnessState(cwd: string, options: { hasUI?: boolean }) {
 	};
 }
 
-function createHarnessActions(input: {
+type HarnessActionInput = {
 	commands: Map<string, { handler: (args: string, ctx: any) => Promise<void> | void }>;
 	ctx: ReturnType<typeof createContext>;
 	entries: Array<Record<string, unknown>>;
@@ -393,63 +341,122 @@ function createHarnessActions(input: {
 	eventHandlers: Map<string, Array<(event: unknown, ctx: unknown) => unknown>>;
 	sentMessages: Array<Record<string, unknown>>;
 	tools: Map<string, any>;
+	ui: UiState;
+};
+
+async function emitEvent(
+	input: HarnessActionInput,
+	name: string,
+	event: unknown,
+): Promise<unknown[]> {
+	const results: unknown[] = [];
+	for (const handler of input.eventHandlers.get(name) ?? []) {
+		const result = await handler(event, input.ctx);
+		results.push(result);
+		const message = getReturnedMessage(result);
+		if (!message) {
+			continue;
+		}
+		statefulPushMessage({
+			sentMessages: input.sentMessages,
+			entries: input.entries,
+			entryCount: input.entryCount,
+			message,
+		});
+	}
+	return results;
+}
+
+async function runRegisteredCommand(
+	input: HarnessActionInput,
+	name: string,
+	args = "",
+): Promise<void> {
+	const command = input.commands.get(name);
+	if (!command) {
+		throw new Error(`Unknown command: ${name}`);
+	}
+	await command.handler(args, input.ctx);
+}
+
+async function runRegisteredTool(input: {
+	harness: HarnessActionInput;
+	emit: (name: string, event: unknown) => Promise<unknown[]>;
+	name: string;
+	params?: Record<string, unknown>;
 }) {
-	async function emit(name: string, event: unknown): Promise<unknown[]> {
-		const results: unknown[] = [];
-		for (const handler of input.eventHandlers.get(name) ?? []) {
-			const result = await handler(event, input.ctx);
-			results.push(result);
-			const message = getReturnedMessage(result);
-			if (!message) {
-				continue;
-			}
-			statefulPushMessage({
-				sentMessages: input.sentMessages,
-				entries: input.entries,
-				entryCount: input.entryCount,
-				message,
-			});
-		}
-		return results;
+	const tool = input.harness.tools.get(input.name);
+	if (!tool) {
+		throw new Error(`Unknown tool: ${input.name}`);
 	}
 
-	async function runCommand(name: string, args = ""): Promise<void> {
-		const command = input.commands.get(name);
-		if (!command) {
-			throw new Error(`Unknown command: ${name}`);
+	const params = input.params ?? {};
+	const result = await tool.execute("tool-call-1", params, undefined, () => {}, input.harness.ctx);
+	const event = {
+		type: "tool_result",
+		toolCallId: "tool-call-1",
+		toolName: input.name,
+		input: params,
+		content: result.content,
+		details: result.details,
+		isError: false,
+	};
+	const patches = await input.emit("tool_result", event);
+	let patched = { ...event };
+	for (const patch of patches) {
+		if (!patch || typeof patch !== "object") {
+			continue;
 		}
-		await command.handler(args, input.ctx);
+		patched = { ...patched, ...patch };
 	}
 
-	async function runTool(name: string, params: Record<string, unknown> = {}) {
-		const tool = input.tools.get(name);
-		if (!tool) {
-			throw new Error(`Unknown tool: ${name}`);
-		}
+	return patched;
+}
 
-		const result = await tool.execute("tool-call-1", params, undefined, () => {}, input.ctx);
-		const event = {
-			type: "tool_result",
-			toolCallId: "tool-call-1",
-			toolName: name,
-			input: params,
-			content: result.content,
-			details: result.details,
-			isError: false,
-		};
-		const patches = await emit("tool_result", event);
-		let patched = { ...event };
-		for (const patch of patches) {
-			if (!patch || typeof patch !== "object") {
-				continue;
-			}
-			patched = { ...patched, ...patch };
+function pressTerminalKey(ui: UiState, data: string): string {
+	let current = data;
+	for (const listener of ui.terminalInputListeners) {
+		const result = listener(current);
+		if (result?.consume) {
+			return "";
 		}
-
-		return patched;
+		if (result?.data !== undefined) {
+			current = result.data;
+		}
 	}
 
-	return { emit, runCommand, runTool };
+	return current;
+}
+
+async function submitPrompt(
+	input: HarnessActionInput,
+	emit: (name: string, event: unknown) => Promise<unknown[]>,
+	prompt: string,
+): Promise<void> {
+	input.ui.editorText = prompt;
+	pressTerminalKey(input.ui, "\r");
+	appendUserMessageEntry({
+		entries: input.entries,
+		entryCount: input.entryCount,
+		prompt,
+	});
+	await emit("before_agent_start", {
+		type: "before_agent_start",
+		prompt,
+		systemPrompt: "",
+	});
+}
+
+function createHarnessActions(input: HarnessActionInput) {
+	const emit = async (name: string, event: unknown) => await emitEvent(input, name, event);
+	const runCommand = async (name: string, args = "") =>
+		await runRegisteredCommand(input, name, args);
+	const runTool = async (name: string, params: Record<string, unknown> = {}) =>
+		await runRegisteredTool({ harness: input, emit, name, params });
+	const pressKey = (data: string) => pressTerminalKey(input.ui, data);
+	const submit = async (prompt: string) => await submitPrompt(input, emit, prompt);
+
+	return { emit, pressKey, runCommand, runTool, submitPrompt: submit };
 }
 
 export function createHarness(cwd: string, options: { hasUI?: boolean } = {}) {
@@ -462,6 +469,7 @@ export function createHarness(cwd: string, options: { hasUI?: boolean } = {}) {
 		eventHandlers: state.eventHandlers,
 		sentMessages: state.sentMessages,
 		tools: state.tools,
+		ui: state.ui,
 	});
 
 	return {
@@ -474,8 +482,10 @@ export function createHarness(cwd: string, options: { hasUI?: boolean } = {}) {
 		sentMessages: state.sentMessages,
 		ui: state.ui,
 		emit: actions.emit,
+		pressKey: actions.pressKey,
 		runCommand: actions.runCommand,
 		runTool: actions.runTool,
+		submitPrompt: actions.submitPrompt,
 	};
 }
 

@@ -18,6 +18,7 @@ export type Runtime = {
 	phase: Phase;
 	attachedPlanPath: string | null;
 	planningKind: "started" | "resumed" | null;
+	skipNextBeforeAgentPlanMessage: boolean;
 	savedState: SavedPhaseState | null;
 	planConfig: PlanConfig;
 	lastPromptWarning: string | null;
@@ -71,6 +72,7 @@ export function createRuntime(pi: ExtensionAPI): Runtime {
 		phase: "idle",
 		attachedPlanPath: null,
 		planningKind: null,
+		skipNextBeforeAgentPlanMessage: false,
 		savedState: null,
 		planConfig: {},
 		lastPromptWarning: null,
