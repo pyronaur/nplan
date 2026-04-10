@@ -1,220 +1,92 @@
 ---
-title: nplan Prompt And Transcript Reference
-summary: Current reference for every visible and hidden nplan prompt or transcript message, including what reaches the agent, when, and why.
-short: nplan prompt and transcript contract reference.
+title: nplan Prompt And Transcript Spec
+summary: Required nplan prompt and transcript contract. The agent must only receive visible message content, and the user must be able to see everything the agent sees.
+short: Required nplan prompt and transcript spec.
 read_when:
-  - Need to know which nplan messages render in the UI.
-  - Need to know which nplan messages are sent to the agent and when.
   - Changing plan review, plan-event, or planning-context behavior.
+  - Need the required visible transcript contract for nplan.
+  - Need to know what plan data may be sent to the agent.
 ---
 
-# nplan Prompt And Transcript Reference
+# nplan Prompt And Transcript Spec
 
-This document is the current contract reference for `nplan` message surfaces.
+This document is the required `nplan` prompt and transcript contract.
 
-It answers four questions for each message:
+It is a spec, not a description of any older implementation.
 
-- what renders
-- when it renders
-- what data reaches the agent
-- why that channel exists
+## Core Rules
 
-This is intentionally a structured reference, not a UX recommendation.
+- The user must be able to see everything the agent sees.
+- The agent must only receive what the user can see.
+- Hidden model-only planning context is forbidden.
+- Hidden `plan-context` messages are forbidden.
+- Approval must not emit a second visible stop row.
+- Review outcomes and lifecycle transitions must use clear, consistent wording.
 
-## Message Records
+## Tool Call Renderer
 
-### Plan Review
+| ID | Message | When | Body | What Data Is Sent To Agent |
+|---|---|---|---|---|
+| F01 | `Plan Review` | `plan_submit` called without summary | none | the same visible `Plan Review` tool-call row |
+| F02 | `Plan Review <summary>` | `plan_submit` called with summary | none | the same visible `Plan Review <summary>` tool-call row |
 
-- id: `A01`
-- name: `Plan Review`
-- renderer: tool call row
-- source: `plan_submit` tool call
-- trigger: user calls `plan_submit` without a summary
-- visible_ui: yes
-- collapsed: `Plan Review`
-- expanded: none
-- sent_to_agent: tool call record only
-- sent_to_agent_when: on the `plan_submit` turn
-- sent_to_agent_why: preserves the review action in turn history
-- notes: this is not a `plan-event`
+## Tool Result Renderer
 
-### Plan Review With Summary
+| ID | Message | When | Collapsed | Expanded | What Data Is Sent To Agent |
+|---|---|---|---|---|---|
+| F03 | `Plan Approved <path>` | `plan_submit` approved | header only | approval text or approval notes | exactly this visible result row, including expanded body text |
+| F04 | `Plan Rejected <path>` | `plan_submit` rejected | header only | revision feedback | exactly this visible result row, including expanded body text |
+| F05 | `Error: ...` | invalid `plan_submit` or review/runtime failure | raw error text | same raw error text | exactly this visible error row |
 
-- id: `A02`
-- name: `Plan Review <summary>`
-- renderer: tool call row
-- source: `plan_submit` tool call
-- trigger: user calls `plan_submit` with a summary
-- visible_ui: yes
-- collapsed: `Plan Review <summary>`
-- expanded: none
-- sent_to_agent: tool call record plus submitted `summary`
-- sent_to_agent_when: on the `plan_submit` turn
-- sent_to_agent_why: preserves the review action and the user-authored summary
-- notes: this is not a `plan-event`
+## Plan Event Renderer
 
-### Plan Approved
+| ID | Message | When | Collapsed | Expanded | What Data Is Sent To Agent |
+|---|---|---|---|---|---|
+| F06 | `Plan Started <path>` | next real planning turn for a fresh or newly created plan | header plus `Ctrl+O` hint | full planning prompt | exactly this visible row, including the same planning prompt body |
+| F07 | `Plan Resumed <path>` | next real planning turn for a resumed existing plan | header plus `Ctrl+O` hint | full planning prompt | exactly this visible row, including the same planning prompt body |
+| F08 | `Planning Ended <path>` | first real ordinary turn after manual exit of the same attached plan | header, optional `Ctrl+O` if body exists | end marker text or empty | exactly this visible row, including expanded body if present |
+| F09 | `Plan Abandoned <path>` | first real turn after detaching or switching away from a plan | header plus usually `Ctrl+O` hint | abandon marker or detach fallback | exactly this visible row, including expanded body text |
 
-- id: `A03`
-- name: `Plan Mode: Approved <path>`
-- renderer: tool result row
-- source: `plan_submit` tool result
-- trigger: `plan_submit` returns approval
-- visible_ui: yes
-- collapsed: approval header only
-- expanded: approval text or approval-with-notes text
-- sent_to_agent: tool result text and tool result details
-- sent_to_agent_when: on the `plan_submit` turn as normal tool-result history
-- sent_to_agent_why: preserves the durable review decision record
-- notes: this is the approval outcome, not the lifecycle marker
+## Hidden / No Visible Renderer
 
-### Plan Rejected
+| ID | Message | When | Visible | Purpose | What Data Is Sent To Agent |
+|---|---|---|---|---|---|
+| F10 | none | never | no hidden rows allowed | hidden model-only plan context removed | nothing hidden; agent only gets visible rows |
 
-- id: `A04`
-- name: `Plan Mode: Rejected <path>`
-- renderer: tool result row
-- source: `plan_submit` tool result
-- trigger: `plan_submit` returns denial
-- visible_ui: yes
-- collapsed: rejection header only
-- expanded: revision feedback
-- sent_to_agent: tool result text and tool result details
-- sent_to_agent_when: on the `plan_submit` turn as normal tool-result history
-- sent_to_agent_why: preserves the durable review decision record
-- notes: planning remains active after this result
+## Truth Table
 
-### Plan Submit Error
+| ID | State | What You See | What Agent Gets |
+|---|---|---|---|
+| G01 | planning turn, fresh plan | `F06` | `F06` |
+| G02 | planning turn, resumed plan | `F07` | `F07` |
+| G03 | rejected plan, next planning turn | `F06` or `F07` | the same visible row |
+| G04 | approved plan turn | `F01` or `F02`, then `F03` | the same visible rows only |
+| G05 | manual exit, next ordinary turn | `F08` | `F08` |
+| G06 | switch or clear, next ordinary turn | `F09` | `F09` |
 
-- id: `A05`
-- name: `Error: ...`
-- renderer: raw tool result row
-- source: `plan_submit` tool result
-- trigger: invalid submit usage or review/runtime failure
-- visible_ui: yes
-- collapsed: raw error text
-- expanded: raw error text
-- sent_to_agent: raw tool result error text
-- sent_to_agent_when: on the error turn as normal tool-result history
-- sent_to_agent_why: preserves the failure outcome without pretending it is a review decision
-- notes: this bypasses the approved/rejected header renderer
+## Sequence Rules
 
-### Plan Started
-
-- id: `A06`
-- name: `Plan Mode: Started <path>`
-- renderer: `plan-event` custom message row
-- source: lifecycle transcript event
-- trigger: the next real submitted planning turn for a fresh or newly created plan whose persisted `planningKind` is `started`
-- visible_ui: yes
-- collapsed: header plus `Ctrl+O` hint
-- expanded: full planning prompt for that plan turn
-- sent_to_agent: while planning, the visible row is not reused as planning context; later while idle, the latest `plan-event` may be kept in context
-- sent_to_agent_when: visible row persists immediately; context reuse can happen on later idle turns
-- sent_to_agent_why: visible transcript explains that planning began, while hidden planning context owns the actual planning prompt during planning
-- notes: interactive submit can pre-emit this before the user message; non-interactive fallback uses `before_agent_start`
-
-### Plan Resumed
-
-- id: `A07`
-- name: `Plan Mode: Resumed <path>`
-- renderer: `plan-event` custom message row
-- source: lifecycle transcript event
-- trigger: the next real submitted planning turn for an existing plan whose persisted `planningKind` is `resumed`
-- visible_ui: yes
-- collapsed: header plus `Ctrl+O` hint
-- expanded: full planning prompt for that plan turn
-- sent_to_agent: while planning, the visible row is not reused as planning context; later while idle, the latest `plan-event` may be kept in context
-- sent_to_agent_when: visible row persists immediately; context reuse can happen on later idle turns
-- sent_to_agent_why: visible transcript explains that planning resumed, while hidden planning context owns the actual planning prompt during planning
-- notes: interactive submit can pre-emit this before the user message; non-interactive fallback uses `before_agent_start`
-
-### Plan Stopped
-
-- id: `A08`
-- name: `Plan Mode: Stopped <path>`
-- renderer: `plan-event` custom message row
-- source: lifecycle transcript event
-- trigger: planning ends for the same attached plan; approval emits it in the same `plan_submit` turn, otherwise it appears on the first later real turn whose history reflects the stop
-- visible_ui: yes
-- collapsed: stop header, sometimes without meaningful expansion text
-- expanded: configured stop marker or empty body
-- sent_to_agent: latest idle `plan-event` context entry
-- sent_to_agent_when: on later idle turns after it exists in session history
-- sent_to_agent_why: carries the latest planning lifecycle state forward once planning is no longer active
-- notes: this is distinct from approval; approval uses A03
-
-### Plan Abandoned
-
-- id: `A09`
-- name: `Plan Mode: Abandoned <path>`
-- renderer: `plan-event` custom message row
-- source: lifecycle transcript event
-- trigger: a previously attached plan is detached or replaced; appears on the first later real turn whose history reflects that detach or switch
-- visible_ui: yes
-- collapsed: abandon header, usually with `Ctrl+O` hint
-- expanded: configured abandon marker or fallback detach text
-- sent_to_agent: latest idle `plan-event` context entry
-- sent_to_agent_when: on later idle turns after it exists in session history
-- sent_to_agent_why: carries forward that the previous attached plan was left behind, which is distinct from ending planning on the same attached plan
-- notes: this is not the same event as A08
-
-### Hidden Planning Context
-
-- id: `A10`
-- name: `plan-context`
-- renderer: hidden custom context message
-- source: planning context injection
-- trigger: context assembly while `nplan` is in planning phase and a planning prompt can be rendered
-- visible_ui: no
-- collapsed: none
-- expanded: none
-- sent_to_agent: full planning prompt
-- sent_to_agent_when: on planning turns during context assembly
-- sent_to_agent_why: this is the authoritative planning prompt channel for the model during planning
-- notes: `display: false`; replaces reuse of visible planning rows as planning context
-
-## Combined Turn Sequences
-
-### Approved Submit Sequence
-
-- id: `S01`
-- sequence: `Plan Review ...` -> `Plan Mode: Approved <path>` -> `Plan Mode: Stopped <path>`
-- trigger: approved `plan_submit` turn
-- visible_ui: yes
-- sent_to_agent: tool call and tool result on that same turn; the `Stopped` event becomes later idle context after it is persisted
-- why: current contract separates review outcome from lifecycle state transition
-
-### Rejected Submit Sequence
-
-- id: `S02`
-- sequence: `Plan Review ...` -> `Plan Mode: Rejected <path>`
-- trigger: rejected `plan_submit` turn
-- visible_ui: yes
-- sent_to_agent: tool call and tool result on that same turn
-- why: denial is the review outcome and planning remains active, so no stop event is emitted
-
-### Switch To New Plan Sequence
-
-- id: `S03`
-- sequence: `Plan Mode: Abandoned <old>` -> `Plan Mode: Started <new>`
-- trigger: switch from one attached plan to a fresh/new target, then make the next real submitted turn
-- visible_ui: yes
-- sent_to_agent: the later idle/planning context logic sees these persisted transcript entries according to normal filtering rules
-- why: current contract records that the old plan was left behind before the new plan begins
-
-### Switch To Existing Plan Sequence
-
-- id: `S04`
-- sequence: `Plan Mode: Abandoned <old>` -> `Plan Mode: Resumed <new>`
-- trigger: switch from one attached plan to an existing target, then make the next real submitted turn
-- visible_ui: yes
-- sent_to_agent: the later idle/planning context logic sees these persisted transcript entries according to normal filtering rules
-- why: current contract records that the old plan was left behind before the new plan resumes
+- Approved submit sequence: `Plan Review ...` -> `Plan Approved <path>`
+- Rejected submit sequence: `Plan Review ...` -> `Plan Rejected <path>`
+- Switch to new plan sequence: `Plan Abandoned <old>` -> `Plan Started <new>`
+- Switch to existing plan sequence: `Plan Abandoned <old>` -> `Plan Resumed <new>`
+- Manual exit sequence: `Planning Ended <path>` on the first later ordinary turn whose history should reflect the exit
 
 ## Context Rules
 
-- during planning, visible `plan-event` rows are not the authoritative planning prompt channel
-- during planning, `plan-context` is injected as the hidden model-facing planning prompt
-- while idle, the latest visible `plan-event` is kept in context as the current lifecycle marker
-- older visible `plan-event` rows are not all replayed; only the latest relevant idle marker is preserved
-- `plan_submit` approval and rejection are durable review records through the tool-result path, not through duplicate lifecycle review messages
+- The planning prompt must be the expanded body of `Plan Started <path>` or `Plan Resumed <path>`.
+- That same visible planning row body is the only planning prompt content the agent may receive.
+- No hidden planning prompt channel may exist.
+- No hidden context-only message may add planning content the user cannot inspect.
+- Approval and rejection remain durable review records through the tool-result path.
+- Approval does not emit `Planning Ended <path>` or any other second completion row in the same submit flow.
+- `Planning Ended <path>` is reserved for manual exit of the same attached plan.
+- `Plan Abandoned <path>` is reserved for detach or switch-away semantics and must not be collapsed into `Planning Ended <path>`.
+
+## Visual Consistency Rules
+
+- All visible plan-facing messages must read as one coherent family.
+- Success language must describe the reason for the transition, not only the raw state change.
+- Completion after approval must read as approval, not as an alarming stop.
+- Lifecycle rows must be explicit and minimal: `Started`, `Resumed`, `Ended`, `Abandoned`.
+- Review rows must be explicit and minimal: `Plan Review`, `Plan Approved`, `Plan Rejected`.
