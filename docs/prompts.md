@@ -1,94 +1,74 @@
 ---
 title: nplan Prompt And Transcript Spec
-summary: Required nplan prompt and transcript contract. The agent must only receive visible message content, and the user must be able to see everything the agent sees.
-short: Required nplan prompt and transcript spec.
+summary: Required nplan message contract. Full planning prompt must be visible and sent once per compaction window.
+short: nplan prompt/message spec.
 read_when:
-  - Changing plan review, plan-event, or planning-context behavior.
-  - Need the required visible transcript contract for nplan.
-  - Need to know what plan data may be sent to the agent.
+  - Changing plan review, lifecycle messages, or planning prompt delivery.
+  - Need exact rules for when full planning prompt may appear.
+  - Need to know what planning data may reach agent.
 ---
 
 # nplan Prompt And Transcript Spec
 
-This document is the required `nplan` prompt and transcript contract.
+This document defines target `nplan` behavior.
 
-It is a spec, not a description of any older implementation.
-
-For the current runtime pipeline and where transcript history is filtered before reaching the model, see [docs/planning-message-lifecycle.md](/Users/n14/Projects/Tools/Pi/nplan/docs/planning-message-lifecycle.md).
+It is not description of current implementation.
 
 ## Core Rules
 
-- The user must be able to see everything the agent sees.
-- The agent must only receive what the user can see.
-- Hidden model-only planning context is forbidden.
+- User must be able to see every planning instruction agent receives.
+- Hidden model-only planning messages are forbidden.
 - Hidden `plan-context` messages are forbidden.
-- Approval must not emit a second visible stop row.
-- Review outcomes and lifecycle transitions must use clear, consistent wording.
+- Full planning prompt is one visible message.
+- Full planning prompt is sent once per compaction window.
+- If compaction removes that prompt from model context, next planning turn sends it again as one visible message.
+- While model still has that prompt in context, no later message may send full planning prompt again.
+- Lifecycle messages may continue, but they must not include full planning prompt unless they are that one allowed prompt message for current compaction window.
+- Review results remain visible transcript records.
+- Approval must not append extra `Planning Ended <path>` row.
 
-## Tool Call Renderer
+## Message Kinds
 
-| ID | Message | When | Body | What Data Is Sent To Agent |
+| ID | Header | Body | When | Agent Gets |
 |---|---|---|---|---|
-| F01 | `Plan Review` | `plan_submit` called without summary | none | the same visible `Plan Review` tool-call row |
-| F02 | `Plan Review <summary>` | `plan_submit` called with summary | none | the same visible `Plan Review <summary>` tool-call row |
+| F01 | `Plan Review` | none | `plan_submit` without summary | same visible message |
+| F02 | `Plan Review <summary>` | none | `plan_submit` with summary | same visible message |
+| F03 | `Plan Approved <path>` | approval text or approval notes | review approved | same visible message |
+| F04 | `Plan Rejected <path>` | revision feedback | review rejected | same visible message |
+| F05 | `Error: ...` | raw error text | invalid `plan_submit` or review/runtime failure | same visible message |
+| F06 | `Plan Started <path>` or `Plan Resumed <path>` | full planning prompt | first planning turn after model does not currently have planning prompt | same visible message |
+| F07 | `Plan Started <path>` or `Plan Resumed <path>` | no full planning prompt | later planning lifecycle turn while model still has planning prompt | same visible message |
+| F08 | `Planning Ended <path>` | optional end marker text | first ordinary turn after manual exit of same attached plan | same visible message |
+| F09 | `Plan Abandoned <path>` | optional abandon/detach text | first turn after detaching or switching away from plan | same visible message |
 
-## Tool Result Renderer
+## Planning Prompt Rule
 
-| ID | Message | When | Collapsed | Expanded | What Data Is Sent To Agent |
-|---|---|---|---|---|---|
-| F03 | `Plan Approved <path>` | `plan_submit` approved | header only | approval text or approval notes | exactly this visible result row, including expanded body text |
-| F04 | `Plan Rejected <path>` | `plan_submit` rejected | header only | revision feedback | exactly this visible result row, including expanded body text |
-| F05 | `Error: ...` | invalid `plan_submit` or review/runtime failure | raw error text | same raw error text | exactly this visible error row |
+Think in compaction windows.
 
-## Plan Event Renderer
+- At most one full planning-prompt message per compaction window.
+- Start, resume, reject, pause, clear, switch, or new-plan flows do not create another full planning-prompt message while current compaction window already has one.
+- After compaction, allowance resets.
+- On first later planning turn, send one full planning-prompt message again.
+- User must be able to see exactly when that message was sent.
 
-| ID | Message | When | Collapsed | Expanded | What Data Is Sent To Agent |
-|---|---|---|---|---|---|
-| F06 | `Plan Started <path>` | next real planning turn for a fresh or newly created plan | header plus `Ctrl+O` hint | full planning prompt | exactly this visible row, including the same planning prompt body |
-| F07 | `Plan Resumed <path>` | next real planning turn for a resumed existing plan | header plus `Ctrl+O` hint | full planning prompt | exactly this visible row, including the same planning prompt body |
-| F08 | `Planning Ended <path>` | first real ordinary turn after manual exit of the same attached plan | header, optional `Ctrl+O` if body exists | end marker text or empty | exactly this visible row, including expanded body if present |
-| F09 | `Plan Abandoned <path>` | first real turn after detaching or switching away from a plan | header plus usually `Ctrl+O` hint | abandon marker or detach fallback | exactly this visible row, including expanded body text |
+## Examples
 
-## Hidden / No Visible Renderer
-
-| ID | Message | When | Visible | Purpose | What Data Is Sent To Agent |
-|---|---|---|---|---|---|
-| F10 | none | never | no hidden rows allowed | hidden model-only plan context removed | nothing hidden; agent only gets visible rows |
-
-## Truth Table
-
-| ID | State | What You See | What Agent Gets |
-|---|---|---|---|
-| G01 | planning turn, fresh plan | `F06` | `F06` |
-| G02 | planning turn, resumed plan | `F07` | `F07` |
-| G03 | rejected plan, next planning turn | `F06` or `F07` | the same visible row |
-| G04 | approved plan turn | `F01` or `F02`, then `F03` | the same visible rows only |
-| G05 | manual exit, next ordinary turn | `F08` | `F08` |
-| G06 | switch or clear, next ordinary turn | `F09` | `F09` |
-
-## Sequence Rules
-
-- Approved submit sequence: `Plan Review ...` -> `Plan Approved <path>`
-- Rejected submit sequence: `Plan Review ...` -> `Plan Rejected <path>`
-- Switch to new plan sequence: `Plan Abandoned <old>` -> `Plan Started <new>`
-- Switch to existing plan sequence: `Plan Abandoned <old>` -> `Plan Resumed <new>`
-- Manual exit sequence: `Planning Ended <path>` on the first later ordinary turn whose history should reflect the exit
+- Session start -> first planning turn: send one full planning-prompt message.
+- Pause -> ordinary turns -> resume before compaction: no second full planning-prompt message.
+- Plan A -> abandon -> Plan B before compaction: no second full planning-prompt message.
+- Rejected review -> revise before compaction: no second full planning-prompt message.
+- Compaction happens -> next planning turn: send one full planning-prompt message again.
 
 ## Context Rules
 
-- The planning prompt must be the expanded body of `Plan Started <path>` or `Plan Resumed <path>`.
-- That same visible planning row body is the only planning prompt content the agent may receive.
-- No hidden planning prompt channel may exist.
-- No hidden context-only message may add planning content the user cannot inspect.
-- Approval and rejection remain durable review records through the tool-result path.
-- Approval does not emit `Planning Ended <path>` or any other second completion row in the same submit flow.
-- `Planning Ended <path>` is reserved for manual exit of the same attached plan.
-- `Plan Abandoned <path>` is reserved for detach or switch-away semantics and must not be collapsed into `Planning Ended <path>`.
+- Agent may receive only visible planning/review/lifecycle messages.
+- No hidden replacement prompt is allowed.
+- No hidden context-only message may add planning instructions.
+- Whether old rows remain visible in transcript history does not change rule above.
+- Full planning prompt is resent only after compaction removed it from model context.
 
-## Visual Consistency Rules
+## Wording Rules
 
-- All visible plan-facing messages must read as one coherent family.
-- Success language must describe the reason for the transition, not only the raw state change.
-- Completion after approval must read as approval, not as an alarming stop.
-- Lifecycle rows must be explicit and minimal: `Started`, `Resumed`, `Ended`, `Abandoned`.
-- Review rows must be explicit and minimal: `Plan Review`, `Plan Approved`, `Plan Rejected`.
+- Lifecycle headers stay minimal: `Started`, `Resumed`, `Ended`, `Abandoned`.
+- Review headers stay minimal: `Plan Review`, `Plan Approved`, `Plan Rejected`.
+- Only `F06` may contain full planning prompt.
