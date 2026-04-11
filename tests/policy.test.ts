@@ -164,13 +164,13 @@ void test("filterContextMessages removes hidden plan-context messages entirely",
 			display: false,
 			timestamp: 2,
 		},
-	], { includeLatestPlanEvent: true });
+	]);
 
 	assert.equal(messages.length, 1);
 	assert.deepEqual(messages[0], createUserMessage("hello"));
 });
 
-void test("filterContextMessages keeps only the latest visible plan event", () => {
+void test("filterContextMessages keeps visible plan events and only removes hidden plan-context", () => {
 	const messages = filterContextMessages([
 		createUserMessage("hello"),
 		{
@@ -187,11 +187,18 @@ void test("filterContextMessages keeps only the latest visible plan event", () =
 			display: true,
 			timestamp: 3,
 		},
-	], { includeLatestPlanEvent: true });
+	]);
 
-	assert.equal(messages.length, 2);
+	assert.equal(messages.length, 3);
 	assert.deepEqual(messages[0], createUserMessage("hello"));
 	assert.deepEqual(messages[1], {
+		role: "custom",
+		customType: "plan-event",
+		content: "Plan Started /abs/path/plan-a.md",
+		display: true,
+		timestamp: 2,
+	});
+	assert.deepEqual(messages[2], {
 		role: "custom",
 		customType: "plan-event",
 		content: "Planning Ended /abs/path/plan-b.md",

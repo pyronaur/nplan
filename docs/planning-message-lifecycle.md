@@ -3,7 +3,7 @@ title: nplan Planning Message Lifecycle
 summary: Current runtime map for how planning messages are created, persisted, rendered in the UI, and filtered before they reach the agent.
 short: Current planning message lifecycle map.
 read_when:
-  - Need to understand why visible planning messages can differ from agent context.
+  - Need to understand how visible planning messages reach agent context.
   - Debugging planning transcript ordering, context filtering, or review rows.
   - Need the actual runtime pipeline, not only the intended prompt spec.
 ---
@@ -19,9 +19,10 @@ This file is the concrete pipeline map for how messages currently move through `
 
 - `plan-event` messages are real persisted transcript entries.
 - The UI renders the full persisted transcript history.
-- The agent does not automatically receive the full visible transcript.
-- The `context` hook filters transcript history before Pi sends it to the model.
-- `nplan` currently keeps only the latest visible `plan-event` in agent context.
+- The `context` hook removes hidden `plan-context` rows before Pi sends context to the model.
+- Visible `plan-event` rows remain in agent context.
+- Full planning prompt appears only on first planning lifecycle row in current compaction window.
+- After compaction drops that prompt from model context, next planning turn emits it again.
 
 ## Diagram Legend
 
@@ -54,9 +55,9 @@ flowchart TD
     B -->|Manual exit or switch reflected on later turn| K[nplan: buildPlanTurnMessage on later real turn]
     K --> E
 
-    F --> L[Pi: context hook receives full session message list]
+    F --> L[Pi: context hook receives current message list]
     L --> M[nplan: filterContextMessages]
-    M --> N[Data: latest visible plan-event kept]
+    M --> N[Data: hidden plan-context removed]
     N --> O[API: Pi sends filtered context to model]
 
     classDef user fill:#fff4cc,stroke:#8a6d00,color:#222;
@@ -78,8 +79,8 @@ flowchart TD
 ```mermaid
 flowchart LR
     A[Data: session history\nfull persisted message list] --> B[UI: transcript renders full visible history]
-    A --> C[Pi: context hook receives full message list]
-    C --> D[nplan: filterContextMessages keeps latest plan-event only]
+    A --> C[Pi: context hook receives current message list]
+    C --> D[nplan: filterContextMessages removes hidden plan-context only]
     D --> E[API: model request payload]
 
     classDef data fill:#e8f6e8,stroke:#3d8a4d,color:#111;
@@ -122,9 +123,9 @@ sequenceDiagram
     S->>UI: render visible row
     U->>S: append user message
     S->>UI: render user message
-    C->>S: read full transcript history
+    C->>S: read current message list
     C->>F: pass full message list
-    F->>F: keep latest visible plan-event only
+    F->>F: remove hidden plan-context only
     F->>M: send filtered context
 ```
 
@@ -157,10 +158,10 @@ sequenceDiagram
     N->>S: append visible Planning Ended
     S->>UI: render Planning Ended
     U->>S: append user message
-    C->>S: read full transcript history
+    C->>S: read current message list
     C->>F: pass full message list
-    F->>F: keep latest visible plan-event only
-    F->>M: send Planning Ended, not older Started/Resumed rows
+    F->>F: remove hidden plan-context only
+    F->>M: send visible lifecycle history still in current context window
 ```
 
 ## Review Flow
@@ -191,13 +192,13 @@ flowchart TD
 | Layer | Data source | Current behavior |
 |---|---|---|
 | UI transcript | full persisted session history | shows all visible `plan-event` rows and all tool rows |
-| Agent context | `context` hook output after `filterContextMessages(...)` | gets only the latest visible `plan-event`, plus normal tool/message history |
+| Agent context | `context` hook output after `filterContextMessages(...)` | gets visible `plan-event` rows in current context plus normal tool/message history |
 
 ## Consequence
 
-If the transcript visibly contains both `Plan Started ...` and later `Planning Ended ...`, the UI shows both because both are persisted history entries.
+If transcript visibly contains `Plan Started ...` and later `Planning Ended ...`, UI shows both because both are persisted history entries.
 
-The agent only gets `Planning Ended ...` on later turns because `filterContextMessages(...)` drops older `plan-event` rows and keeps only the latest one.
+Agent context keeps visible `plan-event` rows that remain in current context window. Full planning prompt itself appears only once per compaction window, because later `Plan Started ...` or `Plan Resumed ...` rows omit prompt body until compaction resets allowance.
 
 ## Important Files
 

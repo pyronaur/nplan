@@ -364,7 +364,7 @@ function registerContextHandler(runtime: Runtime): void {
 		}
 
 		return {
-			messages: filterContextMessages(event.messages, { includeLatestPlanEvent: true }),
+			messages: filterContextMessages(event.messages),
 		};
 	});
 }

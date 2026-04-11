@@ -475,6 +475,7 @@ export function createHarness(cwd: string, options: { hasUI?: boolean } = {}) {
 	return {
 		api: state.api,
 		commands: state.commands,
+		entryCount: state.entryCount,
 		flags: state.flags,
 		entries: state.entries,
 		messageRenderers: state.messageRenderers,

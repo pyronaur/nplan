@@ -313,7 +313,7 @@ void test("repeated plan toggles do not append transcript messages", async () =>
 	});
 });
 
-void test("every submitted planning turn appends a visible planning message with the full prompt", async () => {
+void test("later planning turns keep lifecycle rows but do not resend the full planning prompt before compaction", async () => {
 	const homeDir = temp.makeTempDir("nplan-runtime-home-single-send-");
 	const cwd = temp.makeTempDir("nplan-runtime-cwd-single-send-");
 	process.env.HOME = homeDir;
@@ -328,7 +328,7 @@ void test("every submitted planning turn appends a visible planning message with
 
 	assert.equal(harness.sentMessages.length, 2);
 	assert.match(getMessageContentAt(harness, -1), /^Plan Started /);
-	assert.equal(getMessageContentAt(harness, -1).includes("[PLAN - PLANNING PHASE]"), true);
+	assert.equal(getMessageContentAt(harness, -1).includes("[PLAN - PLANNING PHASE]"), false);
 });
 
 void test("stopping planning stays silent on toggle and emits an ended message on the next real turn", async () => {
@@ -388,7 +388,7 @@ void test("repeated off-on toggles that end in planning still emit the planning 
 
 	assert.equal(harness.sentMessages.length, 2);
 	assert.match(getLastMessageContent(harness), /^Plan Resumed /);
-	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), true);
+	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), false);
 });
 
 void test("switching plans while idle emits an abandoned marker for the old plan and a resume marker for the new plan on the next turn", async () => {
@@ -416,7 +416,7 @@ void test("switching plans while idle emits an abandoned marker for the old plan
 	assert.equal(harness.sentMessages.length, 4);
 	assert.match(getMessageContentAt(harness, -2), new RegExp(`^Plan Abandoned ${planAPath}`));
 	assert.match(getMessageContentAt(harness, -1), new RegExp(`^Plan Resumed ${planBPath}`));
-	assert.equal(getMessageContentAt(harness, -1).includes("[PLAN - PLANNING PHASE]"), true);
+	assert.equal(getMessageContentAt(harness, -1).includes("[PLAN - PLANNING PHASE]"), false);
 });
 
 void test("switching plans while planning emits abandon then start markers on the next real turn", async () => {
@@ -441,7 +441,7 @@ void test("switching plans while planning emits abandon then start markers on th
 	assert.equal(harness.sentMessages.length, 3);
 	assert.match(getMessageContentAt(harness, -2), new RegExp(`^Plan Abandoned ${planAPath}`));
 	assert.match(getMessageContentAt(harness, -1), new RegExp(`^Plan Started ${planBPath}`));
-	assert.equal(getMessageContentAt(harness, -1).includes("[PLAN - PLANNING PHASE]"), true);
+	assert.equal(getMessageContentAt(harness, -1).includes("[PLAN - PLANNING PHASE]"), false);
 });
 
 void test("plan_submit approval exits planning without a second completion row", async () => {

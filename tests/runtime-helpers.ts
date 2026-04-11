@@ -14,6 +14,23 @@ export function appendPersistedPlanState(harness: Harness, data: Record<string, 
 	harness.api.appendEntry("plan", data);
 }
 
+export function appendCompactionEntry(
+	harness: Harness,
+	data: { firstKeptEntryId: string; summary?: string; tokensBefore?: number; details?: unknown },
+): void {
+	harness.entryCount.current += 1;
+	harness.entries.push({
+		type: "compaction",
+		id: `entry-${harness.entryCount.current}`,
+		parentId: null,
+		timestamp: new Date(0).toISOString(),
+		summary: data.summary ?? "Compacted",
+		firstKeptEntryId: data.firstKeptEntryId,
+		tokensBefore: data.tokensBefore ?? 0,
+		details: data.details,
+	});
+}
+
 export function getLastPlanState(harness: Harness): unknown {
 	return [...harness.entries].reverse().find((entry) => entry.customType === "plan")?.data;
 }
