@@ -108,7 +108,7 @@ void test("getPhaseNotification includes the absolute plan path for planning onl
 	assert.equal(getPhaseNotification("idle", "/abs/path/plan.md"), undefined);
 });
 
-void test("getPersistedPlanState keeps the latest idle plan state with a null savedState", () => {
+void test("PlanState.load keeps the latest idle plan state with a null savedState", () => {
 	const state = PlanState.load([
 		createPlanEntry(
 			{

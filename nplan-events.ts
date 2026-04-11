@@ -1,12 +1,7 @@
-import type { ExtensionAPI, SessionEntry } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Box, Text } from "@mariozechner/pi-tui";
 
 export type PlanEventKind = "started" | "resumed" | "stopped" | "abandoned";
-
-export type PlanDeliveryState = {
-	phase: "idle" | "planning";
-	attachedPlanPath: string | null;
-};
 
 export type PlanEventDetails = {
 	kind: PlanEventKind;
@@ -53,42 +48,6 @@ function getHeaderColor(kind: PlanEventKind): "accent" | "warning" | "success" |
 		return "muted";
 	}
 	return "warning";
-}
-
-function isPlanEventMessageEntry(entry: SessionEntry): entry is SessionEntry & {
-	type: "custom_message";
-	customType: "plan-event";
-	details?: unknown;
-} {
-	return entry.type === "custom_message" && entry.customType === "plan-event";
-}
-
-function getPlanDeliveryState(details: PlanEventDetails): PlanDeliveryState {
-	if (details.kind === "started" || details.kind === "resumed") {
-		return { phase: "planning", attachedPlanPath: details.planFilePath };
-	}
-
-	if (details.kind === "stopped") {
-		return { phase: "idle", attachedPlanPath: details.planFilePath };
-	}
-
-	return { phase: "idle", attachedPlanPath: null };
-}
-
-export function getLatestPlanDeliveryState(entries: SessionEntry[]): PlanDeliveryState {
-	for (let i = entries.length - 1; i >= 0; i -= 1) {
-		const entry = entries[i];
-		if (!isPlanEventMessageEntry(entry)) {
-			continue;
-		}
-		const details = isPlanEventDetails(entry.details) ? entry.details : undefined;
-		if (!details) {
-			continue;
-		}
-		return getPlanDeliveryState(details);
-	}
-
-	return { phase: "idle", attachedPlanPath: null };
 }
 
 export function registerPlanEventRenderer(pi: ExtensionAPI): void {
