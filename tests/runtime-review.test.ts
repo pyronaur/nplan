@@ -97,6 +97,9 @@ void test("plan_submit auto-approves when interactive review is unavailable", as
 		planningKind: null,
 		idleKind: "approved",
 		savedState: null,
+		pendingEvents: [],
+		hasDeliveredPlanningRow: false,
+		planningPromptWindowKey: null,
 	});
 });
 
@@ -128,9 +131,11 @@ void test("plan_submit returns Error text when plannotator output is invalid", a
 		idleKind: null,
 		savedState: {
 			activeTools: ["read", "bash", "edit", "write"],
-			model: undefined,
 			thinkingLevel: "medium",
 		},
+		pendingEvents: [],
+		hasDeliveredPlanningRow: false,
+		planningPromptWindowKey: null,
 	});
 });
 

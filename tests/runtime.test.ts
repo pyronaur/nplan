@@ -10,51 +10,18 @@ import {
 import {
 	appendPersistedPlanState,
 	assertPlanningMessage,
+	assertPlanningState,
+	createIdleState,
+	createPlanningState,
 	getLastMessageContent,
 	getLastPlanState,
 	getMessageContentAt,
+	removePlanEventHistory,
 	writePlanFile,
 } from "./runtime-helpers.ts";
 import { createTempTracker } from "./test-temp.ts";
 
 const temp = createTempTracker();
-const DEFAULT_ACTIVE_TOOLS = ["read", "bash", "edit", "write"];
-
-function createSavedState(includeModel = true): Record<string, unknown> {
-	if (includeModel) {
-		return {
-			activeTools: DEFAULT_ACTIVE_TOOLS,
-			model: undefined,
-			thinkingLevel: "medium",
-		};
-	}
-
-	return {
-		activeTools: DEFAULT_ACTIVE_TOOLS,
-		thinkingLevel: "medium",
-	};
-}
-
-function createPlanningState(
-	planPath: string,
-	options: { includeModel?: boolean; planningKind?: "started" | "resumed" } = {},
-): Record<string, unknown> {
-	return {
-		phase: "planning",
-		attachedPlanPath: planPath,
-		planningKind: options.planningKind ?? "resumed",
-		idleKind: null,
-		savedState: createSavedState(options.includeModel ?? true),
-	};
-}
-
-function assertPlanningState(
-	harness: Harness,
-	planPath: string,
-	options: { includeModel?: boolean; planningKind?: "started" | "resumed" } = {},
-): void {
-	assert.deepEqual(getLastPlanState(harness), createPlanningState(planPath, options));
-}
 
 async function emitBeforeAgentStart(harness: Harness, prompt: string): Promise<void> {
 	await harness.emit("before_agent_start", {
@@ -70,7 +37,6 @@ async function startAndDeliverPlan(harness: Harness, slug: string): Promise<void
 	await emitBeforeAgentStart(harness, "Initial planning prompt");
 	await harness.emit("agent_end", { type: "agent_end", messages: [] });
 }
-
 afterEach(() => {
 	temp.cleanup();
 });
@@ -97,8 +63,10 @@ void test("/plan with a new slug attaches the normalized plan path and enters pl
 	await harness.emit("session_start", { type: "session_start", reason: "startup" });
 	await harness.runCommand("plan", "Auth Plan");
 
-	assertPlanningState(harness, join(homeDir, ".n", "pi", "plans", "auth-plan.md"), {
-		planningKind: "started",
+	assertPlanningState({
+		harness,
+		planPath: join(homeDir, ".n", "pi", "plans", "auth-plan.md"),
+		options: { planningKind: "started" },
 	});
 	assert.equal(harness.ui.inputCalls.length, 0);
 	assert.deepEqual(harness.sentMessages, []);
@@ -107,8 +75,14 @@ void test("/plan with a new slug attaches the normalized plan path and enters pl
 
 	assert.match(getLastMessageContent(harness), /^Plan Started /);
 	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), true);
-	assertPlanningState(harness, join(homeDir, ".n", "pi", "plans", "auth-plan.md"), {
-		planningKind: "started",
+	assertPlanningState({
+		harness,
+		planPath: join(homeDir, ".n", "pi", "plans", "auth-plan.md"),
+		options: {
+			planningKind: "started",
+			hasDeliveredPlanningRow: true,
+			planningPromptWindowKey: "root",
+		},
 	});
 });
 
@@ -129,7 +103,7 @@ void test("bare /plan resumes the attached plan without prompting for a slug", a
 	await harness.runCommand("plan");
 
 	assert.equal(harness.ui.inputCalls.length, 0);
-	assertPlanningState(harness, planPath, { planningKind: "resumed" });
+	assertPlanningState({ harness, planPath, options: { planningKind: "resumed" } });
 	assert.deepEqual(harness.sentMessages, []);
 
 	await emitBeforeAgentStart(harness, "Continue");
@@ -150,13 +124,7 @@ void test("/plan asks to resume a foreign existing plan and cancels when decline
 	await harness.runCommand("plan", "existing plan");
 
 	assert.equal(harness.ui.confirmCalls.length, 1);
-	assert.deepEqual(getLastPlanState(harness), {
-		phase: "idle",
-		attachedPlanPath: null,
-		planningKind: null,
-		idleKind: null,
-		savedState: null,
-	});
+	assert.deepEqual(getLastPlanState(harness), createIdleState(null));
 	assert.equal(harness.sentMessages.length, 0);
 });
 
@@ -173,13 +141,21 @@ void test("accepted foreign existing-plan resume stays silent until the next sub
 	await harness.runCommand("plan", "existing plan");
 
 	assert.equal(harness.ui.confirmCalls.length, 1);
-	assertPlanningState(harness, planPath, { planningKind: "resumed" });
+	assertPlanningState({ harness, planPath, options: { planningKind: "resumed" } });
 	assert.deepEqual(harness.sentMessages, []);
 
 	await emitBeforeAgentStart(harness, "Continue");
 
 	assertPlanningMessage({ harness, planPath, kind: "resumed" });
-	assertPlanningState(harness, planPath, { planningKind: "resumed" });
+	assertPlanningState({
+		harness,
+		planPath,
+		options: {
+			planningKind: "resumed",
+			hasDeliveredPlanningRow: true,
+			planningPromptWindowKey: "root",
+		},
+	});
 });
 
 void test("/plan-clear exits planning and detaches the current plan", async () => {
@@ -194,13 +170,7 @@ void test("/plan-clear exits planning and detaches the current plan", async () =
 	await harness.emit("session_start", { type: "session_start", reason: "resume" });
 	await harness.runCommand("plan-clear");
 
-	assert.deepEqual(getLastPlanState(harness), {
-		phase: "idle",
-		attachedPlanPath: null,
-		planningKind: null,
-		idleKind: null,
-		savedState: null,
-	});
+	assert.deepEqual(getLastPlanState(harness), createIdleState(null));
 	assert.equal(harness.ui.editorText, undefined);
 	assert.deepEqual(harness.sentMessages, []);
 });
@@ -234,7 +204,7 @@ void test("--plan bootstraps the default plan file and emits a start event on se
 
 	const planPath = join(homeDir, ".n", "pi", "plans", "plan.md");
 	assert.equal(existsSync(planPath), true);
-	assertPlanningState(harness, planPath, { planningKind: "started" });
+	assertPlanningState({ harness, planPath, options: { planningKind: "started" } });
 	assert.deepEqual(harness.sentMessages, []);
 
 	await emitBeforeAgentStart(harness, "Start planning");
@@ -257,7 +227,7 @@ void test("declining a plan switch while planning keeps the current plan attache
 	await harness.runCommand("plan", "plan-b");
 	await harness.runCommand("plan-status");
 
-	assertPlanningState(harness, planPath, { includeModel: false });
+	assertPlanningState({ harness, planPath, options: { includeModel: false } });
 	assert.deepEqual(harness.ui.notifications.at(-1), {
 		message: `Phase: planning\nAttached plan: ${planPath}`,
 		type: "info",
@@ -279,7 +249,7 @@ void test("fresh start after an earlier start stays Started and still carries th
 	await harness.runCommand("plan", "plan-b");
 
 	const planPath = join(homeDir, ".n", "pi", "plans", "plan-b.md");
-	assertPlanningState(harness, planPath, { planningKind: "started" });
+	assertPlanningState({ harness, planPath, options: { planningKind: "started" } });
 	assert.deepEqual(harness.sentMessages, []);
 
 	await emitBeforeAgentStart(harness, "New turn");
@@ -304,13 +274,10 @@ void test("repeated plan toggles do not append transcript messages", async () =>
 	await harness.runCommand("plan");
 
 	assert.deepEqual(harness.sentMessages, []);
-	assert.deepEqual(getLastPlanState(harness), {
-		phase: "planning",
-		attachedPlanPath: planPath,
+	assert.deepEqual(getLastPlanState(harness), createPlanningState(planPath, {
+		includeModel: false,
 		planningKind: "resumed",
-		idleKind: null,
-		savedState: { ...createSavedState(false), model: undefined },
-	});
+	}));
 });
 
 void test("later planning turns keep lifecycle rows but do not resend the full planning prompt before compaction", async () => {
@@ -354,13 +321,33 @@ void test("stopping planning stays silent on toggle and emits an ended message o
 	assert.equal(harness.sentMessages.length, 2);
 	assert.match(getLastMessageContent(harness), /^Planning Ended /);
 	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), false);
-	assert.deepEqual(getLastPlanState(harness), {
-		phase: "idle",
-		attachedPlanPath: join(homeDir, ".n", "pi", "plans", "stop-turn.md"),
-		planningKind: null,
-		idleKind: "manual",
-		savedState: null,
-	});
+	assert.deepEqual(getLastPlanState(harness), createIdleState(
+		join(homeDir, ".n", "pi", "plans", "stop-turn.md"),
+		{
+			idleKind: "manual",
+			hasDeliveredPlanningRow: true,
+			planningPromptWindowKey: "root",
+		},
+	));
+});
+
+void test("stopping planning does not depend on plan-event transcript history", async () => {
+	const homeDir = temp.makeTempDir("nplan-runtime-home-stop-no-history-");
+	const cwd = temp.makeTempDir("nplan-runtime-cwd-stop-no-history-");
+	process.env.HOME = homeDir;
+	const harness = createHarness(cwd);
+	nplan(harness.api);
+
+	await harness.emit("session_start", { type: "session_start", reason: "startup" });
+	await harness.runCommand("plan", "stop-no-history");
+	await emitBeforeAgentStart(harness, "Initial planning prompt");
+	await harness.emit("agent_end", { type: "agent_end", messages: [] });
+	removePlanEventHistory(harness);
+
+	await harness.runCommand("plan");
+	await emitBeforeAgentStart(harness, "Prompt after stopping planning with missing history");
+
+	assert.match(getLastMessageContent(harness), /^Planning Ended /);
 });
 
 void test("repeated off-on toggles that end in planning still emit the planning row on the next real turn", async () => {
@@ -409,7 +396,15 @@ void test("switching plans while idle emits an abandoned marker for the old plan
 	await harness.runCommand("plan", "plan-b");
 
 	assert.equal(harness.sentMessages.length, 2);
-	assertPlanningState(harness, planBPath, { planningKind: "resumed" });
+	assertPlanningState({
+		harness,
+		planPath: planBPath,
+		options: {
+			planningKind: "resumed",
+			pendingEvents: [{ kind: "abandoned", planFilePath: planAPath }],
+			planningPromptWindowKey: "root",
+		},
+	});
 
 	await emitBeforeAgentStart(harness, "Prompt after switching plans");
 
@@ -434,7 +429,15 @@ void test("switching plans while planning emits abandon then start markers on th
 	await harness.runCommand("plan", "plan-b");
 
 	assert.equal(harness.sentMessages.length, 1);
-	assertPlanningState(harness, planBPath, { planningKind: "started" });
+	assertPlanningState({
+		harness,
+		planPath: planBPath,
+		options: {
+			planningKind: "started",
+			pendingEvents: [{ kind: "abandoned", planFilePath: planAPath }],
+			planningPromptWindowKey: "root",
+		},
+	});
 
 	await emitBeforeAgentStart(harness, "Prompt after switching from A to B");
 
@@ -461,13 +464,11 @@ void test("plan_submit approval exits planning without a second completion row",
 	assert.equal(result.isError, false);
 	assert.equal(harness.sentMessages.length, 1);
 	assert.match(getMessageContentAt(harness, -1), new RegExp(`^Plan Started ${planPath}`));
-	assert.deepEqual(getLastPlanState(harness), {
-		phase: "idle",
-		attachedPlanPath: planPath,
-		planningKind: null,
+	assert.deepEqual(getLastPlanState(harness), createIdleState(planPath, {
 		idleKind: "approved",
-		savedState: null,
-	});
+		hasDeliveredPlanningRow: true,
+		planningPromptWindowKey: "root",
+	}));
 
 	await emitBeforeAgentStart(harness, "Normal prompt after approval");
 

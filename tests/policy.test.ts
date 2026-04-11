@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { PlanState } from "../models/plan-state.ts";
 import {
 	getDefaultPlanPath,
-	getPersistedPlanState,
 	getPlanningToolBlockResult,
 	resolveGlobalPlanPath,
 } from "../nplan-policy.ts";
@@ -109,7 +109,7 @@ void test("getPhaseNotification includes the absolute plan path for planning onl
 });
 
 void test("getPersistedPlanState keeps the latest idle plan state with a null savedState", () => {
-	const state = getPersistedPlanState([
+	const state = PlanState.load([
 		createPlanEntry(
 			{
 				phase: "planning",
@@ -134,10 +134,15 @@ void test("getPersistedPlanState keeps the latest idle plan state with a null sa
 		),
 	]);
 
-	assert.deepEqual(state, {
+	assert.deepEqual(state?.toData(), {
 		phase: "idle",
-		planFilePath: "/abs/path/plan.md",
+		attachedPlanPath: "/abs/path/plan.md",
+		planningKind: null,
+		idleKind: null,
 		savedState: null,
+		pendingEvents: [],
+		hasDeliveredPlanningRow: false,
+		planningPromptWindowKey: null,
 	});
 });
 
