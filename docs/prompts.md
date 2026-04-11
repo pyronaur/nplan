@@ -14,6 +14,8 @@ This document is the required `nplan` prompt and transcript contract.
 
 It is a spec, not a description of any older implementation.
 
+For the current runtime pipeline and where transcript history is filtered before reaching the model, see [docs/planning-message-lifecycle.md](/Users/n14/Projects/Tools/Pi/nplan/docs/planning-message-lifecycle.md).
+
 ## Core Rules
 
 - The user must be able to see everything the agent sees.
