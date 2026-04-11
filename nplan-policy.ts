@@ -1,27 +1,11 @@
-import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 import type { ExtensionContext, SessionEntry } from "@mariozechner/pi-coding-agent";
 import { homedir } from "node:os";
 import { basename, extname, isAbsolute, join, normalize, parse, resolve, sep } from "node:path";
 import { expandHome } from "./nplan-files.ts";
-import { isRecord, isThinkingLevel } from "./nplan-guards.ts";
 import { type Phase } from "./nplan-tool-scope.ts";
 import { formatPhaseWidgetLines, renderColoredPhaseWidgetLine } from "./nplan-widget.ts";
 
 export const DEFAULT_PLAN_NAME = "plan";
-
-export type SavedPhaseState = {
-	activeTools: string[];
-	model?: { provider: string; id: string };
-	thinkingLevel: ThinkingLevel;
-};
-
-export type PersistedPlanState = {
-	phase: Phase;
-	attachedPlanPath?: string | null;
-	planningKind?: "started" | "resumed" | null;
-	idleKind?: "manual" | "approved" | null;
-	savedState?: SavedPhaseState | null;
-};
 
 type PlanningBlockResult = { block: true; reason: string };
 
@@ -140,91 +124,6 @@ const PLANNING_SAFE_BASH_PATTERNS = [
 	/^\s*bat\b/i,
 	/^\s*exa\b/i,
 ] as const;
-
-function isSavedPhaseState(value: unknown): value is SavedPhaseState {
-	if (!isRecord(value)) {
-		return false;
-	}
-	if (
-		!Array.isArray(value.activeTools)
-		|| !value.activeTools.every((tool) => typeof tool === "string")
-	) {
-		return false;
-	}
-	if (!isThinkingLevel(value.thinkingLevel)) {
-		return false;
-	}
-	if (value.model === undefined) {
-		return true;
-	}
-	if (!isRecord(value.model)) {
-		return false;
-	}
-
-	return typeof value.model.provider === "string" && typeof value.model.id === "string";
-}
-
-function isPersistedPlanState(value: unknown): value is PersistedPlanState {
-	if (!isRecord(value)) {
-		return false;
-	}
-	if (value.phase !== "idle" && value.phase !== "planning") {
-		return false;
-	}
-	if (
-		value.planningKind !== undefined && value.planningKind !== null
-		&& value.planningKind !== "started" && value.planningKind !== "resumed"
-	) {
-		return false;
-	}
-	if (
-		value.idleKind !== undefined && value.idleKind !== null
-		&& value.idleKind !== "manual" && value.idleKind !== "approved"
-	) {
-		return false;
-	}
-	if (
-		value.attachedPlanPath !== undefined && value.attachedPlanPath !== null
-		&& typeof value.attachedPlanPath !== "string"
-	) {
-		return false;
-	}
-	if (
-		value.savedState !== undefined && value.savedState !== null
-		&& !isSavedPhaseState(value.savedState)
-	) {
-		return false;
-	}
-	return true;
-}
-
-function normalizePersistedPlanState(value: unknown): PersistedPlanState | undefined {
-	if (isPersistedPlanState(value)) {
-		return value;
-	}
-	if (!isRecord(value)) {
-		return undefined;
-	}
-	if (value.phase !== "idle" && value.phase !== "planning") {
-		return undefined;
-	}
-	if (value.planFilePath !== undefined && typeof value.planFilePath !== "string") {
-		return undefined;
-	}
-	if (
-		value.savedState !== undefined && value.savedState !== null
-		&& !isSavedPhaseState(value.savedState)
-	) {
-		return undefined;
-	}
-	return {
-		phase: value.phase,
-		attachedPlanPath: typeof value.planFilePath === "string" ? value.planFilePath : null,
-		planningKind: value.phase === "planning" ? "resumed" : null,
-		idleKind: null,
-		savedState: value.savedState ?? null,
-	};
-}
 
 function slugifyPlanName(input: string): string {
 	const base = parse(basename(input)).name;
@@ -426,19 +325,4 @@ export function renderPhaseWidget(ctx: ExtensionContext, phase: Phase, planFileP
 
 export function getSessionEntries(ctx: ExtensionContext): SessionEntry[] {
 	return ctx.sessionManager.getBranch();
-}
-
-export function getPersistedPlanState(entries: SessionEntry[]): PersistedPlanState | undefined {
-	for (let i = entries.length - 1; i >= 0; i -= 1) {
-		const entry = entries[i];
-		if (entry.type !== "custom" || entry.customType !== "plan") {
-			continue;
-		}
-		const state = normalizePersistedPlanState(entry.data);
-		if (state) {
-			return state;
-		}
-	}
-
-	return undefined;
 }

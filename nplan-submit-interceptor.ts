@@ -1,15 +1,9 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import type { Runtime } from "./nplan-phase.ts";
-import { buildPlanTurnMessage } from "./nplan-turn-messages.ts";
+import { emitPlanTurnMessages } from "./nplan-turn-messages.ts";
 
 function emitPendingPlanTurnMessage(runtime: Runtime, ctx: ExtensionContext): boolean {
-	const result = buildPlanTurnMessage(runtime, ctx);
-	if (!result?.message) {
-		return false;
-	}
-
-	runtime.pi.sendMessage(result.message, { triggerTurn: false });
-	return true;
+	return emitPlanTurnMessages(runtime, ctx);
 }
 
 function isSubmitKey(data: string): boolean {

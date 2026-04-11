@@ -1,4 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { PlanState } from "./models/plan-state.ts";
+import { SavedPhaseState } from "./models/saved-phase-state.ts";
 import {
 	type PlanConfig,
 	resolvePhaseProfile,
@@ -8,29 +10,24 @@ import {
 	clearPhaseStatus,
 	getDefaultPlanPath,
 	renderPhaseWidget,
-	type SavedPhaseState,
 } from "./nplan-policy.ts";
 import { buildPromptVariables, renderTemplate } from "./nplan-template.ts";
-import { getToolsForPhase, type Phase, stripPlanningOnlyTools } from "./nplan-tool-scope.ts";
+import { getToolsForPhase, stripPlanningOnlyTools } from "./nplan-tool-scope.ts";
 
 export type Runtime = {
 	pi: ExtensionAPI;
-	phase: Phase;
-	attachedPlanPath: string | null;
-	planningKind: "started" | "resumed" | null;
-	idleKind: "manual" | "approved" | null;
+	planState: PlanState;
 	skipNextBeforeAgentPlanMessage: boolean;
-	savedState: SavedPhaseState | null;
 	planConfig: PlanConfig;
 	lastPromptWarning: string | null;
 };
 
 function getPhaseProfile(runtime: Runtime): ReturnType<typeof resolvePhaseProfile> | undefined {
-	if (runtime.phase !== "planning") {
+	if (runtime.planState.phase !== "planning") {
 		return undefined;
 	}
 
-	return resolvePhaseProfile(runtime.planConfig, runtime.phase);
+	return resolvePhaseProfile(runtime.planConfig, runtime.planState.phase);
 }
 
 async function applyModelRef(input: {
@@ -58,9 +55,9 @@ async function applyModelRef(input: {
 }
 
 async function restoreIdleTools(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
-	if (runtime.savedState) {
+	if (runtime.planState.savedState) {
 		await restoreSavedState(runtime, ctx);
-		runtime.savedState = null;
+		runtime.planState = runtime.planState.with({ savedState: null });
 		return;
 	}
 
@@ -70,19 +67,15 @@ async function restoreIdleTools(runtime: Runtime, ctx: ExtensionContext): Promis
 export function createRuntime(pi: ExtensionAPI): Runtime {
 	return {
 		pi,
-		phase: "idle",
-		attachedPlanPath: null,
-		planningKind: null,
-		idleKind: null,
+		planState: PlanState.idle(),
 		skipNextBeforeAgentPlanMessage: false,
-		savedState: null,
 		planConfig: {},
 		lastPromptWarning: null,
 	};
 }
 
 export function getCurrentPlanPath(runtime: Runtime): string {
-	return runtime.attachedPlanPath ?? getDefaultPlanPath();
+	return runtime.planState.attachedPlanPath ?? getDefaultPlanPath();
 }
 
 export function renderPlanningPrompt(
@@ -101,13 +94,13 @@ export function renderPlanningPrompt(
 		buildPromptVariables({
 			planFilePath,
 			planTemplate: resolvePlanTemplate(runtime.planConfig),
-			phase: runtime.phase,
+			phase: runtime.planState.phase,
 			completedCount: 0,
 			totalCount: 0,
 		}),
 	);
 	const warning = rendered.unknownVariables.length > 0
-		? `Plan mode: unknown template variables in ${runtime.phase} prompt: ${
+		? `Plan mode: unknown template variables in ${runtime.planState.phase} prompt: ${
 			rendered.unknownVariables.join(", ")
 		}`
 		: null;
@@ -120,40 +113,41 @@ export function renderPlanningPrompt(
 
 export function updateUi(runtime: Runtime, ctx: ExtensionContext): void {
 	clearPhaseStatus(ctx);
-	renderPhaseWidget(ctx, runtime.phase, getCurrentPlanPath(runtime));
+	renderPhaseWidget(ctx, runtime.planState.phase, getCurrentPlanPath(runtime));
 }
 
 export function persistState(runtime: Runtime): void {
-	runtime.pi.appendEntry("plan", {
-		phase: runtime.phase,
-		attachedPlanPath: runtime.attachedPlanPath,
-		planningKind: runtime.planningKind,
-		idleKind: runtime.idleKind,
-		savedState: runtime.savedState,
-	});
+	runtime.pi.appendEntry("plan", runtime.planState.toData());
 }
 
 export function captureSavedState(runtime: Runtime, ctx: ExtensionContext): void {
-	runtime.savedState = {
-		activeTools: runtime.pi.getActiveTools(),
-		model: ctx.model ? { provider: ctx.model.provider, id: ctx.model.id } : undefined,
-		thinkingLevel: runtime.pi.getThinkingLevel(),
-	};
+	runtime.planState = runtime.planState.with({
+		savedState: new SavedPhaseState(
+			runtime.pi.getActiveTools(),
+			runtime.pi.getThinkingLevel(),
+			ctx.model ? { provider: ctx.model.provider, id: ctx.model.id } : undefined,
+		),
+	});
 }
 
 export async function restoreSavedState(
 	runtime: Runtime,
 	ctx: ExtensionContext,
 ): Promise<void> {
-	if (!runtime.savedState) {
+	if (!runtime.planState.savedState) {
 		return;
 	}
 
-	runtime.pi.setActiveTools(runtime.savedState.activeTools);
-	if (runtime.savedState.model) {
-		await applyModelRef({ runtime, ref: runtime.savedState.model, ctx, reason: "restore" });
+	runtime.pi.setActiveTools(runtime.planState.savedState.activeTools);
+	if (runtime.planState.savedState.model) {
+		await applyModelRef({
+			runtime,
+			ref: runtime.planState.savedState.model,
+			ctx,
+			reason: "restore",
+		});
 	}
-	runtime.pi.setThinkingLevel(runtime.savedState.thinkingLevel);
+	runtime.pi.setThinkingLevel(runtime.planState.savedState.thinkingLevel);
 }
 
 export async function applyPhaseConfig(
@@ -162,21 +156,21 @@ export async function applyPhaseConfig(
 	opts: { restoreSavedState?: boolean } = {},
 ): Promise<void> {
 	const profile = getPhaseProfile(runtime);
-	if (opts.restoreSavedState !== false && runtime.savedState) {
+	if (opts.restoreSavedState !== false && runtime.planState.savedState) {
 		await restoreSavedState(runtime, ctx);
 	}
-	if (runtime.phase === "planning") {
+	if (runtime.planState.phase === "planning") {
 		const baseTools = stripPlanningOnlyTools(
-			runtime.savedState?.activeTools ?? runtime.pi.getActiveTools(),
+			runtime.planState.savedState?.activeTools ?? runtime.pi.getActiveTools(),
 		);
 		const toolSet = new Set(baseTools);
 		for (const tool of profile?.activeTools ?? []) {
 			toolSet.add(tool);
 		}
-		runtime.pi.setActiveTools(getToolsForPhase([...toolSet], runtime.phase));
+		runtime.pi.setActiveTools(getToolsForPhase([...toolSet], runtime.planState.phase));
 	}
 	if (profile?.model) {
-		await applyModelRef({ runtime, ref: profile.model, ctx, reason: runtime.phase });
+		await applyModelRef({ runtime, ref: profile.model, ctx, reason: runtime.planState.phase });
 	}
 	if (profile?.thinking) {
 		runtime.pi.setThinkingLevel(profile.thinking);
@@ -185,11 +179,11 @@ export async function applyPhaseConfig(
 }
 
 export async function syncSessionPhase(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
-	if (runtime.phase === "idle") {
+	if (runtime.planState.phase === "idle") {
 		await restoreIdleTools(runtime, ctx);
 		return;
 	}
-	if (runtime.phase === "planning") {
+	if (runtime.planState.phase === "planning") {
 		await applyPhaseConfig(runtime, ctx, { restoreSavedState: true });
 	}
 }
