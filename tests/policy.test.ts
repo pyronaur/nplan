@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { filterContextMessages } from "../nplan-context.ts";
 import {
 	getDefaultPlanPath,
 	getPersistedPlanState,
@@ -12,18 +11,6 @@ import {
 } from "../nplan-policy.ts";
 import { getPhaseNotification } from "../nplan-status.ts";
 import { formatPhaseWidgetLines } from "../nplan-widget.ts";
-
-function createUserMessage(content: string): {
-	role: "user";
-	content: string;
-	timestamp: number;
-} {
-	return {
-		role: "user",
-		content,
-		timestamp: 1,
-	};
-}
 
 function createPlanEntry(data: unknown, id: string, parentId: string | null): SessionEntry {
 	return {
@@ -151,59 +138,6 @@ void test("getPersistedPlanState keeps the latest idle plan state with a null sa
 		phase: "idle",
 		planFilePath: "/abs/path/plan.md",
 		savedState: null,
-	});
-});
-
-void test("filterContextMessages removes hidden plan-context messages entirely", () => {
-	const messages = filterContextMessages([
-		createUserMessage("hello"),
-		{
-			role: "custom",
-			customType: "plan-context",
-			content: "[PLAN - PLANNING PHASE]\nHidden plan prompt",
-			display: false,
-			timestamp: 2,
-		},
-	]);
-
-	assert.equal(messages.length, 1);
-	assert.deepEqual(messages[0], createUserMessage("hello"));
-});
-
-void test("filterContextMessages keeps visible plan events and only removes hidden plan-context", () => {
-	const messages = filterContextMessages([
-		createUserMessage("hello"),
-		{
-			role: "custom",
-			customType: "plan-event",
-			content: "Plan Started /abs/path/plan-a.md",
-			display: true,
-			timestamp: 2,
-		},
-		{
-			role: "custom",
-			customType: "plan-event",
-			content: "Planning Ended /abs/path/plan-b.md",
-			display: true,
-			timestamp: 3,
-		},
-	]);
-
-	assert.equal(messages.length, 3);
-	assert.deepEqual(messages[0], createUserMessage("hello"));
-	assert.deepEqual(messages[1], {
-		role: "custom",
-		customType: "plan-event",
-		content: "Plan Started /abs/path/plan-a.md",
-		display: true,
-		timestamp: 2,
-	});
-	assert.deepEqual(messages[2], {
-		role: "custom",
-		customType: "plan-event",
-		content: "Planning Ended /abs/path/plan-b.md",
-		display: true,
-		timestamp: 3,
 	});
 });
 

@@ -9,7 +9,6 @@ import {
 	loadPlanConfig,
 	resolvePlanTemplate,
 } from "./nplan-config.ts";
-import { filterContextMessages } from "./nplan-context.ts";
 import { type PlanEventKind, registerPlanEventRenderer } from "./nplan-events.ts";
 import { ensureTextFile } from "./nplan-files.ts";
 import { isRecord } from "./nplan-guards.ts";
@@ -357,18 +356,6 @@ function registerToolCallHandler(runtime: Runtime): void {
 	});
 }
 
-function registerContextHandler(runtime: Runtime): void {
-	runtime.pi.on("context", async (event) => {
-		if (runtime.phase !== "planning" && runtime.phase !== "idle") {
-			return;
-		}
-
-		return {
-			messages: filterContextMessages(event.messages),
-		};
-	});
-}
-
 function registerBeforeAgentStartHandler(runtime: Runtime): void {
 	runtime.pi.on("before_agent_start", async (_event, ctx) => {
 		if (runtime.skipNextBeforeAgentPlanMessage) {
@@ -467,7 +454,6 @@ export default function nplan(pi: ExtensionAPI): void {
 	registerToolResultHandler(runtime);
 	registerBeforeAgentStartHandler(runtime);
 	registerSubmitInterceptor(runtime);
-	registerContextHandler(runtime);
 	registerSessionStartHandler(runtime);
 	registerLeaderHandler(runtime);
 }

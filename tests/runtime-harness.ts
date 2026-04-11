@@ -149,6 +149,7 @@ function createContext(input: {
 	entries: Array<Record<string, unknown>>;
 	uiState: UiState;
 	hasUI?: boolean;
+	signal?: AbortSignal;
 }) {
 	return {
 		ui: createUiApi(input.uiState),
@@ -158,7 +159,7 @@ function createContext(input: {
 		modelRegistry: { find: () => undefined },
 		model: undefined,
 		isIdle: () => true,
-		signal: undefined,
+		signal: input.signal,
 		abort: () => {},
 		hasPendingMessages: () => false,
 		shutdown: () => {},
@@ -176,16 +177,6 @@ function addEventHandler(
 	const handlers = eventHandlers.get(name) ?? [];
 	handlers.push(handler);
 	eventHandlers.set(name, handlers);
-}
-
-function createEventsApi() {
-	return {
-		on(...args: any[]) {
-			void args;
-			return () => {};
-		},
-		emit() {},
-	};
 }
 
 function createMessageApi(state: {
@@ -276,7 +267,13 @@ function createExtensionApi(state: {
 			const [name, handler] = args;
 			addEventHandler(state.eventHandlers, name, handler);
 		},
-		events: createEventsApi(),
+		events: {
+			on(...args: any[]) {
+				void args;
+				return () => {};
+			},
+			emit() {},
+		},
 		...createMessageApi(state),
 		setSessionName() {},
 		getSessionName() {
@@ -290,7 +287,7 @@ function createExtensionApi(state: {
 	};
 }
 
-function createHarnessState(cwd: string, options: { hasUI?: boolean }) {
+function createHarnessState(cwd: string, options: { hasUI?: boolean; signal?: AbortSignal }) {
 	const commands = new Map<string, { handler: (args: string, ctx: any) => Promise<void> | void }>();
 	const flags = new Map<string, boolean | string | undefined>();
 	const entries: Array<Record<string, unknown>> = [];
@@ -314,7 +311,13 @@ function createHarnessState(cwd: string, options: { hasUI?: boolean }) {
 		activeTools,
 		entryCount,
 	});
-	const ctx = createContext({ cwd, entries, uiState: ui, hasUI: options.hasUI });
+	const ctx = createContext({
+		cwd,
+		entries,
+		uiState: ui,
+		hasUI: options.hasUI,
+		signal: options.signal,
+	});
 
 	return {
 		activeTools,
@@ -459,7 +462,10 @@ function createHarnessActions(input: HarnessActionInput) {
 	return { emit, pressKey, runCommand, runTool, submitPrompt: submit };
 }
 
-export function createHarness(cwd: string, options: { hasUI?: boolean } = {}) {
+export function createHarness(
+	cwd: string,
+	options: { hasUI?: boolean; signal?: AbortSignal } = {},
+) {
 	const state = createHarnessState(cwd, options);
 	const actions = createHarnessActions({
 		commands: state.commands,

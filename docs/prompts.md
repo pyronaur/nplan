@@ -18,24 +18,26 @@ It is not description of current implementation.
 
 - User must be able to see every planning instruction agent receives.
 - Hidden model-only planning messages are forbidden.
-- Hidden `plan-context` messages are forbidden.
 - Full planning prompt is one visible message.
 - Full planning prompt is sent once per compaction window.
 - If compaction removes that prompt from model context, next planning turn sends it again as one visible message.
 - While model still has that prompt in context, no later message may send full planning prompt again.
 - Lifecycle messages may continue, but they must not include full planning prompt unless they are that one allowed prompt message for current compaction window.
-- Review results remain visible transcript records.
+- `nplan` does not add hidden planning or review rewrite layers.
+- Review remains ordinary `plan_submit` tool call/result flow with custom visible rendering.
+- Auto-approve fallback is intentional when interactive review is unavailable.
+- Review/runtime failures render as `Error: ...`.
 - Approval must not append extra `Planning Ended <path>` row.
 
 ## Message Kinds
 
 | ID | Header | Body | When | Agent Gets |
 |---|---|---|---|---|
-| F01 | `Plan Review` | none | `plan_submit` without summary | same visible message |
-| F02 | `Plan Review <summary>` | none | `plan_submit` with summary | same visible message |
-| F03 | `Plan Approved <path>` | approval text or approval notes | review approved | same visible message |
-| F04 | `Plan Rejected <path>` | revision feedback | review rejected | same visible message |
-| F05 | `Error: ...` | raw error text | invalid `plan_submit` or review/runtime failure | same visible message |
+| F01 | `Plan Review` | none | `plan_submit` without summary | `plan_submit` tool call |
+| F02 | `Plan Review <summary>` | none | `plan_submit` with summary | `plan_submit` tool call |
+| F03 | `Plan Approved <path>` | approval text or approval notes | review approved or auto-approved | `plan_submit` tool result |
+| F04 | `Plan Rejected <path>` | revision feedback | review rejected | `plan_submit` tool result |
+| F05 | `Error: ...` | raw error text | invalid `plan_submit` or review/runtime failure | `plan_submit` tool result |
 | F06 | `Plan Started <path>` or `Plan Resumed <path>` | full planning prompt | first planning turn after model does not currently have planning prompt | same visible message |
 | F07 | `Plan Started <path>` or `Plan Resumed <path>` | no full planning prompt | later planning lifecycle turn while model still has planning prompt | same visible message |
 | F08 | `Planning Ended <path>` | optional end marker text | first ordinary turn after manual exit of same attached plan | same visible message |
@@ -61,10 +63,11 @@ Think in compaction windows.
 
 ## Context Rules
 
-- Agent may receive only visible planning/review/lifecycle messages.
+- Agent may receive only visible planning lifecycle messages plus the ordinary tool/message history Pi keeps in the branch.
 - No hidden replacement prompt is allowed.
+- No hidden review rewrite is allowed.
 - No hidden context-only message may add planning instructions.
-- Whether old rows remain visible in transcript history does not change rule above.
+- Review labels come from `plan_submit` rendering, not from extra custom transcript rows.
 - Full planning prompt is resent only after compaction removed it from model context.
 
 ## Wording Rules

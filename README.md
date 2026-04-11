@@ -29,7 +29,7 @@ Keep the current local `nplan` interaction surface focused and explicit:
 - `nplan-events.ts` owns plan-mode transcript message rendering
 - `nplan-turn-messages.ts` owns turn-time lifecycle message sequencing between delivered plan state and current runtime state
 - `nplan-status.ts` owns user-facing status text helpers
-- `nplan-policy.ts` owns global plan-path rules, planning context message shaping, planning tool restrictions, and phase UI rendering
+- `nplan-policy.ts` owns global plan-path rules, planning tool restrictions, and phase UI rendering
 - `nplan-review.ts` owns the CLI review transport
 - `nplan-review-ui.ts` owns `plan_submit` review rendering and result patch helpers
 - `nplan-marker-config.ts` owns marker config normalization and merging
@@ -42,7 +42,7 @@ Plan review is handled through the `plannotator` CLI.
 
 - while planning, the agent writes to the active global plan file
 - `plan_submit` reads that file and submits the plan body to `plannotator` on stdin
-- the `plan_submit` tool row itself is the single durable approval/rejection record; approvals render as `Plan Approved <absolute-plan-path>` and denials render as `Plan Rejected <absolute-plan-path>` without a duplicate follow-up message
+- the `plan_submit` tool rows are the review record; visible `Plan Review`, `Plan Approved`, `Plan Rejected`, and `Error: ...` labels come from tool rendering without hidden rewrites or duplicate custom messages
 - CLI approval exits plan mode, restores normal access, and prefills the input editor with `Implement the plan @<absolute-plan-path>`
 - CLI denial returns revision feedback and keeps the extension in planning mode
 - when review is unavailable, `nplan` preserves the current auto-approve fallback behavior
@@ -125,5 +125,5 @@ The test suite covers:
 
 - config merge, prompt rendering, scaffold loading, and planning prompt file resolution behavior
 - planning tool scoping
-- global plan-path resolution, attached-plan command flows, planning context shaping, and planning tool restrictions
+- global plan-path resolution, attached-plan command flows, planning lifecycle behavior, and planning tool restrictions
 - CLI request/response handling through `plannotator` and `plan_submit` result semantics

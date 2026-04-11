@@ -258,6 +258,15 @@ function makeToolResult(
 	};
 }
 
+function formatReviewError(message: string): string {
+	const text = message.trim() || "Unknown review error.";
+	if (text.startsWith("Error:")) {
+		return text;
+	}
+
+	return `Error: ${text}`;
+}
+
 function validatePlanFile(fullPath: string, planFilePath: string): PlanSubmitResult | undefined {
 	let planContent = "";
 	try {
@@ -327,7 +336,7 @@ async function runSubmitPlanTool(
 			signal: ctx.signal,
 		});
 	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
+		const message = formatReviewError(error instanceof Error ? error.message : String(error));
 		ctx.ui.notify(message, "error");
 		return makeToolResult(message, { approved: false, planFilePath });
 	}

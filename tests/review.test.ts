@@ -255,6 +255,32 @@ void test("rejected plan_submit review record uses failed semantics and the exac
 	);
 });
 
+void test("error plan_submit results render the raw Error row text", () => {
+	const text =
+		"Error: Plannotator review returned an invalid decision: Plannotator review output was not valid JSON.";
+	assert.equal(
+		getPlanSubmitResultText({
+			details: { approved: false, planFilePath: "/abs/path/plan.md" },
+			content: [{ type: "text", text }],
+			expanded: true,
+		}),
+		text,
+	);
+
+	const rendered = renderComponentText(
+		renderPlanSubmitResult(
+			{
+				content: [{ type: "text", text }],
+				details: { approved: false, planFilePath: "/abs/path/plan.md" },
+			},
+			{ expanded: true },
+			createTheme(),
+		),
+	);
+
+	assert.equal(rendered.trimEnd(), text);
+});
+
 void test("collapsed plan-event renderer shows the Ctrl+O expand affordance", () => {
 	const harness = createHarness(mkdtempSync(join(tmpdir(), "nplan-event-renderer-")));
 	nplan(harness.api);
