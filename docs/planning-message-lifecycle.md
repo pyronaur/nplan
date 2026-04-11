@@ -83,7 +83,7 @@ flowchart TD
 flowchart LR
     A[Data: current session branch\nafter compaction] --> B[UI: transcript renders visible rows in branch]
     A --> C[Pi: context hook receives current branch message list]
-    C --> D[nplan: filterContextMessages removes hidden plan-context only]
+    C --> D[nplan: strip hidden plan-context]
     D --> E[API: model request payload]
 
     classDef data fill:#e8f6e8,stroke:#3d8a4d,color:#111;
@@ -132,7 +132,7 @@ sequenceDiagram
     S->>UI: render user message
     C->>S: read current branch message list
     C->>F: pass full message list
-    F->>F: remove hidden plan-context only
+    F->>F: strip hidden plan-context
     F->>M: send filtered context
 ```
 
@@ -167,7 +167,7 @@ sequenceDiagram
     U->>S: append user message
     C->>S: read current branch message list
     C->>F: pass full message list
-    F->>F: remove hidden plan-context only
+    F->>F: strip hidden plan-context
     F->>M: send visible lifecycle history still in current context window
 ```
 
