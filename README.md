@@ -23,6 +23,9 @@ Keep the current local `nplan` interaction surface focused and explicit:
 
 - `index.ts` loads `nplan.ts`
 - `nplan.ts` owns the extension lifecycle, commands, state restore, tool gating, and plan submission flow
+- `models/plan-state.ts` owns canonical persisted plan state
+- `models/saved-phase-state.ts` owns persisted saved tool/model/thinking snapshot state
+- `models/plan-lifecycle-event.ts` owns persisted one-shot lifecycle event state
 - `nplan-phase.ts` owns runtime phase state, prompt rendering inputs, and tool/model restore behavior
 - `nplan-config.ts` owns config loading, phase profile resolution, bundled/default planning prompt loading, scaffold loading, and marker resolution
 - `nplan-template.ts` owns `${...}` prompt/template interpolation
@@ -47,7 +50,7 @@ Plan review is handled through the `plannotator` CLI.
 - CLI denial returns revision feedback and keeps the extension in planning mode
 - when review is unavailable, `nplan` preserves the current auto-approve fallback behavior
 
-Plan-mode toggles update the live footer/widget UI and persisted plan state without appending visible transcript messages on their own. Every real submitted planning turn renders a visible collapsed `Plan Started ...` or `Plan Resumed ...` row, and expanding that row with `Ctrl+O` reveals the full planning prompt for that turn. Manual exits surface as `Planning Ended <path>` on the first later ordinary turn whose history reflects the exit, detaches and plan switches surface as `Plan Abandoned <old>` followed by `Plan Started <new>` or `Plan Resumed <new>` on that same turn, and approved `plan_submit` turns do not append a second completion row. The `plan_submit` tool row remains the only durable approval or rejection transcript record.
+Plan-mode toggles update the live footer/widget UI and canonical persisted plan state without appending visible transcript messages on their own. Every real submitted planning turn renders a visible collapsed `Plan Started ...` or `Plan Resumed ...` row, and expanding that row with `Ctrl+O` reveals the full planning prompt for that turn. Manual exits surface as `Planning Ended <path>` on the first later ordinary turn, detaches and plan switches surface as `Plan Abandoned <old>` followed by `Plan Started <new>` or `Plan Resumed <new>` on that same turn, and approved `plan_submit` turns do not append a second completion row. Lifecycle delivery is state-driven; visible `plan-event` rows are transcript artifacts, not control-state authority.
 
 ## Config
 

@@ -20,6 +20,7 @@ For the complete state map, read `docs/mermaid-plan-state-information-architectu
 - Review rows are ordinary `plan_submit` tool call/result rows with custom visible rendering.
 - `nplan` does not use hidden `plan-context` messages.
 - `nplan` does not register a `context` hook or rewrite model context for planning/review rows.
+- Lifecycle delivery is driven by canonical `PlanState`, not by scanning `plan-event` transcript history.
 - Full planning prompt body appears only on the first `Plan Started` or `Plan Resumed` row in the current compaction window.
 - Approved `plan_submit` turns do not append a second completion row.
 
@@ -30,7 +31,7 @@ flowchart TD
     A[User: action] --> B{Pi: action type}
 
     B -->|Interactive prompt submit while planning| C[nplan: submit interceptor]
-    C --> D[nplan: buildPlanTurnMessage]
+    C --> D[nplan: emitPlanTurnMessages]
     D --> E[Pi: pi.sendMessage plan-event triggerTurn:false]
     E --> F[Data: session transcript append]
     F --> G[UI: visible plan-event row renders]
@@ -42,7 +43,7 @@ flowchart TD
     I --> J[UI: tool result row Plan Approved or Plan Rejected or Error]
     J --> F
 
-    B -->|Manual exit or switch reflected on later turn| K[nplan: buildPlanTurnMessage on later real turn]
+    B -->|Manual exit or switch reflected on later turn| K[nplan: emitPlanTurnMessages on later real turn]
     K --> E
 
     F --> L[API: Pi sends current branch history to model]
@@ -67,13 +68,12 @@ flowchart TD
 
 1. `registerSubmitInterceptor(...)` in `nplan-submit-interceptor.ts`
    - Enter key on a real prompt submit
-   - calls `buildPlanTurnMessage(...)`
-   - directly sends the returned `plan-event` via `pi.sendMessage(..., { triggerTurn: false })`
+   - calls `emitPlanTurnMessages(...)`
 2. `registerBeforeAgentStartHandler(...)` in `nplan.ts`
    - normal turn start fallback
-   - returns `buildPlanTurnMessage(...)` result to Pi
+   - calls `emitPlanTurnMessages(...)`
 
-If either path runs while `buildPlanTurnMessage(...)` still believes a resume row is owed, a new `Plan Resumed` row is injected.
+If either path runs for a real turn while `PlanState` says lifecycle rows are owed, `emitPlanTurnMessages(...)` injects them.
 
 ## Planning Turns
 
@@ -88,11 +88,11 @@ If plan state changes without a user message yet, the owed lifecycle row is emit
 
 ## Compaction Window Rule
 
-`nplan-turn-messages.ts` scans the current branch for the latest `compaction` entry.
-If found, prompt-resend checks only look at entries from `firstKeptEntryId` onward.
+`nplan-turn-messages.ts` computes a compaction-window key from the latest `compaction` entry.
+`PlanState.planningPromptWindowKey` records which window already received the full planning prompt.
 
-- If the current window already contains a visible `Plan Started` or `Plan Resumed` row with a non-empty body, later planning rows in that window omit the full planning prompt body.
-- If the current window does not contain such a row, the next `Plan Started` or `Plan Resumed` row includes the full planning prompt body.
+- If `PlanState.planningPromptWindowKey` already matches the current window key, later planning rows in that window omit the full planning prompt body.
+- If the current window key does not match, the next `Plan Started` or `Plan Resumed` row includes the full planning prompt body and state records that window key.
 - `Planning Ended` and `Plan Abandoned` never carry the full planning prompt.
 
 ## Review Flow
@@ -119,7 +119,8 @@ There is no hidden review rewrite layer and no duplicate custom review row.
 ## Important Files
 
 - `nplan-submit-interceptor.ts`: pre-submit `plan-event` emission for interactive Enter submits and fallback dedupe via `skipNextBeforeAgentPlanMessage`
-- `nplan-turn-messages.ts`: computes owed lifecycle rows and prompt resend rule per compaction window
+- `models/plan-state.ts`: canonical state for planning phase, pending lifecycle rows, and prompt-window delivery
+- `nplan-turn-messages.ts`: emits lifecycle rows from `PlanState` and compaction window key
 - `nplan-events.ts`: creates and renders visible `plan-event` transcript rows
 - `nplan-review.ts`: `plan_submit` execution, auto-approve fallback, and review error handling
 - `nplan-review-ui.ts`: `plan_submit` call/result rendering
