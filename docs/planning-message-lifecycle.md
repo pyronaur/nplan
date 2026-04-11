@@ -1,10 +1,11 @@
 ---
 title: nplan Planning Message Lifecycle
-summary: Current runtime map for how planning messages are created, persisted, rendered in the UI, and filtered before they reach the agent.
+summary: Current runtime map for how visible planning rows are emitted, deduplicated, and carried through compaction into agent context.
 short: Current planning message lifecycle map.
 read_when:
   - Need to understand how visible planning messages reach agent context.
   - Debugging planning transcript ordering, context filtering, or review rows.
+  - Need exact runtime rule for when full planning prompt is resent after compaction.
   - Need the actual runtime pipeline, not only the intended prompt spec.
 ---
 
@@ -17,12 +18,14 @@ This file is the concrete pipeline map for how messages currently move through `
 
 ## Overview
 
-- `plan-event` messages are real persisted transcript entries.
-- The UI renders the full persisted transcript history.
-- The `context` hook removes hidden `plan-context` rows before Pi sends context to the model.
-- Visible `plan-event` rows remain in agent context.
-- Full planning prompt appears only on first planning lifecycle row in current compaction window.
-- After compaction drops that prompt from model context, next planning turn emits it again.
+- Every planning lifecycle row is visible `plan-event` message.
+- `nplan` does not use hidden `plan-context` injection path for planning prompt delivery.
+- `filterContextMessages(...)` only strips hidden `plan-context` rows if they appear from older data or foreign input.
+- `buildPlanTurnMessage(...)` decides which lifecycle row is still owed by comparing latest delivered `plan-event` state against latest persisted phase state.
+- Plan switch can emit two rows on one turn: `Plan Abandoned <old>` first, then `Plan Started <new>` or `Plan Resumed <new>`.
+- Full planning prompt body appears only on first `Plan Started` or `Plan Resumed` row in current compaction window.
+- Current compaction window means latest `compaction` entry onward, resolved from `firstKeptEntryId`; if no compaction entry exists, whole current branch is one window.
+- After compaction removes prompt-bearing row from model context window, next planning turn emits full prompt again.
 
 ## Diagram Legend
 
@@ -55,7 +58,7 @@ flowchart TD
     B -->|Manual exit or switch reflected on later turn| K[nplan: buildPlanTurnMessage on later real turn]
     K --> E
 
-    F --> L[Pi: context hook receives current message list]
+    F --> L[Pi: context hook receives current branch message list]
     L --> M[nplan: filterContextMessages]
     M --> N[Data: hidden plan-context removed]
     N --> O[API: Pi sends filtered context to model]
@@ -78,8 +81,8 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    A[Data: session history\nfull persisted message list] --> B[UI: transcript renders full visible history]
-    A --> C[Pi: context hook receives current message list]
+    A[Data: current session branch\nafter compaction] --> B[UI: transcript renders visible rows in branch]
+    A --> C[Pi: context hook receives current branch message list]
     C --> D[nplan: filterContextMessages removes hidden plan-context only]
     D --> E[API: model request payload]
 
@@ -96,6 +99,9 @@ flowchart LR
 ```
 
 ## Interactive Planning Turn
+
+Interactive Enter submit has its own fast path.
+`registerSubmitInterceptor(...)` emits owed `plan-event` row before user message is appended, then sets `skipNextBeforeAgentPlanMessage` so `before_agent_start` path does not emit same row again.
 
 ```mermaid
 sequenceDiagram
@@ -120,10 +126,11 @@ sequenceDiagram
     U->>T: Press Enter on planning prompt
     T->>T: buildPlanTurnMessage()
     T->>S: append visible Plan Started / Plan Resumed
+    T->>T: set skipNextBeforeAgentPlanMessage
     S->>UI: render visible row
     U->>S: append user message
     S->>UI: render user message
-    C->>S: read current message list
+    C->>S: read current branch message list
     C->>F: pass full message list
     F->>F: remove hidden plan-context only
     F->>M: send filtered context
@@ -158,11 +165,45 @@ sequenceDiagram
     N->>S: append visible Planning Ended
     S->>UI: render Planning Ended
     U->>S: append user message
-    C->>S: read current message list
+    C->>S: read current branch message list
     C->>F: pass full message list
     F->>F: remove hidden plan-context only
     F->>M: send visible lifecycle history still in current context window
 ```
+
+## Plan Switch On Next Turn
+
+If attached plan changes between delivered state and persisted state, same turn can owe more than one row.
+`buildPlanTurnMessage(...)` sends earlier owed rows immediately with `triggerTurn: false`, then returns final row for normal turn pipeline.
+
+```mermaid
+sequenceDiagram
+    actor U as User
+    box rgb(216,236,255) nplan
+        participant B as nplan: buildPlanTurnMessage
+    end
+    box rgb(232,246,232) Data
+        participant S as Data: session transcript
+    end
+    box rgb(255,231,214) UI
+        participant UI as UI: transcript
+    end
+
+    U->>B: Submit next real turn after switching plans
+    B->>S: append Plan Abandoned old-plan
+    S->>UI: render abandon row
+    B->>S: append Plan Started / Plan Resumed new-plan
+    S->>UI: render new planning row
+```
+
+## Compaction Window Rule
+
+`nplan-turn-messages.ts` scans current branch for latest `compaction` entry.
+If found, prompt-resend check only looks at entries from `firstKeptEntryId` onward.
+
+- If current window already contains visible `Plan Started` or `Plan Resumed` row with non-empty body, later planning rows in same window omit planning prompt body.
+- If current window does not contain such row, next `Plan Started` or `Plan Resumed` row includes full planning prompt body.
+- `Planning Ended` and `Plan Abandoned` rows never carry full planning prompt.
 
 ## Review Flow
 
@@ -191,19 +232,19 @@ flowchart TD
 
 | Layer | Data source | Current behavior |
 |---|---|---|
-| UI transcript | full persisted session history | shows all visible `plan-event` rows and all tool rows |
-| Agent context | `context` hook output after `filterContextMessages(...)` | gets visible `plan-event` rows in current context plus normal tool/message history |
+| UI transcript | current session branch | shows visible `plan-event` rows and tool rows still present after compaction |
+| Agent context | `context` hook output after `filterContextMessages(...)` | gets same visible `plan-event` rows still in current branch, plus normal tool/message history |
 
 ## Consequence
 
-If transcript visibly contains `Plan Started ...` and later `Planning Ended ...`, UI shows both because both are persisted history entries.
+If current branch visibly contains `Plan Started ...` and later `Planning Ended ...`, UI and agent context both see both rows.
 
-Agent context keeps visible `plan-event` rows that remain in current context window. Full planning prompt itself appears only once per compaction window, because later `Plan Started ...` or `Plan Resumed ...` rows omit prompt body until compaction resets allowance.
+Full planning prompt itself still appears only once per compaction window, because later `Plan Started ...` or `Plan Resumed ...` rows omit prompt body until compaction resets allowance.
 
 ## Important Files
 
-- `nplan-submit-interceptor.ts`: pre-submit `plan-event` emission for interactive Enter submits
-- `nplan-turn-messages.ts`: computes which lifecycle row is owed on the current turn
+- `nplan-submit-interceptor.ts`: pre-submit `plan-event` emission for interactive Enter submits and fallback dedupe via `skipNextBeforeAgentPlanMessage`
+- `nplan-turn-messages.ts`: computes owed lifecycle rows and prompt resend rule per compaction window
 - `nplan-events.ts`: creates and renders visible `plan-event` transcript rows
 - `nplan.ts`: wires `before_agent_start`, `context`, `plan_submit`, and phase transitions
-- `nplan-context.ts`: filters persisted transcript history before Pi sends context to the model
+- `nplan-context.ts`: strips hidden `plan-context` rows before Pi sends context to the model
