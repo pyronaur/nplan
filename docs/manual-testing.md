@@ -52,23 +52,19 @@ This section is intentionally verbatim. Do not paraphrase it away.
 >
 > Note: we're doing all this setup, because I want you to test the plan mode thoroughly and log all the bugs, maybe in docs/manual-testing-results.md - we'll fix all of those bugs, and then you'll test again, and look for more bugs, and test again, etc. - so this document is monumentally foundational to your quality of work.
 
-### Plannotator help shown by user
+### Plannotator quick note
 
-```shell
-$ plannotator --help
-Usage:
-  plannotator --help
-  plannotator [--browser <name>]
-  plannotator review [PR_URL]
-  plannotator annotate <file.md | folder/>
-  plannotator last
-  plannotator archive
-  plannotator sessions
-  plannotator improve-context
+Most of the time you do not need to drive `plannotator` directly.
 
-Note:
-  running 'plannotator' without arguments is for hook integration and expects JSON on stdin
+`nplan` will usually spawn the review instance for you.
+
+Useful support command:
+
+```bash
+plannotator sessions
 ```
+
+Use it when you want to inspect active review instances or recover the current review URL.
 
 ## Starting Point
 
@@ -237,6 +233,7 @@ Known facts:
 - the final review decision comes back on stdout as JSON
 - the live review URL comes from `~/.plannotator/sessions/<pid>.json`
 - `Plan Review Pending <path>` should show that URL visibly
+- most of the time the only manual `plannotator` command you need is `plannotator sessions`
 
 Good review flow:
 
