@@ -1,7 +1,6 @@
 import { isRecord } from "../nplan-guards.ts";
-import type { PlanLifecycleKind } from "./plan-lifecycle-event.ts";
 
-export type PlanEventKind = PlanLifecycleKind;
+export type PlanEventKind = "started" | "ended";
 
 export class PlanEventMessage {
 	readonly kind: PlanEventKind;
@@ -18,13 +17,8 @@ export class PlanEventMessage {
 		if (this.kind === "started") {
 			return `Plan Started ${this.planFilePath}`;
 		}
-		if (this.kind === "resumed") {
-			return `Plan Resumed ${this.planFilePath}`;
-		}
-		if (this.kind === "stopped") {
-			return `Planning Ended ${this.planFilePath}`;
-		}
-		return `Plan Abandoned ${this.planFilePath}`;
+
+		return `Plan Ended ${this.planFilePath}`;
 	}
 
 	static fromUnknown(value: unknown): PlanEventMessage | undefined {
@@ -32,8 +26,7 @@ export class PlanEventMessage {
 			return undefined;
 		}
 		if (
-			(value.kind !== "started" && value.kind !== "resumed" && value.kind !== "stopped"
-				&& value.kind !== "abandoned")
+			(value.kind !== "started" && value.kind !== "ended")
 			|| typeof value.planFilePath !== "string"
 			|| typeof value.body !== "string"
 		) {

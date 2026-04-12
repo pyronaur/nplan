@@ -2,29 +2,29 @@ import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import type { Runtime } from "./nplan-phase.ts";
 import { emitPlanTurnMessages } from "./nplan-turn-messages.ts";
 
-function emitPendingPlanTurnMessage(runtime: Runtime, ctx: ExtensionContext): boolean {
-	return emitPlanTurnMessages(runtime, ctx);
-}
-
 function isSubmitKey(data: string): boolean {
 	return data === "\r" || data === "\n";
 }
 
-function shouldEmitPlanTurnMessageOnSubmit(ctx: ExtensionContext, data: string): boolean {
+function getSubmittedPrompt(ctx: ExtensionContext, data: string): string | null {
 	if (!isSubmitKey(data)) {
-		return false;
+		return null;
 	}
 	if (!ctx.isIdle() || ctx.hasPendingMessages()) {
-		return false;
+		return null;
 	}
 
-	const prompt = ctx.ui.getEditorText().trim();
-	if (!prompt) {
-		return false;
+	const prompt = ctx.ui.getEditorText();
+	if (!prompt.trim()) {
+		return null;
 	}
 
 	// Slash commands bypass normal turn submission, so avoid emitting transcript rows here.
-	return !prompt.startsWith("/");
+	if (prompt.trimStart().startsWith("/")) {
+		return null;
+	}
+
+	return prompt;
 }
 
 export function registerSubmitInterceptor(runtime: Runtime): void {
@@ -38,12 +38,15 @@ export function registerSubmitInterceptor(runtime: Runtime): void {
 		}
 
 		offTerminalInput = ctx.ui.onTerminalInput((data) => {
-			if (!shouldEmitPlanTurnMessageOnSubmit(ctx, data)) {
+			const prompt = getSubmittedPrompt(ctx, data);
+			if (!prompt) {
 				return undefined;
 			}
 
-			emitPendingPlanTurnMessage(runtime, ctx);
-			return undefined;
+			emitPlanTurnMessages(runtime, ctx);
+			ctx.ui.setEditorText("");
+			runtime.pi.sendUserMessage(prompt);
+			return { consume: true };
 		});
 	});
 

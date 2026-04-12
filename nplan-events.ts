@@ -6,13 +6,8 @@ function getHeaderColor(kind: PlanEventKind): "accent" | "warning" | "success" |
 	if (kind === "started") {
 		return "accent";
 	}
-	if (kind === "resumed") {
-		return "success";
-	}
-	if (kind === "stopped") {
-		return "muted";
-	}
-	return "warning";
+
+	return "muted";
 }
 
 export function registerPlanEventRenderer(pi: ExtensionAPI): void {

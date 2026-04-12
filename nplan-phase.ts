@@ -18,6 +18,7 @@ import { getToolsForPhase, stripPlanningOnlyTools } from "./nplan-tool-scope.ts"
 export type Runtime = {
 	pi: ExtensionAPI;
 	planState: PlanState;
+	committedPlanState: PlanState;
 	planDeliveryState: PlanDeliveryState;
 	planConfig: PlanConfig;
 	lastPromptWarning: string | null;
@@ -69,6 +70,7 @@ export function createRuntime(pi: ExtensionAPI): Runtime {
 	return {
 		pi,
 		planState: PlanState.idle(),
+		committedPlanState: PlanState.idle(),
 		planDeliveryState: PlanDeliveryState.idle(),
 		planConfig: {},
 		lastPromptWarning: null,
@@ -118,8 +120,13 @@ export function updateUi(runtime: Runtime, ctx: ExtensionContext): void {
 }
 
 export function persistState(runtime: Runtime): void {
-	runtime.pi.appendEntry("plan", runtime.planState.toData());
+	runtime.pi.appendEntry("plan", runtime.committedPlanState.toData());
 	runtime.pi.appendEntry("plan-delivery", runtime.planDeliveryState.toData());
+}
+
+export function commitPlanState(runtime: Runtime): void {
+	runtime.committedPlanState = runtime.planState;
+	persistState(runtime);
 }
 
 export function captureSavedState(runtime: Runtime, ctx: ExtensionContext): void {

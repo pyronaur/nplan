@@ -15,7 +15,7 @@ Keep the current local `nplan` interaction surface focused and explicit:
 - restricted planning tools with `plan_submit`
 - editor-prefilled implementation handoff after approval
 
-`/plan <slug>` attaches or resumes `~/.n/pi/plans/<slug>.md`. Missing targets start a new plan immediately; existing foreign targets ask for confirmation and then resume. Bare `/plan` or `pi-leader` follow-up `p` resumes the currently attached plan when one exists, otherwise it prompts for a slug. `/plan-clear` detaches the current plan and exits planning when necessary. `--plan` enters the same planning-start flow during session startup, including scaffold bootstrapping.
+`/plan <slug>` stages `~/.n/pi/plans/<slug>.md` as the next planning target. Missing targets do not create a file until the next real user prompt is submitted. Existing foreign targets ask for confirmation and then resume. Bare `/plan` or `pi-leader` follow-up `p` resumes the currently attached plan when one exists, otherwise it prompts for a slug. `/plan-clear` detaches the current plan and exits planning when necessary. `--plan` stages the same planning-start flow during session startup.
 
 ## Architecture
 
@@ -24,15 +24,14 @@ Keep the current local `nplan` interaction surface focused and explicit:
 - `index.ts` loads `nplan.ts`
 - `nplan.ts` owns the extension lifecycle, commands, state restore, tool gating, and plan submission flow
 - `models/plan-state.ts` owns canonical persisted plan state
-- `models/plan-delivery-state.ts` owns canonical persisted planning-message delivery state
+- `models/plan-delivery-state.ts` owns canonical persisted planning-prompt compaction-window state
 - `models/plan-event-message.ts` owns persisted `plan-event` transcript artifact shape
 - `models/saved-phase-state.ts` owns persisted saved tool/model/thinking snapshot state
-- `models/plan-lifecycle-event.ts` owns persisted one-shot lifecycle event state
 - `nplan-phase.ts` owns runtime phase state, prompt rendering inputs, and tool/model restore behavior
 - `nplan-config.ts` owns config loading, phase profile resolution, bundled/default planning prompt loading, scaffold loading, and marker resolution
 - `nplan-template.ts` owns `${...}` prompt/template interpolation
 - `nplan-events.ts` owns plan-mode transcript message rendering
-- `nplan-turn-messages.ts` owns turn-time lifecycle message sequencing between delivered plan state and current runtime state
+- `nplan-turn-messages.ts` owns JIT plan lifecycle emission and commit-time state flush
 - `nplan-status.ts` owns user-facing status text helpers
 - `nplan-policy.ts` owns global plan-path rules, planning tool restrictions, and phase UI rendering
 - `nplan-review.ts` owns the CLI review transport
@@ -52,7 +51,7 @@ Plan review is handled through the `plannotator` CLI.
 - CLI denial returns revision feedback and keeps the extension in planning mode
 - when review is unavailable, `nplan` preserves the current auto-approve fallback behavior
 
-Plan-mode toggles update the live footer/widget UI and canonical persisted state without appending visible transcript messages on their own. Planning rows emit only when delivery state explicitly owes one: on first real turn after start/resume, on first real planning turn after compaction resets prompt allowance, or on explicit idle-transition delivery such as `Planning Ended <path>` and `Plan Abandoned <path>`. Ordinary later planning turns in the same compaction window stay silent. Visible `plan-event` rows are transcript artifacts, not control-state authority.
+Plan-mode toggles update the live footer/widget UI and draft runtime state without appending visible transcript messages on their own. New plan files are not created, and persisted committed state is not updated, until the next real user prompt is submitted. Lifecycle rows emit only at that JIT submit boundary: `Plan Started <path>` when planning begins or the planning prompt must be resent after compaction, and `Plan Ended <path>` when an active planning session stops. Ordinary later planning turns in the same compaction window stay silent. Visible `plan-event` rows are transcript artifacts, not control-state authority.
 
 ## Config
 
@@ -80,7 +79,7 @@ Plan scaffold resolution is also file-backed and follows the same precedence:
 4. `~/.pi/agent/nplan/plan-template.md`
 5. bundled `prompts/plan-template.md`
 
-When a selected plan file does not exist yet, `nplan` creates it from that scaffold before planning begins.
+When a selected plan file does not exist yet, `nplan` creates it from that scaffold immediately before the first real planning prompt is submitted.
 
 Example project config:
 

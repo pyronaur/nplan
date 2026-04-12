@@ -1,9 +1,7 @@
-export type PlanMarkerName = "resumed" | "stopped" | "abandoned";
+export type PlanMarkerName = "ended";
 
 export interface PlanMarkersConfig {
-	resumed?: string | null;
-	stopped?: string | null;
-	abandoned?: string | null;
+	ended?: string | null;
 }
 
 export function normalizeMarkers(
@@ -18,9 +16,7 @@ export function normalizeMarkers(
 	}
 
 	return {
-		resumed: normalizeOptionalString("resumed" in value ? value.resumed : undefined),
-		stopped: normalizeOptionalString("stopped" in value ? value.stopped : undefined),
-		abandoned: normalizeOptionalString("abandoned" in value ? value.abandoned : undefined),
+		ended: normalizeOptionalString("ended" in value ? value.ended : undefined),
 	};
 }
 
@@ -36,9 +32,7 @@ export function mergeMarkers(
 	}
 
 	return {
-		resumed: override.resumed !== undefined ? override.resumed : base?.resumed,
-		stopped: override.stopped !== undefined ? override.stopped : base?.stopped,
-		abandoned: override.abandoned !== undefined ? override.abandoned : base?.abandoned,
+		ended: override.ended !== undefined ? override.ended : base?.ended,
 	};
 }
 

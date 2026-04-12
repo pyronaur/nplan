@@ -60,9 +60,7 @@ const BUNDLED_PLAN_TEMPLATE_PATH = join(
 );
 
 const INTERNAL_CONFIG: PlanConfig = {
-	markers: {
-		abandoned: "Planning detached from ${planFilePath}.",
-	},
+	markers: {},
 	planTemplate: readFileSync(BUNDLED_PLAN_TEMPLATE_PATH, "utf-8"),
 	phases: {
 		planning: {

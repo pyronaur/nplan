@@ -6,18 +6,14 @@ import {
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { PlanDeliveryState } from "./models/plan-delivery-state.ts";
-import { type PlanLifecycleKind } from "./models/plan-lifecycle-event.ts";
 import { PlanState } from "./models/plan-state.ts";
-import {
-	loadPlanConfig,
-	resolvePlanTemplate,
-} from "./nplan-config.ts";
+import { loadPlanConfig } from "./nplan-config.ts";
 import { registerPlanEventRenderer } from "./nplan-events.ts";
-import { ensureTextFile } from "./nplan-files.ts";
 import { isRecord } from "./nplan-guards.ts";
 import {
 	applyPhaseConfig,
 	captureSavedState,
+	commitPlanState,
 	createRuntime,
 	getCurrentPlanPath,
 	persistState,
@@ -58,22 +54,6 @@ type PiLeaderOpenEvent = {
 		]
 	) => void;
 };
-type PlanningEntryKind = Extract<PlanLifecycleKind, "started" | "resumed">;
-
-function hasDeliveredPlanningRow(runtime: Runtime, planFilePath: string): boolean {
-	return !runtime.planDeliveryState.hasPendingPlanningEvent(planFilePath);
-}
-
-function queueIdleLifecycleEvent(
-	runtime: Runtime,
-	kind: Extract<PlanLifecycleKind, "stopped" | "abandoned">,
-	planFilePath: string,
-): void {
-	runtime.planDeliveryState = runtime.planDeliveryState
-		.clearPendingEvent(kind, planFilePath)
-		.queueLifecycleEvent(kind, planFilePath);
-}
-
 function isPiLeaderOpenEvent(event: unknown): event is PiLeaderOpenEvent {
 	return isRecord(event) && typeof event.add === "function";
 }
@@ -93,28 +73,19 @@ function notifyReviewAvailability(ctx: ExtensionContext): void {
 	}
 }
 
-function ensureAttachedPlanFile(runtime: Runtime): void {
-	ensureTextFile(getCurrentPlanPath(runtime),
-		resolvePlanTemplate(runtime.planConfig) ?? "# Plan\n");
-}
-
 async function enterPlanning(
 	runtime: Runtime,
 	ctx: ExtensionContext,
-	entryKind: PlanningEntryKind,
 ): Promise<void> {
-	const planFilePath = getCurrentPlanPath(runtime);
-	runtime.planDeliveryState = runtime.planDeliveryState
-		.clearPendingEvent("stopped", planFilePath)
-		.beginPlanning(entryKind, planFilePath);
+	if (runtime.planState.phase !== "planning") {
+		captureSavedState(runtime, ctx);
+	}
+
 	runtime.planState = runtime.planState.with({
 		phase: "planning",
 		idleKind: null,
 	});
-	ensureAttachedPlanFile(runtime);
-	captureSavedState(runtime, ctx);
 	await applyPhaseConfig(runtime, ctx, { restoreSavedState: false });
-	persistState(runtime);
 	notifyReviewAvailability(ctx);
 }
 
@@ -133,7 +104,6 @@ async function exitPlanningSilently(
 		idleKind,
 		savedState: null,
 	});
-	runtime.planDeliveryState = runtime.planDeliveryState.endPlanning();
 	updateUi(runtime, ctx);
 }
 
@@ -142,23 +112,10 @@ async function exitToIdle(
 	ctx: ExtensionContext,
 	options: { detach?: boolean; idleKind?: Runtime["planState"]["idleKind"] } = {},
 ): Promise<void> {
-	const planFilePath = runtime.planState.attachedPlanPath;
 	await exitPlanningSilently(runtime, ctx, options.idleKind ?? "manual");
-	if (
-		planFilePath
-		&& options.idleKind !== "approved"
-		&& hasDeliveredPlanningRow(runtime, planFilePath)
-	) {
-		const kind = options.detach ? "abandoned" : "stopped";
-		queueIdleLifecycleEvent(runtime, kind, planFilePath);
-	}
 	if (options.detach) {
 		runtime.planState = runtime.planState.with({ attachedPlanPath: null, idleKind: null });
-		persistState(runtime);
-		return;
 	}
-
-	persistState(runtime);
 }
 
 async function promptForPlanTarget(
@@ -185,12 +142,12 @@ async function confirmResumePlan(ctx: ExtensionContext, planFilePath: string): P
 	return await ctx.ui.confirm("Resume planning", `Resume planning in ${planFilePath}?`);
 }
 
-async function confirmAbandonPlan(ctx: ExtensionContext, planFilePath: string): Promise<boolean> {
+async function confirmReplacePlan(ctx: ExtensionContext, planFilePath: string): Promise<boolean> {
 	if (!ctx.hasUI) {
 		return true;
 	}
 
-	return await ctx.ui.confirm("Abandon plan", `Abandon the attached plan ${planFilePath}?`);
+	return await ctx.ui.confirm("Replace plan", `Replace the current plan ${planFilePath}?`);
 }
 
 async function attachRequestedPlan(
@@ -201,18 +158,14 @@ async function attachRequestedPlan(
 	const currentPlanPath = runtime.planState.attachedPlanPath;
 	const targetExists = existsSync(targetPath);
 	if (currentPlanPath && currentPlanPath !== targetPath) {
-		const shouldAbandon = await confirmAbandonPlan(ctx, currentPlanPath);
-		if (!shouldAbandon) {
+		const shouldReplace = await confirmReplacePlan(ctx, currentPlanPath);
+		if (!shouldReplace) {
 			return;
 		}
 		runtime.planState = runtime.planState.with({
 			attachedPlanPath: null,
 			idleKind: null,
 		});
-		if (hasDeliveredPlanningRow(runtime, currentPlanPath)) {
-			queueIdleLifecycleEvent(runtime, "abandoned", currentPlanPath);
-		}
-		persistState(runtime);
 	}
 
 	const shouldConfirmResume = targetExists && (!currentPlanPath || currentPlanPath !== targetPath);
@@ -224,12 +177,7 @@ async function attachRequestedPlan(
 	}
 
 	runtime.planState = runtime.planState.with({ attachedPlanPath: targetPath });
-	if (!targetExists) {
-		await enterPlanning(runtime, ctx, "started");
-		return;
-	}
-
-	await enterPlanning(runtime, ctx, "resumed");
+	await enterPlanning(runtime, ctx);
 }
 
 async function preparePlanningSwitch(
@@ -247,12 +195,11 @@ async function preparePlanningSwitch(
 	const attachedPlanPath = runtime.planState.attachedPlanPath;
 	if (!attachedPlanPath) {
 		await exitPlanningSilently(runtime, ctx, null);
-		persistState(runtime);
 		return true;
 	}
 
-	const shouldAbandon = await confirmAbandonPlan(ctx, attachedPlanPath);
-	if (!shouldAbandon) {
+	const shouldReplace = await confirmReplacePlan(ctx, attachedPlanPath);
+	if (!shouldReplace) {
 		return false;
 	}
 
@@ -275,7 +222,7 @@ async function handlePlanCommand(
 		if (runtime.planState.phase === "planning") {
 			return;
 		}
-		await enterPlanning(runtime, ctx, "resumed");
+		await enterPlanning(runtime, ctx);
 		return;
 	}
 
@@ -295,7 +242,6 @@ async function handlePlanCommand(
 
 async function handlePlanClearCommand(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
 	if (!runtime.planState.attachedPlanPath) {
-		persistState(runtime);
 		return;
 	}
 	if (runtime.planState.phase === "planning") {
@@ -303,15 +249,11 @@ async function handlePlanClearCommand(runtime: Runtime, ctx: ExtensionContext): 
 		return;
 	}
 
-	const planFilePath = runtime.planState.attachedPlanPath;
 	runtime.planState = runtime.planState.with({
 		attachedPlanPath: null,
 		idleKind: null,
 	});
-	if (hasDeliveredPlanningRow(runtime, planFilePath)) {
-		queueIdleLifecycleEvent(runtime, "abandoned", planFilePath);
-	}
-	persistState(runtime);
+	updateUi(runtime, ctx);
 }
 
 function getPlanLeaderLabel(runtime: Runtime): string {
@@ -358,6 +300,7 @@ function registerSubmitTool(runtime: Runtime): void {
 		resolvePlanPath: (cwd) => resolve(cwd, getCurrentPlanPath(runtime)),
 		onPlanApproved: async (ctx, planFilePath) => {
 			await exitToIdle(runtime, ctx, { idleKind: "approved" });
+			commitPlanState(runtime);
 			if (!ctx.hasUI) {
 				return;
 			}
@@ -399,6 +342,10 @@ function registerToolCallHandler(runtime: Runtime): void {
 
 function registerBeforeAgentStartHandler(runtime: Runtime): void {
 	runtime.pi.on("before_agent_start", async (_event, ctx) => {
+		if (ctx.hasUI) {
+			return undefined;
+		}
+
 		emitPlanTurnMessages(runtime, ctx);
 		return undefined;
 	});
@@ -422,6 +369,7 @@ async function handleSessionStart(runtime: Runtime, ctx: ExtensionContext): Prom
 				? resolveGlobalPlanPath(persistedState.attachedPlanPath)
 				: null,
 		});
+		runtime.committedPlanState = runtime.planState;
 	}
 	const persistedDeliveryState = PlanDeliveryState.load(getSessionEntries(ctx));
 	if (persistedDeliveryState) {
@@ -433,11 +381,7 @@ async function handleSessionStart(runtime: Runtime, ctx: ExtensionContext): Prom
 			attachedPlanPath: runtime.planState.attachedPlanPath ?? getDefaultPlanPath(),
 		});
 		if (!wasPlanning) {
-			await enterPlanning(
-				runtime,
-				ctx,
-				existsSync(getCurrentPlanPath(runtime)) ? "resumed" : "started",
-			);
+			await enterPlanning(runtime, ctx);
 			return;
 		}
 	}
