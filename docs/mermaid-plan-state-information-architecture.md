@@ -47,11 +47,7 @@ Persisted fields:
   "data": {
     "phase": "planning",
     "attachedPlanPath": "/abs/path/plan.md",
-    "planningKind": "resumed",
     "idleKind": null,
-    "pendingEvents": [],
-    "hasDeliveredPlanningRow": true,
-    "planningPromptWindowKey": "root",
     "savedState": {
       "activeTools": ["read", "bash", "edit", "write"],
       "thinkingLevel": "medium"
@@ -64,16 +60,41 @@ Meaning of persisted fields:
 
 | Field | Meaning | Used by |
 |---|---|---|
-| `phase` | whether the session is in planning or idle | restore, tool gating, lifecycle derivation |
-| `attachedPlanPath` | current attached global plan path | restore, lifecycle derivation, status/UI |
-| `planningKind` | whether planning should be treated as `started` or `resumed` | lifecycle derivation |
+| `phase` | whether the session is in planning or idle | restore, tool gating |
+| `attachedPlanPath` | current attached global plan path | restore, status/UI |
 | `idleKind` | why planning last ended, currently `manual` or `approved` | ended/approved lifecycle behavior |
-| `pendingEvents` | one-shot lifecycle rows still owed on the next real turn | lifecycle delivery |
-| `hasDeliveredPlanningRow` | whether current attached planning cycle has ever shown a planning row | stop/abandon gating |
-| `planningPromptWindowKey` | compaction window key that already received the full planning prompt | prompt resend gating |
 | `savedState.activeTools` | tools to restore after planning | phase restore |
 | `savedState.model` | model to restore after planning | phase restore |
 | `savedState.thinkingLevel` | thinking level to restore after planning | phase restore |
+
+### `[PERSISTED STATE]` `customType: "plan-delivery"`
+
+Written by `persistState(...)` in `nplan-phase.ts`.
+Read by `PlanDeliveryState.load(...)` in `models/plan-delivery-state.ts`.
+
+Persisted fields:
+
+```json
+{
+  "type": "custom",
+  "customType": "plan-delivery",
+  "data": {
+    "pendingEvents": [
+      { "kind": "resumed", "planFilePath": "/abs/path/plan.md" }
+    ],
+    "planningMessageKind": "resumed",
+    "planningPromptWindowKey": "root"
+  }
+}
+```
+
+Meaning of persisted fields:
+
+| Field | Meaning | Used by |
+|---|---|---|
+| `pendingEvents` | explicit lifecycle rows still owed on the next real turn | lifecycle delivery |
+| `planningMessageKind` | header kind to use for future planning-row delivery while planning stays active | start/resume and compaction resend delivery |
+| `planningPromptWindowKey` | compaction window key that already received the full planning prompt | prompt resend gating |
 
 ### `[PERSISTED TRANSCRIPT]` `customType: "plan-event"`
 
@@ -134,14 +155,14 @@ These fields exist in the in-memory `Runtime` object in `nplan-phase.ts`.
 | Field | Category | Meaning |
 |---|---|---|
 | `planState` | `[TRANSIENT RUNTIME]` | in-memory instance of canonical `PlanState` model |
-| `skipNextBeforeAgentPlanMessage` | `[TRANSIENT RUNTIME]` | one-shot dedupe between submit interceptor and immediate `before_agent_start` |
+| `planDeliveryState` | `[TRANSIENT RUNTIME]` | in-memory instance of canonical `PlanDeliveryState` model |
 | `planConfig` | `[TRANSIENT RUNTIME]` | loaded config for this process |
 | `lastPromptWarning` | `[TRANSIENT RUNTIME]` | warning dedupe only |
 
 Important distinction:
 
 - `planState` is later written into `[PERSISTED STATE]` `customType: "plan"`
-- `skipNextBeforeAgentPlanMessage` is not persisted
+- `planDeliveryState` is later written into `[PERSISTED STATE]` `customType: "plan-delivery"`
 - there is no transcript-derived control state in the lifecycle path
 
 ## Derivation Map
@@ -150,30 +171,30 @@ Important distinction:
 flowchart TD
     A[Commands and runtime transitions in nplan.ts] --> B[persistState in nplan-phase.ts]
     B --> C[[PERSISTED STATE plan entry]]
-    C --> D[PlanState.load in models/plan-state.ts]
-    D --> E[[DERIVED current plan state]]
+    B --> D[[PERSISTED STATE plan-delivery entry]]
+    C --> E[PlanState.load]
+    D --> F[PlanDeliveryState.load]
+    E --> G[[DERIVED current plan state]]
+    F --> H[[DERIVED current delivery state]]
 
-    E --> F[getTurnEvents from PlanState]
-    F --> G[[DERIVED lifecycle events for this turn]]
+    I[Current branch entries] --> J[getCurrentCompactionWindowKey]
+    J --> K[[DERIVED current compaction window key]]
 
-    H[Current branch entries] --> I[getCurrentCompactionWindowKey]
-    I --> J[[DERIVED current compaction window key]]
+    G --> L[emitPlanTurnMessages in nplan-turn-messages.ts]
+    H --> L
+    K --> L
 
-    E --> K[emitPlanTurnMessages in nplan-turn-messages.ts]
-    G --> K
-    J --> K
-
-    K --> L{messages owed?}
-    L -->|yes| M[createPlanEventMessage]
-    M --> N[plan-event appended to transcript]
-    K --> O[persist updated PlanState]
+    L --> M{delivery owed?}
+    M -->|yes| N[PlanEventMessage.toMessage]
+    N --> O[plan-event appended to transcript]
+    L --> P[persist updated PlanState and PlanDeliveryState]
 
     classDef persisted fill:#e8f6e8,stroke:#3d8a4d,color:#111;
     classDef derived fill:#d8ecff,stroke:#2f6fb0,color:#111;
     classDef logic fill:#ffe7d6,stroke:#c26a2e,color:#111;
-    class C,N,O persisted;
-    class E,G,J derived;
-    class A,B,D,F,H,I,K,L,M logic;
+    class C,D,O,P persisted;
+    class G,H,K derived;
+    class A,B,E,F,I,J,L,M,N logic;
 ```
 
 ## Restore Path
@@ -182,15 +203,18 @@ flowchart TD
 flowchart TD
     A[session_start] --> B[getSessionEntries ctx]
     B --> C[PlanState.load]
-    C --> D[hydrate runtime.planState]
-    D --> E[syncSessionPhase]
-    E --> F[restore tools model thinking level]
-    E --> G[render live UI]
+    B --> D[PlanDeliveryState.load]
+    C --> E[hydrate runtime.planState]
+    D --> F[hydrate runtime.planDeliveryState]
+    E --> G[syncSessionPhase]
+    F --> G
+    G --> H[restore tools model thinking level]
+    G --> I[render live UI]
 
     classDef persisted fill:#e8f6e8,stroke:#3d8a4d,color:#111;
     classDef logic fill:#d8ecff,stroke:#2f6fb0,color:#111;
-    class B,C persisted;
-    class A,D,E,F,G logic;
+    class B,C,D persisted;
+    class A,E,F,G,H,I logic;
 ```
 
 ## Exact Injection Sites
@@ -207,7 +231,7 @@ Lifecycle rows can only be injected through two paths:
 So the injection trigger is always:
 
 - some turn-start path runs
-- `emitPlanTurnMessages(...)` reads canonical `PlanState`
+- `emitPlanTurnMessages(...)` reads canonical `PlanState` plus canonical `PlanDeliveryState`
 
 ## Old Duplicate `Plan Resumed` Bug
 
@@ -228,13 +252,10 @@ flowchart TD
     class E,F bad;
 ```
 
-Old bug existed because one decision used two authorities:
-
-- `[PERSISTED STATE]` latest `plan` entry for current phase state
-- `[PERSISTED TRANSCRIPT]` scan of `plan-event` rows for delivery history
+Old bug existed because lifecycle events were reconstructed from a steady planning snapshot instead of being delivered from explicit delivery state.
 
 Current runtime no longer does this.
-Lifecycle delivery now comes from `PlanState.pendingEvents`, `PlanState.hasDeliveredPlanningRow`, `PlanState.planningKind`, and `PlanState.planningPromptWindowKey`.
+Lifecycle delivery now comes from `PlanDeliveryState.pendingEvents`, `PlanDeliveryState.planningMessageKind`, and `PlanDeliveryState.planningPromptWindowKey`.
 
 ## What Is Persisted Versus Not Persisted
 
@@ -242,21 +263,21 @@ Lifecycle delivery now comes from `PlanState.pendingEvents`, `PlanState.hasDeliv
 |---|---|---|
 | phase | yes | `[PERSISTED STATE]` `plan.data.phase` |
 | attached plan path | yes | `[PERSISTED STATE]` `plan.data.attachedPlanPath` |
-| planning kind | yes | `[PERSISTED STATE]` `plan.data.planningKind` |
 | idle kind | yes | `[PERSISTED STATE]` `plan.data.idleKind` |
 | restore tools/model/thinking | yes | `[PERSISTED STATE]` `plan.data.savedState` |
-| lifecycle rows owed on next turn | yes | `[PERSISTED STATE]` `plan.data.pendingEvents` |
-| whether current planning cycle has ever shown a planning row | yes | `[PERSISTED STATE]` `plan.data.hasDeliveredPlanningRow` |
-| prompt resent in current compaction window | yes, keyed by compaction window | `[PERSISTED STATE]` `plan.data.planningPromptWindowKey` + `[PERSISTED TRANSCRIPT]` `compaction` |
-| one-shot interceptor dedupe | no | `[TRANSIENT RUNTIME]` `skipNextBeforeAgentPlanMessage` |
+| lifecycle rows owed on next turn | yes | `[PERSISTED STATE]` `plan-delivery.data.pendingEvents` |
+| start/resume header kind for future planning-row delivery | yes | `[PERSISTED STATE]` `plan-delivery.data.planningMessageKind` |
+| prompt resent in current compaction window | yes, keyed by compaction window | `[PERSISTED STATE]` `plan-delivery.data.planningPromptWindowKey` + `[PERSISTED TRANSCRIPT]` `compaction` |
 
 ## Important Files
 
 - `models/plan-state.ts`: canonical persisted plan-state model
+- `models/plan-delivery-state.ts`: canonical persisted planning-message delivery model
 - `models/saved-phase-state.ts`: persisted saved-tools/model/thinking snapshot model
 - `models/plan-lifecycle-event.ts`: persisted one-shot lifecycle event model
-- `nplan-phase.ts`: writes `[PERSISTED STATE]` `customType: "plan"`
+- `models/plan-event-message.ts`: persisted `plan-event` transcript artifact model
+- `nplan-phase.ts`: writes `[PERSISTED STATE]` `customType: "plan"` and `customType: "plan-delivery"`
 - `nplan-events.ts`: writes `[PERSISTED TRANSCRIPT]` `plan-event` rows
-- `nplan-turn-messages.ts`: combines canonical plan state with compaction window key and emits lifecycle rows
+- `nplan-turn-messages.ts`: combines canonical plan state, canonical delivery state, and compaction window key to emit lifecycle rows
 - `nplan-submit-interceptor.ts`: one injection path for lifecycle rows
 - `nplan.ts`: fallback injection path and session restore wiring

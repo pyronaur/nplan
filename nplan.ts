@@ -5,12 +5,14 @@ import {
 } from "@mariozechner/pi-coding-agent";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { PlanDeliveryState } from "./models/plan-delivery-state.ts";
+import { type PlanLifecycleKind } from "./models/plan-lifecycle-event.ts";
 import { PlanState } from "./models/plan-state.ts";
 import {
 	loadPlanConfig,
 	resolvePlanTemplate,
 } from "./nplan-config.ts";
-import { type PlanEventKind, registerPlanEventRenderer } from "./nplan-events.ts";
+import { registerPlanEventRenderer } from "./nplan-events.ts";
 import { ensureTextFile } from "./nplan-files.ts";
 import { isRecord } from "./nplan-guards.ts";
 import {
@@ -56,7 +58,21 @@ type PiLeaderOpenEvent = {
 		]
 	) => void;
 };
-type PlanningEntryKind = Extract<PlanEventKind, "started" | "resumed">;
+type PlanningEntryKind = Extract<PlanLifecycleKind, "started" | "resumed">;
+
+function hasDeliveredPlanningRow(runtime: Runtime, planFilePath: string): boolean {
+	return !runtime.planDeliveryState.hasPendingPlanningEvent(planFilePath);
+}
+
+function queueIdleLifecycleEvent(
+	runtime: Runtime,
+	kind: Extract<PlanLifecycleKind, "stopped" | "abandoned">,
+	planFilePath: string,
+): void {
+	runtime.planDeliveryState = runtime.planDeliveryState
+		.clearPendingEvent(kind, planFilePath)
+		.queueLifecycleEvent(kind, planFilePath);
+}
 
 function isPiLeaderOpenEvent(event: unknown): event is PiLeaderOpenEvent {
 	return isRecord(event) && typeof event.add === "function";
@@ -88,14 +104,13 @@ async function enterPlanning(
 	entryKind: PlanningEntryKind,
 ): Promise<void> {
 	const planFilePath = getCurrentPlanPath(runtime);
-	runtime.planState = runtime.planState
+	runtime.planDeliveryState = runtime.planDeliveryState
 		.clearPendingEvent("stopped", planFilePath)
-		.with({
-			phase: "planning",
-			planningKind: entryKind,
-			idleKind: null,
-			hasDeliveredPlanningRow: false,
-		});
+		.beginPlanning(entryKind, planFilePath);
+	runtime.planState = runtime.planState.with({
+		phase: "planning",
+		idleKind: null,
+	});
 	ensureAttachedPlanFile(runtime);
 	captureSavedState(runtime, ctx);
 	await applyPhaseConfig(runtime, ctx, { restoreSavedState: false });
@@ -115,10 +130,10 @@ async function exitPlanningSilently(
 	await restoreSavedState(runtime, ctx);
 	runtime.planState = runtime.planState.with({
 		phase: "idle",
-		planningKind: null,
 		idleKind,
 		savedState: null,
 	});
+	runtime.planDeliveryState = runtime.planDeliveryState.endPlanning();
 	updateUi(runtime, ctx);
 }
 
@@ -130,12 +145,12 @@ async function exitToIdle(
 	const planFilePath = runtime.planState.attachedPlanPath;
 	await exitPlanningSilently(runtime, ctx, options.idleKind ?? "manual");
 	if (
-		planFilePath && options.idleKind !== "approved" && runtime.planState.hasDeliveredPlanningRow
+		planFilePath
+		&& options.idleKind !== "approved"
+		&& hasDeliveredPlanningRow(runtime, planFilePath)
 	) {
 		const kind = options.detach ? "abandoned" : "stopped";
-		runtime.planState = runtime.planState
-			.clearPendingEvent(kind, planFilePath)
-			.queueLifecycleEvent(kind, planFilePath);
+		queueIdleLifecycleEvent(runtime, kind, planFilePath);
 	}
 	if (options.detach) {
 		runtime.planState = runtime.planState.with({ attachedPlanPath: null, idleKind: null });
@@ -193,12 +208,9 @@ async function attachRequestedPlan(
 		runtime.planState = runtime.planState.with({
 			attachedPlanPath: null,
 			idleKind: null,
-			planningKind: null,
 		});
-		if (runtime.planState.hasDeliveredPlanningRow) {
-			runtime.planState = runtime.planState
-				.clearPendingEvent("abandoned", currentPlanPath)
-				.queueLifecycleEvent("abandoned", currentPlanPath);
+		if (hasDeliveredPlanningRow(runtime, currentPlanPath)) {
+			queueIdleLifecycleEvent(runtime, "abandoned", currentPlanPath);
 		}
 		persistState(runtime);
 	}
@@ -294,13 +306,10 @@ async function handlePlanClearCommand(runtime: Runtime, ctx: ExtensionContext): 
 	const planFilePath = runtime.planState.attachedPlanPath;
 	runtime.planState = runtime.planState.with({
 		attachedPlanPath: null,
-		planningKind: null,
 		idleKind: null,
 	});
-	if (runtime.planState.hasDeliveredPlanningRow) {
-		runtime.planState = runtime.planState
-			.clearPendingEvent("abandoned", planFilePath)
-			.queueLifecycleEvent("abandoned", planFilePath);
+	if (hasDeliveredPlanningRow(runtime, planFilePath)) {
+		queueIdleLifecycleEvent(runtime, "abandoned", planFilePath);
 	}
 	persistState(runtime);
 }
@@ -390,11 +399,6 @@ function registerToolCallHandler(runtime: Runtime): void {
 
 function registerBeforeAgentStartHandler(runtime: Runtime): void {
 	runtime.pi.on("before_agent_start", async (_event, ctx) => {
-		if (runtime.skipNextBeforeAgentPlanMessage) {
-			runtime.skipNextBeforeAgentPlanMessage = false;
-			return undefined;
-		}
-
 		emitPlanTurnMessages(runtime, ctx);
 		return undefined;
 	});
@@ -418,6 +422,10 @@ async function handleSessionStart(runtime: Runtime, ctx: ExtensionContext): Prom
 				? resolveGlobalPlanPath(persistedState.attachedPlanPath)
 				: null,
 		});
+	}
+	const persistedDeliveryState = PlanDeliveryState.load(getSessionEntries(ctx));
+	if (persistedDeliveryState) {
+		runtime.planDeliveryState = persistedDeliveryState;
 	}
 	if (runtime.pi.getFlag("plan") === true) {
 		const wasPlanning = runtime.planState.phase === "planning";

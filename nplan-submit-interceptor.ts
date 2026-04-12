@@ -33,7 +33,6 @@ export function registerSubmitInterceptor(runtime: Runtime): void {
 	runtime.pi.on("session_start", async (_event, ctx) => {
 		offTerminalInput?.();
 		offTerminalInput = undefined;
-		runtime.skipNextBeforeAgentPlanMessage = false;
 		if (!ctx.hasUI) {
 			return;
 		}
@@ -43,9 +42,7 @@ export function registerSubmitInterceptor(runtime: Runtime): void {
 				return undefined;
 			}
 
-			if (emitPendingPlanTurnMessage(runtime, ctx)) {
-				runtime.skipNextBeforeAgentPlanMessage = true;
-			}
+			emitPendingPlanTurnMessage(runtime, ctx);
 			return undefined;
 		});
 	});
@@ -53,6 +50,5 @@ export function registerSubmitInterceptor(runtime: Runtime): void {
 	runtime.pi.on("session_shutdown", () => {
 		offTerminalInput?.();
 		offTerminalInput = undefined;
-		runtime.skipNextBeforeAgentPlanMessage = false;
 	});
 }

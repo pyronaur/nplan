@@ -20,7 +20,7 @@ For the complete state map, read `docs/mermaid-plan-state-information-architectu
 - Review rows are ordinary `plan_submit` tool call/result rows with custom visible rendering.
 - `nplan` does not use hidden `plan-context` messages.
 - `nplan` does not register a `context` hook or rewrite model context for planning/review rows.
-- Lifecycle delivery is driven by canonical `PlanState`, not by scanning `plan-event` transcript history.
+- Lifecycle delivery is driven by canonical `PlanState` plus canonical `PlanDeliveryState`, not by scanning `plan-event` transcript history.
 - Full planning prompt body appears only on the first `Plan Started` or `Plan Resumed` row in the current compaction window.
 - Approved `plan_submit` turns do not append a second completion row.
 
@@ -73,12 +73,12 @@ flowchart TD
    - normal turn start fallback
    - calls `emitPlanTurnMessages(...)`
 
-If either path runs for a real turn while `PlanState` says lifecycle rows are owed, `emitPlanTurnMessages(...)` injects them.
+If either path runs for a real turn while `PlanDeliveryState` says lifecycle rows are owed, `emitPlanTurnMessages(...)` injects them.
 
 ## Planning Turns
 
 Interactive Enter submit has its own fast path.
-`registerSubmitInterceptor(...)` emits any owed `plan-event` row before the user message is appended, then sets `skipNextBeforeAgentPlanMessage` so `before_agent_start` does not emit the same row again.
+`registerSubmitInterceptor(...)` emits any owed `plan-event` row before the user message is appended. Because emission drains and persists delivery state immediately, `before_agent_start` sees no duplicate lifecycle row afterward.
 
 If plan state changes without a user message yet, the owed lifecycle row is emitted on the next real turn:
 
@@ -89,10 +89,10 @@ If plan state changes without a user message yet, the owed lifecycle row is emit
 ## Compaction Window Rule
 
 `nplan-turn-messages.ts` computes a compaction-window key from the latest `compaction` entry.
-`PlanState.planningPromptWindowKey` records which window already received the full planning prompt.
+`PlanDeliveryState.planningPromptWindowKey` records which window already received the full planning prompt.
 
-- If `PlanState.planningPromptWindowKey` already matches the current window key, later planning rows in that window omit the full planning prompt body.
-- If the current window key does not match, the next `Plan Started` or `Plan Resumed` row includes the full planning prompt body and state records that window key.
+- If `PlanDeliveryState.planningPromptWindowKey` already matches the current window key, ordinary later planning turns in that window stay silent unless some other explicit lifecycle delivery is queued.
+- If the current window key does not match while planning stays active, the next real planning turn queues one `Plan Started` or `Plan Resumed` row with the full planning prompt body and state records that window key.
 - `Planning Ended` and `Plan Abandoned` never carry the full planning prompt.
 
 ## Review Flow
@@ -118,9 +118,10 @@ There is no hidden review rewrite layer and no duplicate custom review row.
 
 ## Important Files
 
-- `nplan-submit-interceptor.ts`: pre-submit `plan-event` emission for interactive Enter submits and fallback dedupe via `skipNextBeforeAgentPlanMessage`
-- `models/plan-state.ts`: canonical state for planning phase, pending lifecycle rows, and prompt-window delivery
-- `nplan-turn-messages.ts`: emits lifecycle rows from `PlanState` and compaction window key
+- `nplan-submit-interceptor.ts`: pre-submit `plan-event` emission for interactive Enter submits
+- `models/plan-state.ts`: canonical current phase state
+- `models/plan-delivery-state.ts`: canonical lifecycle-delivery and prompt-window state
+- `nplan-turn-messages.ts`: emits lifecycle rows from `PlanDeliveryState` and compaction window key
 - `nplan-events.ts`: creates and renders visible `plan-event` transcript rows
 - `nplan-review.ts`: `plan_submit` execution, auto-approve fallback, and review error handling
 - `nplan-review-ui.ts`: `plan_submit` call/result rendering

@@ -1,4 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { PlanDeliveryState } from "./models/plan-delivery-state.ts";
 import { PlanState } from "./models/plan-state.ts";
 import { SavedPhaseState } from "./models/saved-phase-state.ts";
 import {
@@ -17,7 +18,7 @@ import { getToolsForPhase, stripPlanningOnlyTools } from "./nplan-tool-scope.ts"
 export type Runtime = {
 	pi: ExtensionAPI;
 	planState: PlanState;
-	skipNextBeforeAgentPlanMessage: boolean;
+	planDeliveryState: PlanDeliveryState;
 	planConfig: PlanConfig;
 	lastPromptWarning: string | null;
 };
@@ -68,7 +69,7 @@ export function createRuntime(pi: ExtensionAPI): Runtime {
 	return {
 		pi,
 		planState: PlanState.idle(),
-		skipNextBeforeAgentPlanMessage: false,
+		planDeliveryState: PlanDeliveryState.idle(),
 		planConfig: {},
 		lastPromptWarning: null,
 	};
@@ -118,6 +119,7 @@ export function updateUi(runtime: Runtime, ctx: ExtensionContext): void {
 
 export function persistState(runtime: Runtime): void {
 	runtime.pi.appendEntry("plan", runtime.planState.toData());
+	runtime.pi.appendEntry("plan-delivery", runtime.planDeliveryState.toData());
 }
 
 export function captureSavedState(runtime: Runtime, ctx: ExtensionContext): void {

@@ -37,7 +37,8 @@ void test("compaction allows the next planning turn to resend the full planning 
 	await emitBeforeAgentStart(harness, "Second planning prompt before compaction");
 	await harness.emit("agent_end", { type: "agent_end", messages: [] });
 
-	assert.equal(getMessageContentAt(harness, -1).includes("[PLAN - PLANNING PHASE]"), false);
+	assert.equal(harness.sentMessages.length, 1);
+	assert.equal(getMessageContentAt(harness, -1).includes("[PLAN - PLANNING PHASE]"), true);
 
 	const latestEntry = harness.entries.at(-1);
 	if (!latestEntry?.id || typeof latestEntry.id !== "string") {
@@ -47,6 +48,7 @@ void test("compaction allows the next planning turn to resend the full planning 
 
 	await emitBeforeAgentStart(harness, "Planning prompt after compaction");
 
+	assert.equal(harness.sentMessages.length, 2);
 	assert.match(getLastMessageContent(harness), /^Plan Started /);
 	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), true);
 });

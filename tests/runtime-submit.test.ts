@@ -12,7 +12,7 @@ afterEach(() => {
 	temp.cleanup();
 });
 
-void test("interactive submit emits the planning row before the user message and skips the fallback duplicate", async () => {
+void test("interactive submit emits the planning row before the user message and drains delivery state", async () => {
 	const homeDir = temp.makeTempDir("nplan-runtime-home-submit-order-");
 	const cwd = temp.makeTempDir("nplan-runtime-cwd-submit-order-");
 	process.env.HOME = homeDir;

@@ -23,21 +23,13 @@ export function createPlanningState(
 	planPath: string,
 	options: {
 		includeModel?: boolean;
-		planningKind?: "started" | "resumed";
-		pendingEvents?: Array<{ kind: "stopped" | "abandoned"; planFilePath: string }>;
-		hasDeliveredPlanningRow?: boolean;
-		planningPromptWindowKey?: string | null;
 	} = {},
 ): Record<string, unknown> {
 	return {
 		phase: "planning",
 		attachedPlanPath: planPath,
-		planningKind: options.planningKind ?? "resumed",
 		idleKind: null,
 		savedState: createSavedState(options.includeModel ?? true),
-		pendingEvents: options.pendingEvents ?? [],
-		hasDeliveredPlanningRow: options.hasDeliveredPlanningRow ?? false,
-		planningPromptWindowKey: options.planningPromptWindowKey ?? null,
 	};
 }
 
@@ -45,19 +37,27 @@ export function createIdleState(
 	planPath: string | null,
 	options: {
 		idleKind?: "manual" | "approved" | null;
-		pendingEvents?: Array<{ kind: "stopped" | "abandoned"; planFilePath: string }>;
-		hasDeliveredPlanningRow?: boolean;
-		planningPromptWindowKey?: string | null;
 	} = {},
 ): Record<string, unknown> {
 	return {
 		phase: "idle",
 		attachedPlanPath: planPath,
-		planningKind: null,
 		idleKind: options.idleKind ?? null,
 		savedState: null,
+	};
+}
+
+export function createPlanDeliveryState(options: {
+	planningMessageKind?: "started" | "resumed" | null;
+	pendingEvents?: Array<{
+		kind: "started" | "resumed" | "stopped" | "abandoned";
+		planFilePath: string;
+	}>;
+	planningPromptWindowKey?: string | null;
+} = {}): Record<string, unknown> {
+	return {
 		pendingEvents: options.pendingEvents ?? [],
-		hasDeliveredPlanningRow: options.hasDeliveredPlanningRow ?? false,
+		planningMessageKind: options.planningMessageKind ?? null,
 		planningPromptWindowKey: options.planningPromptWindowKey ?? null,
 	};
 }
@@ -71,6 +71,13 @@ export function writePlanFile(homeDir: string, slug: string, content = "# Plan\n
 
 export function appendPersistedPlanState(harness: Harness, data: Record<string, unknown>): void {
 	harness.api.appendEntry("plan", data);
+}
+
+export function appendPersistedPlanDeliveryState(
+	harness: Harness,
+	data: Record<string, unknown>,
+): void {
+	harness.api.appendEntry("plan-delivery", data);
 }
 
 export function appendCompactionEntry(
@@ -90,8 +97,27 @@ export function appendCompactionEntry(
 	});
 }
 
+export async function emitBeforeAgentStart(harness: Harness, prompt: string): Promise<void> {
+	await harness.emit("before_agent_start", {
+		type: "before_agent_start",
+		prompt,
+		systemPrompt: "",
+	});
+}
+
+export async function startAndDeliverPlan(harness: Harness, slug: string): Promise<void> {
+	await harness.emit("session_start", { type: "session_start", reason: "startup" });
+	await harness.runCommand("plan", slug);
+	await emitBeforeAgentStart(harness, "Initial planning prompt");
+	await harness.emit("agent_end", { type: "agent_end", messages: [] });
+}
+
 export function getLastPlanState(harness: Harness): unknown {
 	return [...harness.entries].reverse().find((entry) => entry.customType === "plan")?.data;
+}
+
+export function getLastPlanDeliveryState(harness: Harness): unknown {
+	return [...harness.entries].reverse().find((entry) => entry.customType === "plan-delivery")?.data;
 }
 
 export function getLastMessageContent(harness: Harness): string {
@@ -109,16 +135,26 @@ export function assertPlanningState(input: {
 	planPath: string;
 	options?: {
 		includeModel?: boolean;
-		planningKind?: "started" | "resumed";
-		pendingEvents?: Array<{ kind: "stopped" | "abandoned"; planFilePath: string }>;
-		hasDeliveredPlanningRow?: boolean;
-		planningPromptWindowKey?: string | null;
 	};
 }): void {
 	assert.deepEqual(
 		getLastPlanState(input.harness),
 		createPlanningState(input.planPath, input.options),
 	);
+}
+
+export function assertPlanDeliveryState(input: {
+	harness: Harness;
+	options?: {
+		planningMessageKind?: "started" | "resumed" | null;
+		pendingEvents?: Array<{
+			kind: "started" | "resumed" | "stopped" | "abandoned";
+			planFilePath: string;
+		}>;
+		planningPromptWindowKey?: string | null;
+	};
+}): void {
+	assert.deepEqual(getLastPlanDeliveryState(input.harness), createPlanDeliveryState(input.options));
 }
 
 export function removePlanEventHistory(harness: Harness): void {

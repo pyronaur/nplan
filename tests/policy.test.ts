@@ -137,12 +137,8 @@ void test("PlanState.load keeps the latest idle plan state with a null savedStat
 	assert.deepEqual(state?.toData(), {
 		phase: "idle",
 		attachedPlanPath: "/abs/path/plan.md",
-		planningKind: null,
 		idleKind: null,
 		savedState: null,
-		pendingEvents: [],
-		hasDeliveredPlanningRow: false,
-		planningPromptWindowKey: null,
 	});
 });
 

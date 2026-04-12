@@ -1,8 +1,8 @@
 import type { ExtensionContext, SessionEntry } from "@mariozechner/pi-coding-agent";
+import type { PlanEventKind } from "./models/plan-event-message.ts";
 import { resolvePlanMarker } from "./nplan-config.ts";
 import {
 	createPlanEventMessage,
-	type PlanEventKind,
 } from "./nplan-events.ts";
 import { persistState, renderPlanningPrompt, type Runtime } from "./nplan-phase.ts";
 
@@ -66,27 +66,34 @@ export function emitPlanTurnMessages(
 	runtime: Runtime,
 	ctx: ExtensionContext,
 ): boolean {
-	const events = runtime.planState.getTurnEvents();
+	const windowKey = getCurrentCompactionWindowKey(ctx.sessionManager.getBranch());
+	if (
+		runtime.planState.phase === "planning"
+		&& runtime.planState.attachedPlanPath
+		&& runtime.planDeliveryState.planningMessageKind
+		&& !runtime.planDeliveryState.hasPendingPlanningEvent(runtime.planState.attachedPlanPath)
+		&& runtime.planDeliveryState.shouldIncludePlanningPrompt(windowKey)
+	) {
+		runtime.planDeliveryState = runtime.planDeliveryState.queueLifecycleEvent(
+			runtime.planDeliveryState.planningMessageKind,
+			runtime.planState.attachedPlanPath,
+		);
+	}
+
+	const events = runtime.planDeliveryState.pendingEvents;
 	if (events.length === 0) {
 		return false;
 	}
 
-	const windowKey = getCurrentCompactionWindowKey(ctx.sessionManager.getBranch());
-	const includePlanningPrompt = runtime.planState.shouldIncludePlanningPrompt(windowKey);
-	const hasPlanningRow = events.some((event) =>
-		event.kind === "started" || event.kind === "resumed"
-	);
+	const includePlanningPrompt = runtime.planDeliveryState.shouldIncludePlanningPrompt(windowKey);
 	for (const event of events) {
 		const message = createTurnMessage({ runtime, ctx, event, includePlanningPrompt });
 		runtime.pi.sendMessage(message, { triggerTurn: false });
 	}
 
-	runtime.planState = runtime.planState.acknowledgePendingEvents();
-	if (hasPlanningRow) {
-		runtime.planState = runtime.planState.markPlanningRowDelivered();
-	}
+	runtime.planDeliveryState = runtime.planDeliveryState.acknowledgePendingEvents();
 	if (includePlanningPrompt) {
-		runtime.planState = runtime.planState.markPlanningPromptWindow(windowKey);
+		runtime.planDeliveryState = runtime.planDeliveryState.markPlanningPromptWindow(windowKey);
 	}
 	persistState(runtime);
 	return true;

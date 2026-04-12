@@ -94,12 +94,8 @@ void test("plan_submit auto-approves when interactive review is unavailable", as
 	assert.deepEqual(getLastPlanState(harness), {
 		phase: "idle",
 		attachedPlanPath: planPath,
-		planningKind: null,
 		idleKind: "approved",
 		savedState: null,
-		pendingEvents: [],
-		hasDeliveredPlanningRow: false,
-		planningPromptWindowKey: null,
 	});
 });
 
@@ -127,15 +123,11 @@ void test("plan_submit returns Error text when plannotator output is invalid", a
 	assert.deepEqual(getLastPlanState(harness), {
 		phase: "planning",
 		attachedPlanPath: planPath,
-		planningKind: "started",
 		idleKind: null,
 		savedState: {
 			activeTools: ["read", "bash", "edit", "write"],
 			thinkingLevel: "medium",
 		},
-		pendingEvents: [],
-		hasDeliveredPlanningRow: false,
-		planningPromptWindowKey: null,
 	});
 });
 
