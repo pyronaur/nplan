@@ -70,76 +70,46 @@ Note:
   running 'plannotator' without arguments is for hook integration and expects JSON on stdin
 ```
 
-## How To Use This Guide
+## Starting Point
 
-This is a starting point and memory aid.
+This file is here to help you restart fast.
 
-Use it like this:
+Normal warmup:
 
-- read this file first
-- pick the test case you are about to run
-- read only the extra docs that matter for that case
-- write down what you learn so the next pass starts faster
-
-Good defaults:
-
-- `piux_client` is usually the best live control surface
-- the inner session JSONL is usually the best source for persisted ordering and artifact shape
-- real user flows are usually more valuable than clever shortcuts
-- small prompts and tiny plan bodies keep the testing loop cheap
-- reusing one session and navigating it with `/tree` is usually better than spawning fresh sessions
-- if this guide stops helping, improve the guide before doing more testing
-
-## Fresh-Start Warmup
-
-On a fresh pass, start here:
-
-1. Read this file end to end.
+1. Read this file.
 2. Read `../README.md` and `./prompts.md`.
 3. Confirm the current inner session with `/session`.
-4. Restate the testing collaboration style to the inner agent.
-5. Pick one small case and run it.
+4. Tell the inner agent what you are testing and what short response shape you want back.
+5. Run one small case and log it.
 
 That is enough for a normal smoke pass.
 
-## Read What Matches The Case
+## What To Read For Which Case
 
 This file lives at `nplan/docs/manual-testing.md`.
 
 Relative paths below are relative to this file.
 
-| Case | Read next | Why |
-|---|---|---|
-| basic lifecycle smoke | `../README.md`, `./prompts.md` | command surface and visible contract |
-| duplicate start/end rows | `./prompts.md`, `./mermaid-planning-message-lifecycle.md` | exact lifecycle contract and emission path |
-| draft vs committed confusion | `./prompts.md`, `./mermaid-plan-state-information-architecture.md` | state ownership and submit boundary |
-| review pending / approve / reject | `../README.md`, `./prompts.md`, `./plannotator-review-url.md`, `/Users/n14/.agents/skills/n/agent-browser/SKILL.md` | tool-row contract, URL source, browser workflow |
-| tree navigation around planning | `../../docs/piux.md`, Pi `tree.md`, Pi `session.md` | branch movement and session artifacts |
-| compaction resend behavior | `./prompts.md`, `./mermaid-planning-message-lifecycle.md`, Pi `compaction.md` | compaction window rules |
-| resume / restore behavior | `./mermaid-plan-state-information-architecture.md`, Pi `session.md` | persisted restore path |
+- Basic lifecycle smoke: `../README.md`, `./prompts.md`
+- Duplicate start/end rows: `./prompts.md`, `./mermaid-planning-message-lifecycle.md`
+- Draft vs committed confusion: `./prompts.md`, `./mermaid-plan-state-information-architecture.md`
+- Review pending / approve / reject: `../README.md`, `./prompts.md`, `./plannotator-review-url.md`, `/Users/n14/.agents/skills/n/agent-browser/SKILL.md`
+- Tree navigation around planning: `../../docs/piux.md`, Pi `tree.md`, Pi `session.md`
+- Compaction resend behavior: `./prompts.md`, `./mermaid-planning-message-lifecycle.md`, Pi `compaction.md`
+- Resume / restore behavior: `./mermaid-plan-state-information-architecture.md`, Pi `session.md`
 
-Only read the mermaid docs when the case needs lifecycle/state detail.
+Only read the mermaid docs when the case needs lifecycle or state detail.
 
-## If The Map Gets Fuzzy
-
-Use the `docs` command first, then open exact files.
-
-Useful commands:
+If the map gets fuzzy, use:
 
 ```bash
 docs ls nplan docs
 docs ls .
 ```
 
-What those give back:
-
-- `docs ls nplan docs` = the local `nplan/docs` map
-- `docs ls .` = repo-level docs plus `nplan/docs`
-
-## Path Legend
+Useful path anchors:
 
 - `../README.md` = `nplan/README.md`
-- `../AGENTS.md` = `nplan/AGENTS.md`
 - `./prompts.md` = `nplan/docs/prompts.md`
 - `./mermaid-planning-message-lifecycle.md` = `nplan/docs/mermaid-planning-message-lifecycle.md`
 - `./mermaid-plan-state-information-architecture.md` = `nplan/docs/mermaid-plan-state-information-architecture.md`
@@ -148,45 +118,59 @@ What those give back:
 - `../../docs/piux.md` = repo-level `docs/piux.md`
 - `/Users/n14/.agents/skills/n/agent-browser/SKILL.md` = real agent-browser skill source on this machine
 
-## Current `nplan` Contract To Test
+## What Matters Most During Testing
 
-From `../README.md` and `./prompts.md`:
+The live `piux` screen is the main source of truth.
 
-- `/plan <slug>` stages draft planning intent only.
-- Missing plan files are not created until the first real planning prompt submit.
-- Slash commands do not append lifecycle rows on their own.
-- Slash commands do not commit new persisted plan state on their own.
-- Lifecycle rows emit only at real prompt submit time.
-- Visible lifecycle rows are only:
-  - `Plan Started <path>`
-  - `Plan Ended <path>`
-- Valid per-turn lifecycle outcomes:
-  - no lifecycle row
-  - `Plan Started <path>`
-  - `Plan Ended <path>`
-  - `Plan Ended <old>` then `Plan Started <new>`
-- Full planning prompt appears only inside the one visible `Plan Started <path>` artifact for the current compaction window.
-- Full planning prompt is sent once per compaction window.
-- `plan_submit` review stays on the tool call/result path.
-- Review result labels are:
-  - `Plan Review`
-  - `Plan Review <summary>`
-  - `Plan Review Pending <path>`
-  - `Plan Approved <path>`
-  - `Plan Rejected <path>`
-  - `Error: ...`
-- Approval must not append extra `Plan Ended <path>` on the same submit turn.
-- Auto-approve fallback is intentional when interactive review is unavailable.
+Optimize for what a user sees:
 
-## `piux` Operator Setup
+- visible rows
+- visible ordering
+- visible prompts
+- visible review flow
+- visible tree / compaction behavior
 
-- Inner session runs in `/tmp/piux`.
-- Extension source of truth is `/tmp/piux/.pi/settings.json` `extensions`.
-- Use absolute extension paths.
-- Reload inner Pi with `/reload` after changing that list.
-- Default observation path: `piux_client look diff`.
-- Use `piux_client look screen` when the diff is too compressed.
-- Use raw tmux fallback only when `piux_client` looks suspicious.
+JSONL is not the main test target.
+
+Use JSONL when:
+
+- the screen looks wrong and you want to debug why
+- ordering looks suspicious
+- you need to confirm what was persisted after a weird turn
+- branch / compaction behavior is confusing
+
+Good default loop:
+
+1. drive the flow in `piux`
+2. watch the screen
+3. only open JSONL when the screen creates a question
+
+## Current Contract In Short
+
+Read `../README.md` and `./prompts.md` for the full contract.
+
+The parts that matter most in manual testing:
+
+- `/plan <slug>` stages planning intent without appending a lifecycle row on its own
+- missing plan files are created on the first real planning prompt submit, not earlier
+- lifecycle rows appear only on real prompt submit boundaries
+- visible lifecycle surface is `Plan Started <path>` and `Plan Ended <path>`
+- full planning prompt appears only on the one allowed `Plan Started <path>` row for the current compaction window
+- `plan_submit` review stays on the tool call/result path
+- approval must not append an extra `Plan Ended <path>` on the same submit turn
+- review failures render as `Error: ...`
+
+## `piux` And The Inner Agent
+
+`piux_client` is usually the best way to drive the session.
+
+Useful inner-session habits:
+
+- keep prompts tiny
+- ask for tiny outputs
+- tell the inner agent what you are doing before you start a case
+- use placeholder content like `A`, `B`, `C` lists instead of real plans when the content itself is not under test
+- reuse the same session and navigate it with `/tree` when that keeps context stable
 
 ## agent-browser Starting Point
 
@@ -194,21 +178,12 @@ Real skill source:
 
 - `/Users/n14/.agents/skills/n/agent-browser/SKILL.md`
 
-Useful defaults from that skill:
+Useful basics from that skill:
 
 - browser loop: `open` -> `wait --load networkidle` -> `snapshot -i`
 - after page changes, re-snapshot before using refs again
-- use `--session-name` so the browser session survives repeated review cycles
-- use `network har start` / `network har stop` when learning the review contract
-- use `diff snapshot` when you need proof that a click changed the page
-- use `wait` aggressively on slow pages instead of guessing timing
-
-Good low-token browser pattern:
-
-1. discover once
-2. write down the relevant semantic controls
-3. reuse short commands on the same browser session
-4. avoid repeated full snapshots unless the DOM changed
+- use `--session-name` so a browser session survives repeated review cycles
+- use `network har start` / `network har stop` when learning the review request contract
 
 Typical review-page discovery flow:
 
@@ -218,248 +193,91 @@ agent-browser --session-name nplan-review wait --load networkidle
 agent-browser --session-name nplan-review snapshot -i
 ```
 
-When learning the request contract:
+Current plannotator review page cues already seen in this pass:
 
-```bash
-agent-browser --session-name nplan-review network har start
-# perform one real action
-agent-browser --session-name nplan-review network har stop ./capture.har
-```
-
-### agent-browser Notes That Matter Here
-
-- refs like `@e10` are per-snapshot handles, not durable selectors
-- once the page changes, old refs are stale
-- record semantic targets, not only refs
-- for the plannotator review page, write down button names and page landmarks
-
-### Current plannotator Review Page Cues
-
-From the live page already opened during this pass:
-
-- page title/brand: `Plannotator`
-- main action button: `Approve`
-- onboarding gate seen once: `Continue`
-- useful landmarks: `Contents`, `Versions`, `Files`, `Archive`, `Copy plan`
+- `Plannotator`
+- `Continue`
+- `Approve`
+- `Contents`
+- `Versions`
+- `Files`
+- `Archive`
+- `Copy plan`
 
 Treat those as page cues, not stable automation selectors.
 
-## Selector Notes Ledger
+Do not store transient `@e...` refs in this runbook.
+Store semantic labels and short workflows instead.
 
-When a page matters across many cycles, store notes like this:
+## Tree, Session, Compaction
 
-- page: plannotator review
-- entry action: `Continue` if onboarding gate is present
-- review action: `Approve`
-- likely reject path: discover and record later
-- snapshot needed after: any click that changes the page or dismisses a gate
+Read the Pi docs when the case needs them.
 
-Keep semantic labels here. Keep transient `@e...` refs out of the runbook.
+The short version:
 
-## Session And Tree Facts That Matter
+- `/session` tells you which JSONL file is active
+- `/tree` moves around inside the same session file
+- `/fork` creates a new session file
+- compaction changes what the model still has in context
 
-From Pi docs:
+For `nplan`, that matters mostly when you are testing:
 
-- Session files are JSONL under `~/.pi/agent/sessions/...` or the isolated `PI_CODING_AGENT_DIR` equivalent.
-- `piux` session files live under `/tmp/piux/.pi/agent/sessions/...`.
-- `/session` reveals the active session file path and session id.
-- Session history is a tree. `/tree` changes the leaf inside the same session file.
-- `/fork` creates a new session file. Use sparingly.
-- `/tree` can add branch summaries when leaving a branch.
-- `branch_summary` and `compaction` entries are real persisted artifacts.
+- duplicate or missing lifecycle rows
+- prompt resend after compaction
+- restore/resume behavior
+- branch navigation around planning
 
-### What this means during testing
-
-- When testing transcript order, inspect the current session JSONL directly.
-- When testing branch navigation, verify both visible tree behavior and persisted branch-summary artifacts.
-- When testing compaction, verify what happens before and after the compaction boundary rather than assuming linear transcript behavior.
-- When switching branches with `/tree`, re-state the testing contract to the inner agent after landing on the new leaf.
-
-## Compaction Facts That Matter
-
-From Pi docs:
-
-- Compaction replaces older context with a `compaction` summary entry.
-- The model sees the summary plus messages from `firstKeptEntryId` onward.
-- Compaction and branch summarization are separate mechanisms.
-- Split-turn compaction exists when one turn is huge.
-
-### What this means for `nplan`
-
-- `nplan` planning-prompt delivery is defined in compaction windows.
-- After compaction removes the planning prompt from model context, the next real planning turn may emit one full `Plan Started <path>` prompt again.
-- Compaction testing must verify both:
-  - no duplicate full prompt before compaction
-  - one renewed full prompt after compaction
-
-## Inner-Agent Collaboration Script
-
-Before starting a batch of tests, tell the inner agent what is happening and what you want back.
-
-Good prompts for the inner agent:
-
-- state that the session is a manual `nplan` test
-- state which behavior is under test right now
-- tell it to ignore most plan-prompt prose
-- tell it to keep outputs tiny
-- tell it to use placeholder plan content like `A`, `B`, `C` lists instead of real plans
-- tell it what response form to use, for example:
-  - `reply with one short line`
-  - `write a 3-item list only`
-  - `after reading, ask exactly one short question`
-
-Why this helps:
-
-- saves tokens
-- makes transcript order easier to inspect
-- keeps compaction farther away
-- avoids fake bugs caused by giant plan content
-
-## Suggested Manual Test Loop
-
-For every case:
-
-1. State the test contract to the inner agent in minimal words.
-2. Drive the flow with `piux_client`.
-3. Inspect the visible pane diff.
-4. Inspect the session JSONL for persisted artifacts and order.
-5. If needed, inspect `/plan-status`.
-6. Log the result in `./manual-testing-results.md`.
-
-## What To Inspect On Each Case
-
-### Visible layer
-
-- exact visible row text
-- relative ordering between lifecycle rows, tool rows, and user messages
-- whether the planning prompt is collapsed under the correct row
-
-### Persisted layer
-
-- `custom_message` `plan-event`
-- `custom` `plan`
-- `custom` `plan-delivery`
-- message entries for user / assistant / toolResult
-- compaction entries
-- branch summary entries
-
-### State layer
-
-- does committed state change only on real submit?
-- does draft-only command activity stay out of persisted committed state until submit?
-
-## Review Testing Notes
+## Review Testing Starting Point
 
 Start from observation, not guesses.
 
 Known facts:
 
-- `nplan` spawns `plannotator` with JSON on stdin.
-- final review decision returns on stdout as JSON.
-- live review URL is not printed on stdout.
-- live review URL comes from `~/.plannotator/sessions/<pid>.json`.
-- `Plan Review Pending <path>` should expose that URL visibly.
+- `nplan` spawns `plannotator` with JSON on stdin
+- the final review decision comes back on stdout as JSON
+- the live review URL comes from `~/.plannotator/sessions/<pid>.json`
+- `Plan Review Pending <path>` should show that URL visibly
 
-### Review discovery path
+Good review flow:
 
-1. Trigger real `plan_submit` from the inner session.
-2. Wait for `Plan Review Pending <path>`.
-3. Capture the live review URL from the visible pending row or the plannotator session file.
-4. Use network inspection to learn the exact approve / reject request contract.
-5. Once one real request is observed, decide whether it can be replayed cheaply.
+1. trigger real `plan_submit`
+2. wait for `Plan Review Pending <path>`
+3. capture the visible URL
+4. open the review page with `agent-browser`
+5. learn the approve/reject path once
+6. keep notes so later cycles are cheap
 
-### Browser usage shape
+## What To Cover Over Time
 
-- Use `$agent-browser` only when the review page is actually live.
-- Use a named browser session so state survives repeated review cycles.
-- Use `snapshot -i` sparingly.
-- Once a stable selector set is known, stop rediscovering the page on every cycle.
-- Once selectors are known, reuse them with short commands.
-- Prefer one initial discovery pass, then cheap repeated clicks or request replays.
-- Use network tools only when needed to capture the review contract.
-- Keep browser commands small enough that the review-driving method is readable from the terminal transcript later.
+The big buckets are enough here:
 
-### Review-driving options
+- lifecycle staging
+- submit boundary behavior
+- review pending / approve / reject / error / fallback
+- tree navigation around planning
+- compaction resend behavior
+- resume / restore behavior
+- input quirks when they affect visible behavior
 
-- best: capture one real approve/reject request, then replay if stable
-- fallback: click Approve / Reject with `agent-browser`
-- fallback of fallback: user manually clicks once while operator verifies the resulting transcript contract
+## Logging
 
-## Test Areas To Cover
+Use `./manual-testing-results.md` as the running ledger.
 
-### Lifecycle staging
+For each case, write down:
 
-- `/plan <new-slug>` while idle
-- bare `/plan` on attached plan
-- `/plan-clear` while planning
-- `/plan-clear` while idle
-- switch from active plan A to plan B
-- switch from idle attached plan A to plan B
-- self-cancel draft state before submit
+- what you tried
+- what you expected to see on screen
+- what actually happened on screen
+- whether it passed
+- if it failed, the bug you think you found
 
-### Submit boundary
-
-- first real planning prompt on fresh plan
-- later planning turn in same compaction window
-- ordinary turn after clear
-- ordinary turn after switch
-- command-only churn before submit
-
-### Review flows
-
-- review pending visible state
-- approve
-- reject
-- runtime error
-- cancelled review
-- review unavailable auto-approve fallback
-
-### Session / tree / compaction
-
-- `/tree` back to pre-plan branch and return
-- branch-summary prompt while leaving a plan branch
-- compaction while planning
-- compaction after approval
-- resume old session with active plan
-- resume old session with idle attached plan
-
-### Input / UI edges
-
-- Enter submit
-- Shift+Return newline insert
-- slash command while editor has pending text
-- `/plan-status` during draft-only staged change
-
-## Token Efficiency Notes
-
-- tiny plan files
-- tiny prompts
-- minimal assistant response shape
-- no unnecessary repo exploration in the inner session
-- prefer repeated structured test prompts over freeform English
-- do not ask the inner agent for explanations unless the explanation itself is the subject under test
-
-These are good defaults. Ignore them when the case needs depth.
-
-## Result Logging Shape
-
-Use `./manual-testing-results.md` as a rolling ledger.
-
-For each case log:
-
-- case id
-- setup
-- expected visible artifacts
-- expected persisted artifacts
-- actual result
-- pass/fail
-- bug title if failed
+Add JSONL notes only when they helped debug or confirm a suspicious case.
 
 ## Current Working Notes
 
-- `piux_client look diff` is the fastest default observation tool.
-- `/session` is the fastest way to confirm the active JSONL file.
-- draft-only plan changes can be real runtime state without being committed session state yet.
-- do not call a bug until both visible pane and JSONL agree.
-- bare file names in a runbook are sloppy; always anchor docs by exact relative or absolute path.
-- the real agent-browser skill source on this machine is `/Users/n14/.agents/skills/n/agent-browser/SKILL.md`.
+- `piux_client look diff` is the fastest default observation tool
+- `/session` is the fastest way to confirm the active JSONL file
+- draft-only plan changes can be real runtime state without being committed session state yet
+- when the screen looks wrong, JSONL becomes useful
+- bare file names in a runbook are sloppy; anchor docs by exact relative or absolute path
+- the real agent-browser skill source on this machine is `/Users/n14/.agents/skills/n/agent-browser/SKILL.md`
