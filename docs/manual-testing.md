@@ -70,18 +70,16 @@ Note:
   running 'plannotator' without arguments is for hook integration and expects JSON on stdin
 ```
 
-## Default Working Style
+## Good Starting Point
 
-- No gate work during manual passes unless explicitly requested.
-- Prefer `piux_client` as the default live control surface.
-- Prefer the inner session JSONL as the authority for persisted ordering and artifact shape.
-- Prefer real user flows over invented harness shortcuts.
-- Keep prompts tiny to save tokens.
-- Tell the inner agent what the test is doing and what minimal response shape it should use.
-- Reuse the same session when possible.
-- Prefer `/tree` and `/resume` over opening fresh sessions casually.
-- Avoid forking unless the branch itself is the thing under test.
-- If the runbook is unclear, pause testing and fix the runbook first.
+Use this as a starting point, not a rigid checklist.
+
+- `piux_client` is usually the best live control surface.
+- The inner session JSONL is usually the best source for persisted ordering and artifact shape.
+- Real user flows are usually more valuable than clever shortcuts.
+- Small prompts and tiny plan bodies keep the testing loop cheap.
+- Reusing one session and navigating it with `/tree` is usually better than spawning fresh sessions.
+- If this guide stops helping, improve the guide before doing more testing.
 
 ## Read Order Before Any Live Test
 
@@ -99,7 +97,8 @@ Read these in order:
 6. `./mermaid-plan-state-information-architecture.md`
 7. `./plannotator-review-url.md`
 8. `../../docs/piux.md`
-9. Pi docs:
+9. `/Users/n14/.agents/skills/n/agent-browser/SKILL.md`
+10. Pi docs:
    - `/opt/homebrew/lib/node_modules/@mariozechner/pi-coding-agent/docs/session.md`
    - `/opt/homebrew/lib/node_modules/@mariozechner/pi-coding-agent/docs/tree.md`
    - `/opt/homebrew/lib/node_modules/@mariozechner/pi-coding-agent/docs/compaction.md`
@@ -114,6 +113,34 @@ Read these in order:
 - `./plannotator-review-url.md` = `nplan/docs/plannotator-review-url.md`
 - `./manual-testing-results.md` = `nplan/docs/manual-testing-results.md`
 - `../../docs/piux.md` = repo-level `docs/piux.md`
+- `/Users/n14/.agents/skills/n/agent-browser/SKILL.md` = real agent-browser skill source on this machine
+
+## Where To Re-Orient Fast
+
+Use the `docs` command when the map gets fuzzy.
+
+Useful commands:
+
+```bash
+docs ls nplan docs
+docs ls .
+```
+
+What those give back:
+
+- `docs ls nplan docs` = the local `nplan/docs` map
+- `docs ls .` = repo-level docs plus `nplan/docs`
+
+Use those first, then open exact files.
+
+## First 10 Minutes On A Fresh Pass
+
+1. Read this file end to end.
+2. Read `../README.md`, `./prompts.md`, and the two mermaid docs.
+3. Read `/Users/n14/.agents/skills/n/agent-browser/SKILL.md`.
+4. Confirm `piux` target session and current JSONL with `/session`.
+5. Restate the test collaboration script to the inner agent.
+6. Start with one small case and log it.
 
 ## Current `nplan` Contract To Test
 
@@ -154,6 +181,58 @@ From `../README.md` and `./prompts.md`:
 - Default observation path: `piux_client look diff`.
 - Use `piux_client look screen` when the diff is too compressed.
 - Use raw tmux fallback only when `piux_client` looks suspicious.
+
+## agent-browser Starting Point
+
+Real skill source:
+
+- `/Users/n14/.agents/skills/n/agent-browser/SKILL.md`
+
+Useful defaults from that skill:
+
+- browser loop: `open` -> `wait --load networkidle` -> `snapshot -i`
+- after page changes, re-snapshot before using refs again
+- use `--session-name` so the browser session survives repeated review cycles
+- use `network har start` / `network har stop` when learning the review contract
+- use `diff snapshot` when you need proof that a click changed the page
+- use `wait` aggressively on slow pages instead of guessing timing
+
+Good low-token browser pattern:
+
+1. discover once
+2. write down the relevant controls
+3. reuse short commands on the same browser session
+4. avoid repeated full snapshots unless the DOM changed
+
+### agent-browser Notes That Matter Here
+
+- refs like `@e10` are per-snapshot handles, not durable selectors
+- once the page changes, old refs are stale
+- record semantic targets, not only refs
+- for the plannotator review page, write down button names and page landmarks
+
+### Current plannotator Review Page Cues
+
+From the live page already opened during this pass:
+
+- page title/brand: `Plannotator`
+- main action button: `Approve`
+- onboarding gate seen once: `Continue`
+- useful landmarks: `Contents`, `Versions`, `Files`, `Archive`, `Copy plan`
+
+Treat those as page cues, not stable automation selectors.
+
+## Selector Notes Ledger
+
+When a page matters across many cycles, store notes like this:
+
+- page: plannotator review
+- entry action: `Continue` if onboarding gate is present
+- review action: `Approve`
+- likely reject path: discover and record later
+- snapshot needed after: any click that changes the page or dismisses a gate
+
+Keep semantic labels here. Keep transient `@e...` refs out of the runbook.
 
 ## Session And Tree Facts That Matter
 
@@ -207,14 +286,14 @@ Preferred instructions:
   - `write a 3-item list only`
   - `after reading, ask exactly one short question`
 
-Why:
+Why this helps:
 
 - saves tokens
 - makes transcript order easier to inspect
 - keeps compaction farther away
 - avoids fake bugs caused by giant plan content
 
-## Core Manual Test Loop
+## Suggested Manual Test Loop
 
 For every case:
 
@@ -223,9 +302,9 @@ For every case:
 3. Inspect the visible pane diff.
 4. Inspect the session JSONL for persisted artifacts and order.
 5. If needed, inspect `/plan-status`.
-6. Log the result in `docs/manual-testing-results.md`.
+6. Log the result in `./manual-testing-results.md`.
 
-## What To Inspect Every Time
+## What To Inspect On Each Case
 
 ### Visible layer
 
@@ -247,7 +326,7 @@ For every case:
 - does committed state change only on real submit?
 - does draft-only command activity stay out of persisted committed state until submit?
 
-## Review Testing Strategy
+## Review Testing Research Notes
 
 Do not guess the review HTTP contract.
 
@@ -259,7 +338,7 @@ Known facts:
 - live review URL comes from `~/.plannotator/sessions/<pid>.json`.
 - `Plan Review Pending <path>` should expose that URL visibly.
 
-### Review plan
+### Review discovery path
 
 1. Trigger real `plan_submit` from the inner session.
 2. Wait for `Plan Review Pending <path>`.
@@ -267,7 +346,7 @@ Known facts:
 4. Use network inspection to learn the exact approve / reject request contract.
 5. Once one real request is observed, decide whether it can be replayed cheaply.
 
-### Browser tooling plan
+### Browser usage shape
 
 - Use `$agent-browser` only when the review page is actually live.
 - Use a named browser session so state survives repeated review cycles.
@@ -278,13 +357,13 @@ Known facts:
 - Use network tools only when needed to capture the review contract.
 - Keep browser commands small enough that the review-driving method is readable from the terminal transcript later.
 
-### Possible review-driving options
+### Review-driving options
 
 - best: capture one real approve/reject request, then replay if stable
 - fallback: click Approve / Reject with `agent-browser`
 - fallback of fallback: user manually clicks once while operator verifies the resulting transcript contract
 
-## Recommended Test Matrix
+## Test Areas To Cover
 
 ### Lifecycle staging
 
@@ -329,7 +408,7 @@ Known facts:
 - slash command while editor has pending text
 - `/plan-status` during draft-only staged change
 
-## Token Efficiency Rules
+## Token Efficiency Notes
 
 - tiny plan files
 - tiny prompts
@@ -337,6 +416,8 @@ Known facts:
 - no unnecessary repo exploration in the inner session
 - prefer repeated structured test prompts over freeform English
 - do not ask the inner agent for explanations unless the explanation itself is the subject under test
+
+These are good defaults, not hard laws. Break them when the test needs depth.
 
 ## Result Logging Shape
 
@@ -359,3 +440,4 @@ For each case log:
 - draft-only plan changes can be real runtime state without being committed session state yet.
 - do not call a bug until both visible pane and JSONL agree.
 - bare file names in a runbook are sloppy; always anchor docs by exact relative or absolute path.
+- the real agent-browser skill source on this machine is `/Users/n14/.agents/skills/n/agent-browser/SKILL.md`.
