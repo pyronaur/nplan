@@ -48,16 +48,9 @@ export function createIdleState(
 }
 
 export function createPlanDeliveryState(options: {
-	planningMessageKind?: "started" | "resumed" | null;
-	pendingEvents?: Array<{
-		kind: "started" | "resumed" | "stopped" | "abandoned";
-		planFilePath: string;
-	}>;
 	planningPromptWindowKey?: string | null;
 } = {}): Record<string, unknown> {
 	return {
-		pendingEvents: options.pendingEvents ?? [],
-		planningMessageKind: options.planningMessageKind ?? null,
 		planningPromptWindowKey: options.planningPromptWindowKey ?? null,
 	};
 }
@@ -98,11 +91,7 @@ export function appendCompactionEntry(
 }
 
 export async function emitBeforeAgentStart(harness: Harness, prompt: string): Promise<void> {
-	await harness.emit("before_agent_start", {
-		type: "before_agent_start",
-		prompt,
-		systemPrompt: "",
-	});
+	await harness.submitPrompt(prompt);
 }
 
 export async function startAndDeliverPlan(harness: Harness, slug: string): Promise<void> {
@@ -146,11 +135,6 @@ export function assertPlanningState(input: {
 export function assertPlanDeliveryState(input: {
 	harness: Harness;
 	options?: {
-		planningMessageKind?: "started" | "resumed" | null;
-		pendingEvents?: Array<{
-			kind: "started" | "resumed" | "stopped" | "abandoned";
-			planFilePath: string;
-		}>;
 		planningPromptWindowKey?: string | null;
 	};
 }): void {
@@ -171,13 +155,10 @@ export function removePlanEventHistory(harness: Harness): void {
 export function assertPlanningMessage(input: {
 	harness: Harness;
 	planPath: string;
-	kind: "started" | "resumed";
+	kind?: "started";
 	index?: number;
 }): void {
 	const content = getMessageContentAt(input.harness, input.index ?? -1);
-	assert.match(
-		content,
-		new RegExp(`^Plan ${input.kind === "started" ? "Started" : "Resumed"} ${input.planPath}`),
-	);
+	assert.match(content, new RegExp(`^Plan Started ${input.planPath}`));
 	assert.equal(content.includes("[PLAN - PLANNING PHASE]"), true);
 }

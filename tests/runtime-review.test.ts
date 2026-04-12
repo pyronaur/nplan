@@ -7,7 +7,7 @@ import {
 } from "../nplan-review.ts";
 import nplan from "../nplan.ts";
 import { createHarness } from "./runtime-harness.ts";
-import { getLastPlanState } from "./runtime-helpers.ts";
+import { emitBeforeAgentStart, getLastPlanState } from "./runtime-helpers.ts";
 import { createTempTracker } from "./test-temp.ts";
 
 const temp = createTempTracker();
@@ -35,14 +35,13 @@ async function startPlanning(
 ): Promise<string> {
 	await harness.emit("session_start", { type: "session_start", reason: "startup" });
 	await harness.runCommand("plan", slug);
-	const state = getLastPlanState(harness);
-	assert.equal(typeof state, "object");
-	assert.notEqual(state, null);
-	if (!state || typeof state !== "object" || !("attachedPlanPath" in state)) {
-		throw new Error("expected plan state");
+	const homeDir = process.env.HOME;
+	if (!homeDir) {
+		throw new Error("HOME must be set for runtime review tests");
 	}
-
-	return String(state.attachedPlanPath);
+	const planPath = join(homeDir, ".n", "pi", "plans", `${slug}.md`);
+	await emitBeforeAgentStart(harness, `Plan prompt for ${slug}`);
+	return planPath;
 }
 
 function getToolText(result: unknown): string {

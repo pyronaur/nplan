@@ -4,6 +4,7 @@ import nplan from "../nplan.ts";
 import { createHarness } from "./runtime-harness.ts";
 import {
 	appendCompactionEntry,
+	emitBeforeAgentStart,
 	getLastMessageContent,
 	getMessageContentAt,
 } from "./runtime-helpers.ts";
@@ -14,14 +15,6 @@ const temp = createTempTracker();
 afterEach(() => {
 	temp.cleanup();
 });
-
-async function emitBeforeAgentStart(harness: ReturnType<typeof createHarness>, prompt: string) {
-	await harness.emit("before_agent_start", {
-		type: "before_agent_start",
-		prompt,
-		systemPrompt: "",
-	});
-}
 
 void test("compaction allows the next planning turn to resend the full planning prompt", async () => {
 	const homeDir = temp.makeTempDir("nplan-runtime-home-compaction-reset-");

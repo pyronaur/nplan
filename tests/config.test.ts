@@ -238,16 +238,14 @@ void test("loadPlanConfig resolves marker overrides from plan.json", () => {
 		globalConfig: {},
 		projectConfig: {
 			markers: {
-				resumed: "Back in planning for ${planFilePath}.",
+				ended: "Planning ended for ${planFilePath}.",
 			},
 		},
 	});
 
 	const loaded = loadPlanConfig(cwdDir);
 
-	assert.equal(resolvePlanMarker(loaded.config, "resumed"),
-		"Back in planning for ${planFilePath}.");
-	assert.equal(resolvePlanMarker(loaded.config, "stopped"), undefined);
+	assert.equal(resolvePlanMarker(loaded.config, "ended"), "Planning ended for ${planFilePath}.");
 });
 
 void test("loadPlanConfig warns when deprecated planning systemPrompt config is used", () => {

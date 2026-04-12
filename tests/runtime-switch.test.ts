@@ -5,7 +5,6 @@ import nplan from "../nplan.ts";
 import { createHarness } from "./runtime-harness.ts";
 import {
 	assertPlanDeliveryState,
-	assertPlanningState,
 	emitBeforeAgentStart,
 	getMessageContentAt,
 	startAndDeliverPlan,
@@ -19,7 +18,7 @@ afterEach(() => {
 	temp.cleanup();
 });
 
-void test("switching plans while idle emits an abandoned marker for the old plan and a resume marker for the new plan on the next turn", async () => {
+void test("switching plans while idle emits only a new start marker on the next real turn", async () => {
 	const homeDir = temp.makeTempDir("nplan-runtime-home-switch-idle-");
 	const cwd = temp.makeTempDir("nplan-runtime-cwd-switch-idle-");
 	process.env.HOME = homeDir;
@@ -37,28 +36,18 @@ void test("switching plans while idle emits an abandoned marker for the old plan
 	await harness.runCommand("plan", "plan-b");
 
 	assert.equal(harness.sentMessages.length, 2);
-	assertPlanningState({ harness, planPath: planBPath });
-	assertPlanDeliveryState({
-		harness,
-		options: {
-			planningMessageKind: "resumed",
-			pendingEvents: [
-				{ kind: "abandoned", planFilePath: planAPath },
-				{ kind: "resumed", planFilePath: planBPath },
-			],
-			planningPromptWindowKey: "root",
-		},
-	});
+	assertPlanDeliveryState({ harness, options: { planningPromptWindowKey: "root" } });
 
 	await emitBeforeAgentStart(harness, "Prompt after switching plans");
 
-	assert.equal(harness.sentMessages.length, 4);
-	assert.match(getMessageContentAt(harness, -2), new RegExp(`^Plan Abandoned ${planAPath}`));
-	assert.match(getMessageContentAt(harness, -1), new RegExp(`^Plan Resumed ${planBPath}`));
+	assert.equal(harness.sentMessages.length, 3);
 	assert.equal(getMessageContentAt(harness, -1).includes("[PLAN - PLANNING PHASE]"), false);
+	assert.match(getMessageContentAt(harness, -1), new RegExp(`^Plan Started ${planBPath}`));
+	assert.equal(getMessageContentAt(harness, -1).includes("[PLAN - PLANNING PHASE]"), false);
+	assert.equal(getMessageContentAt(harness, -1).includes(planAPath), false);
 });
 
-void test("switching plans while planning emits abandon then start markers on the next real turn", async () => {
+void test("switching plans while planning emits end then start markers on the next real turn", async () => {
 	const homeDir = temp.makeTempDir("nplan-runtime-home-switch-planning-");
 	const cwd = temp.makeTempDir("nplan-runtime-cwd-switch-planning-");
 	process.env.HOME = homeDir;
@@ -68,28 +57,18 @@ void test("switching plans while planning emits abandon then start markers on th
 	const planBPath = join(homeDir, ".n", "pi", "plans", "plan-b.md");
 
 	await startAndDeliverPlan(harness, "plan-a");
-	harness.ui.confirmResponses.push(true);
+	assert.equal(writePlanFile(homeDir, "plan-b") === planBPath, true);
+	harness.ui.confirmResponses.push(true, true);
 
 	await harness.runCommand("plan", "plan-b");
 
 	assert.equal(harness.sentMessages.length, 1);
-	assertPlanningState({ harness, planPath: planBPath });
-	assertPlanDeliveryState({
-		harness,
-		options: {
-			planningMessageKind: "started",
-			pendingEvents: [
-				{ kind: "abandoned", planFilePath: planAPath },
-				{ kind: "started", planFilePath: planBPath },
-			],
-			planningPromptWindowKey: "root",
-		},
-	});
+	assertPlanDeliveryState({ harness, options: { planningPromptWindowKey: "root" } });
 
 	await emitBeforeAgentStart(harness, "Prompt after switching from A to B");
 
 	assert.equal(harness.sentMessages.length, 3);
-	assert.match(getMessageContentAt(harness, -2), new RegExp(`^Plan Abandoned ${planAPath}`));
+	assert.match(getMessageContentAt(harness, -2), new RegExp(`^Plan Ended ${planAPath}`));
 	assert.match(getMessageContentAt(harness, -1), new RegExp(`^Plan Started ${planBPath}`));
 	assert.equal(getMessageContentAt(harness, -1).includes("[PLAN - PLANNING PHASE]"), false);
 });
