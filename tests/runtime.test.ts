@@ -26,6 +26,20 @@ afterEach(() => {
 	temp.cleanup();
 });
 
+function renderWidgetLine(widget: unknown, width = 60): string | undefined {
+	if (typeof widget !== "function") {
+		return undefined;
+	}
+
+	const component = widget(
+		{ requestRender() {} },
+		{
+			fg: (_color: string, text: string) => text,
+		},
+	);
+	return component.render(width)[0];
+}
+
 void test("registers plan-clear and removes the legacy plan-file command", () => {
 	const harness = createHarness(temp.makeTempDir("nplan-runtime-cwd-register-"));
 	nplan(harness.api);
@@ -185,6 +199,23 @@ void test("/plan creates a missing plan file from the configured scaffold before
 	const planPath = join(homeDir, ".n", "pi", "plans", "bootstrap-me.md");
 	assert.equal(existsSync(planPath), true);
 	assert.equal(readFileSync(planPath, "utf-8"), "# Custom Template\n");
+});
+
+void test("planning widget uses editorPaddingX from Pi settings", async () => {
+	const homeDir = temp.makeTempDir("nplan-runtime-home-widget-padding-");
+	const cwd = temp.makeTempDir("nplan-runtime-cwd-widget-padding-");
+	process.env.HOME = homeDir;
+	mkdirSync(join(cwd, ".pi"), { recursive: true });
+	writeFileSync(join(cwd, ".pi", "settings.json"), JSON.stringify({ editorPaddingX: 2 }), "utf8");
+	const planPath = writePlanFile(homeDir, "widget-padding");
+	const harness = createHarness(cwd);
+	appendPersistedPlanState(harness, createPlanningState(planPath, { includeModel: false }));
+	nplan(harness.api);
+
+	await harness.emit("session_start", { type: "session_start", reason: "resume" });
+
+	const line = renderWidgetLine(harness.ui.widgets.get("plan-progress"));
+	assert.equal(line?.startsWith("  ⏸ plan"), true);
 });
 
 void test("--plan bootstraps the default plan file and emits a start event on session start", async () => {

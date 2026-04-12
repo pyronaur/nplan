@@ -1,6 +1,7 @@
 import type { ExtensionContext, SessionEntry } from "@mariozechner/pi-coding-agent";
 import { homedir } from "node:os";
 import { basename, extname, isAbsolute, join, normalize, parse, resolve, sep } from "node:path";
+import { getEditorPaddingX } from "./nplan-editor-padding.ts";
 import { expandHome } from "./nplan-files.ts";
 import { type Phase } from "./nplan-tool-scope.ts";
 import { formatPhaseWidgetLines, renderColoredPhaseWidgetLine } from "./nplan-widget.ts";
@@ -24,8 +25,6 @@ type ApplyPatchAction = {
 
 const STATUS_KEY = "plan";
 const WIDGET_KEY = "plan-progress";
-const WIDGET_LEFT_PADDING = 1;
-const WIDGET_RIGHT_PADDING = 2;
 const WIDGET_GAP = 4;
 
 const PLANNING_MUTATING_BASH_PATTERNS = [
@@ -305,6 +304,7 @@ export function renderPhaseWidget(ctx: ExtensionContext, phase: Phase, planFileP
 		return;
 	}
 
+	const editorPaddingX = getEditorPaddingX(ctx.cwd);
 	ctx.ui.setWidget(WIDGET_KEY, (_tui, theme) => ({
 		invalidate() {},
 		render(width: number) {
@@ -312,8 +312,8 @@ export function renderPhaseWidget(ctx: ExtensionContext, phase: Phase, planFileP
 				phase,
 				planFilePath,
 				width,
-				leftPadding: WIDGET_LEFT_PADDING,
-				rightPadding: WIDGET_RIGHT_PADDING,
+				leftPadding: editorPaddingX,
+				rightPadding: editorPaddingX,
 				gap: WIDGET_GAP,
 			});
 			return lines.map((line) =>
