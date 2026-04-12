@@ -70,54 +70,59 @@ Note:
   running 'plannotator' without arguments is for hook integration and expects JSON on stdin
 ```
 
-## Good Starting Point
+## How To Use This Guide
 
-Use this as a starting point, not a rigid checklist.
+This is a starting point and memory aid.
 
-- `piux_client` is usually the best live control surface.
-- The inner session JSONL is usually the best source for persisted ordering and artifact shape.
-- Real user flows are usually more valuable than clever shortcuts.
-- Small prompts and tiny plan bodies keep the testing loop cheap.
-- Reusing one session and navigating it with `/tree` is usually better than spawning fresh sessions.
-- If this guide stops helping, improve the guide before doing more testing.
+Use it like this:
 
-## Read Order Before Any Live Test
+- read this file first
+- pick the test case you are about to run
+- read only the extra docs that matter for that case
+- write down what you learn so the next pass starts faster
+
+Good defaults:
+
+- `piux_client` is usually the best live control surface
+- the inner session JSONL is usually the best source for persisted ordering and artifact shape
+- real user flows are usually more valuable than clever shortcuts
+- small prompts and tiny plan bodies keep the testing loop cheap
+- reusing one session and navigating it with `/tree` is usually better than spawning fresh sessions
+- if this guide stops helping, improve the guide before doing more testing
+
+## Fresh-Start Warmup
+
+On a fresh pass, start here:
+
+1. Read this file end to end.
+2. Read `../README.md` and `./prompts.md`.
+3. Confirm the current inner session with `/session`.
+4. Restate the testing collaboration style to the inner agent.
+5. Pick one small case and run it.
+
+That is enough for a normal smoke pass.
+
+## Read What Matches The Case
 
 This file lives at `nplan/docs/manual-testing.md`.
 
 Relative paths below are relative to this file.
 
-Read these in order:
+| Case | Read next | Why |
+|---|---|---|
+| basic lifecycle smoke | `../README.md`, `./prompts.md` | command surface and visible contract |
+| duplicate start/end rows | `./prompts.md`, `./mermaid-planning-message-lifecycle.md` | exact lifecycle contract and emission path |
+| draft vs committed confusion | `./prompts.md`, `./mermaid-plan-state-information-architecture.md` | state ownership and submit boundary |
+| review pending / approve / reject | `../README.md`, `./prompts.md`, `./plannotator-review-url.md`, `/Users/n14/.agents/skills/n/agent-browser/SKILL.md` | tool-row contract, URL source, browser workflow |
+| tree navigation around planning | `../../docs/piux.md`, Pi `tree.md`, Pi `session.md` | branch movement and session artifacts |
+| compaction resend behavior | `./prompts.md`, `./mermaid-planning-message-lifecycle.md`, Pi `compaction.md` | compaction window rules |
+| resume / restore behavior | `./mermaid-plan-state-information-architecture.md`, Pi `session.md` | persisted restore path |
 
-1. `./manual-testing.md`
-2. `../AGENTS.md`
-3. `../README.md`
-4. `./prompts.md`
-5. `./mermaid-planning-message-lifecycle.md`
-6. `./mermaid-plan-state-information-architecture.md`
-7. `./plannotator-review-url.md`
-8. `../../docs/piux.md`
-9. `/Users/n14/.agents/skills/n/agent-browser/SKILL.md`
-10. Pi docs:
-   - `/opt/homebrew/lib/node_modules/@mariozechner/pi-coding-agent/docs/session.md`
-   - `/opt/homebrew/lib/node_modules/@mariozechner/pi-coding-agent/docs/tree.md`
-   - `/opt/homebrew/lib/node_modules/@mariozechner/pi-coding-agent/docs/compaction.md`
+Only read the mermaid docs when the case needs lifecycle/state detail.
 
-## Path Legend
+## If The Map Gets Fuzzy
 
-- `../README.md` = `nplan/README.md`
-- `../AGENTS.md` = `nplan/AGENTS.md`
-- `./prompts.md` = `nplan/docs/prompts.md`
-- `./mermaid-planning-message-lifecycle.md` = `nplan/docs/mermaid-planning-message-lifecycle.md`
-- `./mermaid-plan-state-information-architecture.md` = `nplan/docs/mermaid-plan-state-information-architecture.md`
-- `./plannotator-review-url.md` = `nplan/docs/plannotator-review-url.md`
-- `./manual-testing-results.md` = `nplan/docs/manual-testing-results.md`
-- `../../docs/piux.md` = repo-level `docs/piux.md`
-- `/Users/n14/.agents/skills/n/agent-browser/SKILL.md` = real agent-browser skill source on this machine
-
-## Where To Re-Orient Fast
-
-Use the `docs` command when the map gets fuzzy.
+Use the `docs` command first, then open exact files.
 
 Useful commands:
 
@@ -131,16 +136,17 @@ What those give back:
 - `docs ls nplan docs` = the local `nplan/docs` map
 - `docs ls .` = repo-level docs plus `nplan/docs`
 
-Use those first, then open exact files.
+## Path Legend
 
-## First 10 Minutes On A Fresh Pass
-
-1. Read this file end to end.
-2. Read `../README.md`, `./prompts.md`, and the two mermaid docs.
-3. Read `/Users/n14/.agents/skills/n/agent-browser/SKILL.md`.
-4. Confirm `piux` target session and current JSONL with `/session`.
-5. Restate the test collaboration script to the inner agent.
-6. Start with one small case and log it.
+- `../README.md` = `nplan/README.md`
+- `../AGENTS.md` = `nplan/AGENTS.md`
+- `./prompts.md` = `nplan/docs/prompts.md`
+- `./mermaid-planning-message-lifecycle.md` = `nplan/docs/mermaid-planning-message-lifecycle.md`
+- `./mermaid-plan-state-information-architecture.md` = `nplan/docs/mermaid-plan-state-information-architecture.md`
+- `./plannotator-review-url.md` = `nplan/docs/plannotator-review-url.md`
+- `./manual-testing-results.md` = `nplan/docs/manual-testing-results.md`
+- `../../docs/piux.md` = repo-level `docs/piux.md`
+- `/Users/n14/.agents/skills/n/agent-browser/SKILL.md` = real agent-browser skill source on this machine
 
 ## Current `nplan` Contract To Test
 
@@ -200,9 +206,25 @@ Useful defaults from that skill:
 Good low-token browser pattern:
 
 1. discover once
-2. write down the relevant controls
+2. write down the relevant semantic controls
 3. reuse short commands on the same browser session
 4. avoid repeated full snapshots unless the DOM changed
+
+Typical review-page discovery flow:
+
+```bash
+agent-browser --session-name nplan-review open http://localhost:PORT
+agent-browser --session-name nplan-review wait --load networkidle
+agent-browser --session-name nplan-review snapshot -i
+```
+
+When learning the request contract:
+
+```bash
+agent-browser --session-name nplan-review network har start
+# perform one real action
+agent-browser --session-name nplan-review network har stop ./capture.har
+```
 
 ### agent-browser Notes That Matter Here
 
@@ -246,7 +268,7 @@ From Pi docs:
 - `/tree` can add branch summaries when leaving a branch.
 - `branch_summary` and `compaction` entries are real persisted artifacts.
 
-### Testing consequences
+### What this means during testing
 
 - When testing transcript order, inspect the current session JSONL directly.
 - When testing branch navigation, verify both visible tree behavior and persisted branch-summary artifacts.
@@ -262,7 +284,7 @@ From Pi docs:
 - Compaction and branch summarization are separate mechanisms.
 - Split-turn compaction exists when one turn is huge.
 
-### `nplan` consequences
+### What this means for `nplan`
 
 - `nplan` planning-prompt delivery is defined in compaction windows.
 - After compaction removes the planning prompt from model context, the next real planning turn may emit one full `Plan Started <path>` prompt again.
@@ -272,9 +294,9 @@ From Pi docs:
 
 ## Inner-Agent Collaboration Script
 
-Before starting a batch of tests, tell the inner agent exactly what is happening.
+Before starting a batch of tests, tell the inner agent what is happening and what you want back.
 
-Preferred instructions:
+Good prompts for the inner agent:
 
 - state that the session is a manual `nplan` test
 - state which behavior is under test right now
@@ -326,9 +348,9 @@ For every case:
 - does committed state change only on real submit?
 - does draft-only command activity stay out of persisted committed state until submit?
 
-## Review Testing Research Notes
+## Review Testing Notes
 
-Do not guess the review HTTP contract.
+Start from observation, not guesses.
 
 Known facts:
 
@@ -417,7 +439,7 @@ Known facts:
 - prefer repeated structured test prompts over freeform English
 - do not ask the inner agent for explanations unless the explanation itself is the subject under test
 
-These are good defaults, not hard laws. Break them when the test needs depth.
+These are good defaults. Ignore them when the case needs depth.
 
 ## Result Logging Shape
 
@@ -433,7 +455,7 @@ For each case log:
 - pass/fail
 - bug title if failed
 
-## Current Early Lessons
+## Current Working Notes
 
 - `piux_client look diff` is the fastest default observation tool.
 - `/session` is the fastest way to confirm the active JSONL file.
