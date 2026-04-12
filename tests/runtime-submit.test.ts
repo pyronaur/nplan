@@ -40,3 +40,25 @@ void test("interactive submit emits the planning row before the user message and
 	assert.equal(userMessageIndex >= 0, true);
 	assert.equal(planEventIndex < userMessageIndex, true);
 });
+
+void test("shift-return newline does not trigger submit interception", async () => {
+	const homeDir = temp.makeTempDir("nplan-runtime-home-shift-return-");
+	const cwd = temp.makeTempDir("nplan-runtime-cwd-shift-return-");
+	process.env.HOME = homeDir;
+	const harness = createHarness(cwd);
+	nplan(harness.api);
+
+	await harness.emit("session_start", { type: "session_start", reason: "startup" });
+	await harness.runCommand("plan", "shift-return");
+	harness.ui.editorText = "line one";
+
+	const result = harness.pressKey("\n");
+
+	assert.equal(result, "\n");
+	assert.equal(harness.sentMessages.length, 0);
+	assert.equal(harness.ui.editorText, "line one");
+	assert.equal(
+		harness.entries.some((entry) => entry.type === "message"),
+		false,
+	);
+});

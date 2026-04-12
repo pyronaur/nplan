@@ -3,7 +3,7 @@ import type { Runtime } from "./nplan-phase.ts";
 import { emitPlanTurnMessages } from "./nplan-turn-messages.ts";
 
 function isSubmitKey(data: string): boolean {
-	return data === "\r" || data === "\n";
+	return data === "\r";
 }
 
 function getSubmittedPrompt(ctx: ExtensionContext, data: string): string | null {
