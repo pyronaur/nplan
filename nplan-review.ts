@@ -1,20 +1,31 @@
 import { Type } from "@mariozechner/pi-ai";
 import { defineTool, type ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { PlannotatorSession } from "./models/plannotator-session.ts";
 import { planDenyFeedback } from "./nplan-feedback.ts";
+import {
+	buildPlannotatorRequest,
+	type NplanReviewResult,
+	parsePlannotatorReviewResult,
+} from "./nplan-plannotator.ts";
+import {
+	spawnReviewProcess,
+} from "./nplan-review-process.ts";
 import {
 	type PlanSubmitDetails,
 	renderPlanSubmitCall,
 	renderPlanSubmitResult,
 } from "./nplan-review-ui.ts";
+import {
+	getApprovedPlanMessage,
+	getAutoApprovePlanMessage,
+	getEmptyPlanMessage,
+	getMissingPlanMessage,
+	getPendingReviewMessage,
+} from "./nplan-status.ts";
 import { PLAN_SUBMIT_TOOL } from "./nplan-tool-scope.ts";
-
-export interface NplanReviewResult {
-	status: "approved" | "needs_revision";
-	feedback: string | null;
-}
 
 type SubmitPlanToolRuntime = {
 	isPlanning: () => boolean;
@@ -23,30 +34,11 @@ type SubmitPlanToolRuntime = {
 	onPlanApproved: (ctx: ExtensionContext, planFilePath: string) => Promise<void>;
 };
 
-interface PlannotatorReviewOutput {
-	hookSpecificOutput?: {
-		decision?: {
-			behavior?: string;
-			message?: string;
-		};
-	};
-}
-
-interface StartupLatch {
-	started: Promise<void>;
-	settle: (input: { ok: true } | { ok: false; error: Error }) => void;
-}
-
-interface ReviewProcess {
-	started: Promise<void>;
-	wait: Promise<NplanReviewResult>;
-	cancel: () => void;
-}
-
 interface StartPlanReviewInput {
 	reviewId?: string;
 	planFilePath: string;
 	cwd: string;
+	onUpdate?: PlanSubmitUpdate;
 }
 
 interface PlanReviewJob {
@@ -61,169 +53,32 @@ type PlanSubmitResult = {
 	details: PlanSubmitDetails;
 };
 
+type PlanSubmitUpdate = (result: PlanSubmitResult) => void;
+
 let cliAvailable: boolean | null = null;
 const planReviewJobs = new Map<string, PlanReviewJob>();
 
-function isPlannotatorOutput(value: unknown): value is PlannotatorReviewOutput {
-	return !!value && typeof value === "object" && !Array.isArray(value);
-}
-
-function createStartupLatch(): StartupLatch {
-	let resolveStarted: (() => void) | null = null;
-	let rejectStarted: ((error: Error) => void) | null = null;
-	const started = new Promise<void>((resolve, reject) => {
-		resolveStarted = resolve;
-		rejectStarted = reject;
-	});
-	const settle = (input: { ok: true } | { ok: false; error: Error }) => {
-		if (!resolveStarted || !rejectStarted) {
-			return;
-		}
-
-		const onResolve = resolveStarted;
-		const onReject = rejectStarted;
-		resolveStarted = null;
-		rejectStarted = null;
-		if (input.ok) {
-			onResolve();
-			return;
-		}
-
-		onReject(input.error);
-	};
-	return { started, settle };
-}
-
-function tryWriteReviewPayload(input: {
-	payload: string;
-	fail: (message: string) => void;
-	stdin: { write(chunk: string): void; end(): void };
-}): boolean {
-	try {
-		input.stdin.write(input.payload);
-		input.stdin.end();
-		return true;
-	} catch (error) {
-		const reason = error instanceof Error ? error.message : String(error);
-		input.fail(`Failed to send plan content to Plannotator CLI: ${reason}`);
-		return false;
-	}
-}
-
-function buildReviewFailureReason(input: {
-	stderr: string;
-	stdout: string;
-	code: number | null;
-	signal: NodeJS.Signals | null;
-}): string {
-	return input.stderr.trim() || input.stdout.trim()
-		|| `exit code ${input.code ?? "null"}, signal ${input.signal ?? "null"}`;
-}
-
-function handleReviewClose(input: {
-	code: number | null;
-	signal: NodeJS.Signals | null;
-	stderr: string;
-	stdout: string;
-	resolve: (result: NplanReviewResult) => void;
-	reject: (error: Error) => void;
-	settleStarted: StartupLatch["settle"];
+function emitPendingReviewUpdate(input: {
+	planFilePath: string;
+	reviewUrl?: string;
+	onUpdate?: PlanSubmitUpdate;
 }): void {
-	if (input.code !== 0) {
-		const reason = buildReviewFailureReason({
-			stderr: input.stderr,
-			stdout: input.stdout,
-			code: input.code,
-			signal: input.signal,
-		});
-		input.settleStarted({
-			ok: false,
-			error: new Error(`Plannotator CLI review failed: ${reason}`),
-		});
-		input.reject(new Error(`Plannotator CLI review failed: ${reason}`));
-		return;
-	}
-
-	input.settleStarted({ ok: true });
-	try {
-		input.resolve(parsePlannotatorReviewResult(input.stdout));
-	} catch (error) {
-		const reason = error instanceof Error ? error.message : String(error);
-		input.reject(new Error(`Plannotator review returned an invalid decision: ${reason}`));
-	}
+	input.onUpdate?.(
+		makeToolResult(getPendingReviewMessage(input.reviewUrl), {
+			status: "pending",
+			planFilePath: input.planFilePath,
+			reviewUrl: input.reviewUrl,
+		}),
+	);
 }
 
-function spawnReviewProcess(
-	input: { reviewId: string; payload: string; cwd: string },
-): ReviewProcess {
-	let cancel = () => {};
-	const startup = createStartupLatch();
-	const wait = new Promise<NplanReviewResult>((resolve, reject) => {
-		const child = spawn("plannotator", [], {
-			cwd: input.cwd,
-			env: {
-				...process.env,
-				PLANNOTATOR_CWD: input.cwd,
-			},
-			stdio: ["pipe", "pipe", "pipe"],
-		});
-		let stdout = "";
-		let stderr = "";
-		let settled = false;
-		const finish = (handler: () => void) => {
-			if (settled) {
-				return;
-			}
-			settled = true;
-			planReviewJobs.delete(input.reviewId);
-			handler();
-		};
-		const fail = (message: string) => {
-			const error = new Error(message);
-			startup.settle({ ok: false, error });
-			finish(() => reject(error));
-		};
+function readPlanReviewUrl(pid: number): string | undefined {
+	const session = PlannotatorSession.load(pid);
+	if (!session?.isPlanReview()) {
+		return undefined;
+	}
 
-		cancel = () => {
-			child.kill("SIGTERM");
-			fail("Plannotator review was cancelled before a decision was captured.");
-		};
-
-		if (!tryWriteReviewPayload({ payload: input.payload, fail, stdin: child.stdin })) {
-			return;
-		}
-
-		child.stdout.on("data", (chunk) => {
-			stdout += String(chunk);
-		});
-		child.stderr.on("data", (chunk) => {
-			stderr += String(chunk);
-		});
-		child.on("spawn", () => {
-			startup.settle({ ok: true });
-		});
-		child.on("error", (error) => {
-			fail(`Failed to start Plannotator CLI: ${error.message}`);
-		});
-		child.on("close", (code, signal) => {
-			finish(() => {
-				handleReviewClose({
-					code,
-					signal,
-					stderr,
-					stdout,
-					resolve,
-					reject,
-					settleStarted: startup.settle,
-				});
-			});
-		});
-	});
-	return {
-		started: startup.started,
-		wait,
-		cancel: () => cancel(),
-	};
+	return session.url;
 }
 
 function startPlanReviewCli(input: StartPlanReviewInput): PlanReviewJob {
@@ -234,14 +89,24 @@ function startPlanReviewCli(input: StartPlanReviewInput): PlanReviewJob {
 	}
 
 	const process = spawnReviewProcess({
-		reviewId,
 		payload: buildPlannotatorRequest(input.planFilePath),
 		cwd: input.cwd,
+		parseResult: parsePlannotatorReviewResult,
+		readReviewUrl: readPlanReviewUrl,
+		onReviewUrl: (reviewUrl) => {
+			emitPendingReviewUpdate({
+				planFilePath: input.planFilePath,
+				reviewUrl,
+				onUpdate: input.onUpdate,
+			});
+		},
 	});
 	const job: PlanReviewJob = {
 		reviewId,
 		started: process.started,
-		wait: process.wait,
+		wait: process.wait.finally(() => {
+			planReviewJobs.delete(reviewId);
+		}),
 		cancel: () => process.cancel(),
 	};
 	planReviewJobs.set(reviewId, job);
@@ -260,11 +125,7 @@ function makeToolResult(
 
 function formatReviewError(message: string): string {
 	const text = message.trim() || "Unknown review error.";
-	if (text.startsWith("Error:")) {
-		return text;
-	}
-
-	return `Error: ${text}`;
+	return text.startsWith("Error:") ? text : `Error: ${text}`;
 }
 
 function validatePlanFile(fullPath: string, planFilePath: string): PlanSubmitResult | undefined {
@@ -272,49 +133,31 @@ function validatePlanFile(fullPath: string, planFilePath: string): PlanSubmitRes
 	try {
 		planContent = readFileSync(fullPath, "utf-8");
 	} catch {
-		return makeToolResult(
-			`Error: ${planFilePath} does not exist. Write your plan using the write tool first, then call ${PLAN_SUBMIT_TOOL} again.`,
-			{ approved: false, planFilePath },
-		);
+		return makeToolResult(getMissingPlanMessage(planFilePath, PLAN_SUBMIT_TOOL), {
+			status: "error",
+			planFilePath,
+		});
 	}
 	if (planContent.trim().length > 0) {
 		return undefined;
 	}
 
-	return makeToolResult(
-		`Error: ${planFilePath} is empty. Write your plan first, then call ${PLAN_SUBMIT_TOOL} again.`,
-		{ approved: false, planFilePath },
-	);
-}
-
-function getAutoApproveMessage(hasUI: boolean): string {
-	if (hasUI) {
-		return "Plan auto-approved (review unavailable). Execute the plan now.";
-	}
-
-	return "Plan auto-approved (non-interactive mode). Execute the plan now.";
-}
-
-function getApprovedPlanMessage(planFilePath: string, feedback: string | null): string {
-	if (!feedback) {
-		return `Plan approved. You now have full tool access (read, bash, edit, write). Execute the plan in ${planFilePath}.`;
-	}
-
-	return `Plan approved with notes! You now have full tool access (read, bash, edit, write). Execute the plan in ${planFilePath}.\n\n`
-		+ `## Implementation Notes\n\n`
-		+ `The user approved your plan but added the following notes to consider during implementation:\n\n${feedback}\n\n`
-		+ "Proceed with implementation, incorporating these notes where applicable.";
+	return makeToolResult(getEmptyPlanMessage(planFilePath, PLAN_SUBMIT_TOOL), {
+		status: "error",
+		planFilePath,
+	});
 }
 
 async function runSubmitPlanTool(
 	runtime: SubmitPlanToolRuntime,
 	ctx: ExtensionContext,
+	onUpdate?: PlanSubmitUpdate,
 ): Promise<PlanSubmitResult> {
 	const planFilePath = runtime.getPlanFilePath();
 	if (!runtime.isPlanning()) {
 		return makeToolResult(
 			"Error: Not in plan mode. Use /plan to enter planning mode first.",
-			{ approved: false, planFilePath },
+			{ status: "error", planFilePath },
 		);
 	}
 
@@ -325,7 +168,10 @@ async function runSubmitPlanTool(
 	}
 	if (!ctx.hasUI || !hasPlannotatorCli()) {
 		await runtime.onPlanApproved(ctx, planFilePath);
-		return makeToolResult(getAutoApproveMessage(ctx.hasUI), { approved: true, planFilePath });
+		return makeToolResult(getAutoApprovePlanMessage(ctx.hasUI), {
+			status: "approved",
+			planFilePath,
+		});
 	}
 
 	let result: NplanReviewResult;
@@ -334,16 +180,17 @@ async function runSubmitPlanTool(
 			planFilePath: fullPath,
 			cwd: ctx.cwd,
 			signal: ctx.signal,
+			onUpdate,
 		});
 	} catch (error) {
 		const message = formatReviewError(error instanceof Error ? error.message : String(error));
 		ctx.ui.notify(message, "error");
-		return makeToolResult(message, { approved: false, planFilePath });
+		return makeToolResult(message, { status: "error", planFilePath });
 	}
 	if (result.status === "approved") {
 		await runtime.onPlanApproved(ctx, planFilePath);
 		return makeToolResult(getApprovedPlanMessage(planFilePath, result.feedback), {
-			approved: true,
+			status: "approved",
 			planFilePath,
 			feedback: result.feedback ?? undefined,
 		});
@@ -352,49 +199,12 @@ async function runSubmitPlanTool(
 	const feedbackText = result.feedback || "Plan rejected. Please revise.";
 	return makeToolResult(
 		planDenyFeedback(feedbackText, PLAN_SUBMIT_TOOL, { planFilePath }),
-		{ approved: false, planFilePath, feedback: feedbackText },
+		{ status: "rejected", planFilePath, feedback: feedbackText },
 	);
 }
 
 export function getImplementationHandoffText(planFilePath: string): string {
 	return `Implement the plan @${planFilePath}`;
-}
-
-export function buildPlannotatorRequest(planFilePath: string): string {
-	return JSON.stringify({
-		tool_input: {
-			plan: readFileSync(planFilePath, "utf-8"),
-		},
-	});
-}
-
-export function parsePlannotatorReviewResult(stdout: string): NplanReviewResult {
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(stdout.trim());
-	} catch {
-		throw new Error("Plannotator review output was not valid JSON.");
-	}
-	if (!isPlannotatorOutput(parsed)) {
-		throw new Error("Plannotator review output did not include a decision.");
-	}
-
-	const behavior = parsed.hookSpecificOutput?.decision?.behavior;
-	const message = parsed.hookSpecificOutput?.decision?.message?.trim() || null;
-	if (behavior === "allow") {
-		return {
-			status: "approved",
-			feedback: message,
-		};
-	}
-	if (behavior === "deny") {
-		return {
-			status: "needs_revision",
-			feedback: message,
-		};
-	}
-
-	throw new Error("Plannotator review output did not include a decision.");
 }
 
 export function resetPlannotatorCliAvailabilityCache(): void {
@@ -429,10 +239,12 @@ export async function runPlanReviewCli(input: {
 	planFilePath: string;
 	cwd: string;
 	signal?: AbortSignal;
+	onUpdate?: PlanSubmitUpdate;
 }): Promise<NplanReviewResult> {
 	const job = startPlanReviewCli({
 		planFilePath: input.planFilePath,
 		cwd: input.cwd,
+		onUpdate: input.onUpdate,
 	});
 	const signal = input.signal;
 	if (!signal) {
@@ -482,8 +294,9 @@ export function createPlanSubmitTool(runtime: SubmitPlanToolRuntime) {
 			),
 		}),
 		async execute(...args) {
+			const onUpdate = args[3];
 			const ctx = args[4];
-			return await runSubmitPlanTool(runtime, ctx);
+			return await runSubmitPlanTool(runtime, ctx, onUpdate);
 		},
 		renderCall(args, theme) {
 			return renderPlanSubmitCall(args, theme);
@@ -493,3 +306,6 @@ export function createPlanSubmitTool(runtime: SubmitPlanToolRuntime) {
 		},
 	});
 }
+
+export { buildPlannotatorRequest, parsePlannotatorReviewResult } from "./nplan-plannotator.ts";
+export type { NplanReviewResult } from "./nplan-plannotator.ts";

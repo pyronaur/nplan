@@ -46,7 +46,8 @@ Plan review is handled through the `plannotator` CLI.
 
 - while planning, the agent writes to the active global plan file
 - `plan_submit` reads that file and submits the plan body to `plannotator` on stdin
-- the `plan_submit` tool rows are the review record; visible `Plan Review`, `Plan Approved`, `Plan Rejected`, and `Error: ...` labels come from tool rendering without hidden rewrites or duplicate custom messages
+- the `plan_submit` tool rows are the review record; visible `Plan Review`, `Plan Review Pending`, `Plan Approved`, `Plan Rejected`, and `Error: ...` labels come from tool rendering without hidden rewrites or duplicate custom messages
+- while the Plannotator review server is live, the pending `plan_submit` row shows the review URL in-place so the link stays visible even if the browser auto-open succeeds or later output is collapsed
 - CLI approval exits plan mode, restores normal access, and prefills the input editor with `Implement the plan @<absolute-plan-path>`
 - CLI denial returns revision feedback and keeps the extension in planning mode
 - when review is unavailable, `nplan` preserves the current auto-approve fallback behavior

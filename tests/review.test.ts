@@ -21,6 +21,7 @@ import nplan from "../nplan.ts";
 import { createHarness } from "./runtime-harness.ts";
 
 const originalPath = process.env.PATH;
+const originalHome = process.env.HOME;
 
 afterEach(() => {
 	if (originalPath === undefined) {
@@ -29,8 +30,18 @@ afterEach(() => {
 	if (originalPath !== undefined) {
 		process.env.PATH = originalPath;
 	}
+	if (originalHome === undefined) {
+		delete process.env.HOME;
+	}
+	if (originalHome !== undefined) {
+		process.env.HOME = originalHome;
+	}
 	resetPlannotatorCliAvailabilityCache();
 });
+
+function escapeForShell(value: string): string {
+	return value.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
+}
 
 function makeFakePlannotator(output: string) {
 	const dir = mkdtempSync(join(tmpdir(), "nplan-plannotator-"));
@@ -39,7 +50,7 @@ function makeFakePlannotator(output: string) {
 	const script = [
 		"#!/bin/sh",
 		`cat > "${capturePath}"`,
-		`printf '%s' "${output.replaceAll("\"", "\\\"")}"`,
+		`printf '%s' "${escapeForShell(output)}"`,
 	].join("\n");
 
 	writeFileSync(binPath, script, { encoding: "utf-8", mode: 0o755 });
@@ -49,6 +60,27 @@ function makeFakePlannotator(output: string) {
 		capturePath,
 		binDir: dir,
 	};
+}
+
+function makeFakePlannotatorWithSessionUrl(output: string, reviewUrl: string) {
+	const dir = mkdtempSync(join(tmpdir(), "nplan-plannotator-session-"));
+	const binPath = join(dir, "plannotator");
+	const script = [
+		"#!/bin/sh",
+		"cat > /dev/null",
+		"mkdir -p \"$HOME/.plannotator/sessions\"",
+		"session_path=\"$HOME/.plannotator/sessions/$$.json\"",
+		`printf '{\n  "pid": %s,\n  "port": 19432,\n  "url": "${
+			escapeForShell(reviewUrl)
+		}",\n  "mode": "plan",\n  "project": "test",\n  "startedAt": "2026-04-12T00:00:00.000Z",\n  "label": "plan-test"\n}\n' "$$" > "$session_path"`,
+		"sleep 1",
+		`printf '%s' "${escapeForShell(output)}"`,
+	].join("\n");
+
+	writeFileSync(binPath, script, { encoding: "utf-8", mode: 0o755 });
+	chmodSync(binPath, 0o755);
+
+	return { binDir: dir };
 }
 
 async function runPlanReviewCliCase(output: string) {
@@ -166,7 +198,7 @@ void test("getPlanSubmitCallText includes the summary when present", () => {
 void test("getPlanSubmitResultText renders approved and rejected states without duplication", () => {
 	assert.equal(
 		getPlanSubmitResultText({
-			details: { approved: true, planFilePath: "/abs/path/plan.md" },
+			details: { status: "approved", planFilePath: "/abs/path/plan.md" },
 			content: [{ type: "text", text: "Plan approved." }],
 			expanded: false,
 		}),
@@ -175,7 +207,7 @@ void test("getPlanSubmitResultText renders approved and rejected states without 
 	assert.equal(
 		getPlanSubmitResultText({
 			details: {
-				approved: false,
+				status: "rejected",
 				planFilePath: "/abs/path/plan.md",
 				feedback: "Add rollback guidance.",
 			},
@@ -184,6 +216,41 @@ void test("getPlanSubmitResultText renders approved and rejected states without 
 		}),
 		"Plan Rejected /abs/path/plan.md\n\nAdd rollback guidance.",
 	);
+});
+
+void test("pending plan_submit review rows show the review URL without expansion", () => {
+	const reviewUrl = "http://localhost:19432";
+	assert.equal(
+		getPlanSubmitResultText({
+			details: {
+				status: "pending",
+				planFilePath: "/abs/path/plan.md",
+				reviewUrl,
+			},
+			content: [{ type: "text", text: `Open this URL to review:\n${reviewUrl}` }],
+			expanded: false,
+		}),
+		`Plan Review Pending /abs/path/plan.md\n\nOpen this URL to review:\n${reviewUrl}`,
+	);
+
+	const rendered = renderComponentText(
+		renderPlanSubmitResult(
+			{
+				content: [{ type: "text", text: `Open this URL to review:\n${reviewUrl}` }],
+				details: {
+					status: "pending",
+					planFilePath: "/abs/path/plan.md",
+					reviewUrl,
+				},
+			},
+			{ expanded: false, isPartial: true },
+			createTheme(),
+		),
+	);
+
+	assert.match(rendered, /Plan Review Pending \/abs\/path\/plan\.md/);
+	assert.match(rendered, /Open this URL to review:/);
+	assert.ok(rendered.includes(reviewUrl));
 });
 
 void test("plan_submit call renderer uses a review-specific visible title", () => {
@@ -200,7 +267,7 @@ void test("patchPlanSubmitResult flips rejected reviews to tool errors and appro
 	assert.deepEqual(
 		patchPlanSubmitResult({
 			toolName: "plan_submit",
-			details: { approved: true, planFilePath: "/abs/path/plan.md" },
+			details: { status: "approved", planFilePath: "/abs/path/plan.md" },
 		}),
 		{ isError: false },
 	);
@@ -208,7 +275,7 @@ void test("patchPlanSubmitResult flips rejected reviews to tool errors and appro
 		patchPlanSubmitResult({
 			toolName: "plan_submit",
 			details: {
-				approved: false,
+				status: "rejected",
 				planFilePath: "/abs/path/plan.md",
 				feedback: "Revise the rollout section.",
 			},
@@ -218,7 +285,7 @@ void test("patchPlanSubmitResult flips rejected reviews to tool errors and appro
 	assert.equal(
 		patchPlanSubmitResult({
 			toolName: "read",
-			details: { approved: false, planFilePath: "/abs/path/plan.md" },
+			details: { status: "rejected", planFilePath: "/abs/path/plan.md" },
 		}),
 		undefined,
 	);
@@ -229,7 +296,7 @@ void test("rejected plan_submit review record uses failed semantics and the exac
 		{
 			content: [{ type: "text", text: "Plan rejected." }],
 			details: {
-				approved: false,
+				status: "rejected",
 				planFilePath: "/abs/path/plan.md",
 				feedback: "Revise the rollout section.\n\n- Add rollback guidance.",
 			},
@@ -246,7 +313,7 @@ void test("rejected plan_submit review record uses failed semantics and the exac
 		patchPlanSubmitResult({
 			toolName: "plan_submit",
 			details: {
-				approved: false,
+				status: "rejected",
 				planFilePath: "/abs/path/plan.md",
 				feedback: "Revise the rollout section.\n\n- Add rollback guidance.",
 			},
@@ -260,7 +327,7 @@ void test("error plan_submit results render the raw Error row text", () => {
 		"Error: Plannotator review returned an invalid decision: Plannotator review output was not valid JSON.";
 	assert.equal(
 		getPlanSubmitResultText({
-			details: { approved: false, planFilePath: "/abs/path/plan.md" },
+			details: { status: "error", planFilePath: "/abs/path/plan.md" },
 			content: [{ type: "text", text }],
 			expanded: true,
 		}),
@@ -271,7 +338,7 @@ void test("error plan_submit results render the raw Error row text", () => {
 		renderPlanSubmitResult(
 			{
 				content: [{ type: "text", text }],
-				details: { approved: false, planFilePath: "/abs/path/plan.md" },
+				details: { status: "error", planFilePath: "/abs/path/plan.md" },
 			},
 			{ expanded: true },
 			createTheme(),
@@ -355,4 +422,47 @@ void test("runPlanReviewCli returns revision feedback for deny decisions", async
 			},
 		}),
 	);
+});
+
+void test("runPlanReviewCli emits a live review URL update when plannotator starts the server", async () => {
+	const reviewUrl = "http://localhost:19432";
+	const fake = makeFakePlannotatorWithSessionUrl(
+		JSON.stringify({
+			hookSpecificOutput: {
+				decision: {
+					behavior: "allow",
+				},
+			},
+		}),
+		reviewUrl,
+	);
+	const repoRoot = mkdtempSync(join(tmpdir(), "nplan-plan-review-update-"));
+	const homeDir = mkdtempSync(join(tmpdir(), "nplan-plan-review-home-"));
+	const planFilePath = join(repoRoot, "plan.md");
+	writeFileSync(planFilePath, "# Plan\n\nShip the change.\n", "utf-8");
+	process.env.HOME = homeDir;
+	process.env.PATH = `${fake.binDir}:${originalPath ?? ""}`;
+
+	const updates: Array<{ text: string; details: unknown }> = [];
+	const result = await runPlanReviewCli({
+		planFilePath,
+		cwd: repoRoot,
+		onUpdate: (partial) => {
+			const text = partial.content.find((item) => item.type === "text")?.text ?? "";
+			updates.push({ text, details: partial.details });
+		},
+	});
+
+	assert.deepEqual(result, {
+		status: "approved",
+		feedback: null,
+	});
+
+	const urlUpdate = updates.find((update) => update.text.includes(reviewUrl));
+	assert.ok(urlUpdate);
+	assert.deepEqual(urlUpdate?.details, {
+		status: "pending",
+		planFilePath,
+		reviewUrl,
+	});
 });
