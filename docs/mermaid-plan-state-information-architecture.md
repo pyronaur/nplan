@@ -217,7 +217,7 @@ flowchart TD
     B[[PERSISTED TRANSCRIPT scan does not yet see resumed delivery]] --> C
     C --> D[getTurnEvents decides resumed is still owed]
     D --> E[Plan Resumed emitted]
-    E --> F[Another trigger runs before transcript-derived delivery catches up]
+    E --> F[Another trigger runs before persisted lifecycle state records delivery]
     F --> C
 
     classDef persisted fill:#e8f6e8,stroke:#3d8a4d,color:#111;
