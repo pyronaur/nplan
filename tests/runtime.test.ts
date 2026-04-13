@@ -261,7 +261,7 @@ void test("declining a plan switch while planning keeps the current plan attache
 	assert.equal(harness.sentMessages.length, 0);
 });
 
-void test("fresh start after an earlier start stays Started and still carries the planning prompt", async () => {
+void test("draft planning can be canceled with bare /plan before the first real submit", async () => {
 	const homeDir = temp.makeTempDir("nplan-runtime-home-second-start-");
 	const cwd = temp.makeTempDir("nplan-runtime-cwd-second-start-");
 	process.env.HOME = homeDir;
@@ -271,10 +271,37 @@ void test("fresh start after an earlier start stays Started and still carries th
 	await harness.emit("session_start", { type: "session_start", reason: "startup" });
 	await harness.runCommand("plan", "plan-a");
 	await harness.runCommand("plan");
-	harness.ui.confirmResponses.push(true);
+	await harness.runCommand("plan-status");
+
+	const planPath = join(homeDir, ".n", "pi", "plans", "plan-a.md");
+	assert.equal(harness.ui.confirmCalls.length, 0);
+	assert.deepEqual(getLastPlanState(harness), createIdleState(null));
+	assert.equal(existsSync(planPath), false);
+	assert.deepEqual(harness.sentMessages, []);
+	assert.deepEqual(harness.ui.notifications.at(-1), {
+		message: "Phase: idle\nAttached plan: none",
+		type: "info",
+	});
+
+	await emitBeforeAgentStart(harness, "New turn");
+
+	assert.deepEqual(harness.sentMessages, []);
+});
+
+void test("fresh start after canceling an earlier draft still carries the planning prompt", async () => {
+	const homeDir = temp.makeTempDir("nplan-runtime-home-second-start-");
+	const cwd = temp.makeTempDir("nplan-runtime-cwd-second-start-");
+	process.env.HOME = homeDir;
+	const harness = createHarness(cwd);
+	nplan(harness.api);
+
+	await harness.emit("session_start", { type: "session_start", reason: "startup" });
+	await harness.runCommand("plan", "plan-a");
+	await harness.runCommand("plan");
 	await harness.runCommand("plan", "plan-b");
 
 	const planPath = join(homeDir, ".n", "pi", "plans", "plan-b.md");
+	assert.equal(harness.ui.confirmCalls.length, 0);
 	assert.deepEqual(getLastPlanState(harness), createIdleState(null));
 	assert.deepEqual(harness.sentMessages, []);
 

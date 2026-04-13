@@ -123,6 +123,16 @@ async function exitToIdle(
 	}
 }
 
+async function revertDraftPlanning(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
+	if (runtime.planState.phase !== "planning") {
+		return;
+	}
+
+	await restoreSavedState(runtime, ctx);
+	runtime.planState = runtime.committedPlanState;
+	updateUi(runtime, ctx);
+}
+
 async function promptForPlanTarget(
 	runtime: Runtime,
 	ctx: ExtensionContext,
@@ -220,6 +230,10 @@ async function handlePlanCommand(
 ): Promise<void> {
 	const targetArg = args.trim();
 	if (runtime.planState.phase === "planning" && !targetArg) {
+		if (runtime.committedPlanState.phase !== "planning") {
+			await revertDraftPlanning(runtime, ctx);
+		}
+
 		return;
 	}
 
