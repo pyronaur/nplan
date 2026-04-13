@@ -5,7 +5,8 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function isThinkingLevel(value: unknown): value is ThinkingLevel {
-	return value === "minimal"
+	return value === "off"
+		|| value === "minimal"
 		|| value === "low"
 		|| value === "medium"
 		|| value === "high"

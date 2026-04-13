@@ -273,6 +273,9 @@ export function patchPlanSubmitResult(event: {
 	if (event.details.status === "pending" || event.details.status === "approved") {
 		return { isError: false };
 	}
+	if (event.details.status === "error") {
+		return { isError: false };
+	}
 	return { isError: true };
 }
 

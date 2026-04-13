@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
 import nplan from "../nplan.ts";
@@ -15,7 +15,6 @@ import {
 	getLastMessageContent,
 	getLastPlanState,
 	getMessageContentAt,
-	removePlanEventHistory,
 	writePlanFile,
 } from "./runtime-helpers.ts";
 import { createTempTracker } from "./test-temp.ts";
@@ -29,20 +28,6 @@ afterEach(() => {
 function assertNoCommittedPlanChange(harness: ReturnType<typeof createHarness>): void {
 	assert.deepEqual(getLastPlanState(harness), createIdleState(null));
 	assert.deepEqual(harness.sentMessages, []);
-}
-
-function renderWidgetLine(widget: unknown, width = 60): string | undefined {
-	if (typeof widget !== "function") {
-		return undefined;
-	}
-
-	const component = widget(
-		{ requestRender() {} },
-		{
-			fg: (_color: string, text: string) => text,
-		},
-	);
-	return component.render(width)[0];
 }
 
 void test("registers plan-clear and removes the legacy plan-file command", () => {
@@ -190,6 +175,25 @@ void test("/plan creates a missing plan file from the configured scaffold before
 	assert.equal(readFileSync(planPath, "utf-8"), "# Custom Template\n");
 });
 
+void test("resuming an attached missing plan file does not recreate it on the next planning turn", async () => {
+	const homeDir = temp.makeTempDir("nplan-runtime-home-missing-attached-");
+	const cwd = temp.makeTempDir("nplan-runtime-cwd-missing-attached-");
+	process.env.HOME = homeDir;
+	const planPath = writePlanFile(homeDir, "missing-attached");
+	const harness = createHarness(cwd);
+	appendPersistedPlanState(harness, createIdleState(planPath, { idleKind: "manual" }));
+	nplan(harness.api);
+
+	await harness.emit("session_start", { type: "session_start", reason: "resume" });
+	unlinkSync(planPath);
+	await harness.runCommand("plan");
+	assert.equal(existsSync(planPath), false);
+	await emitBeforeAgentStart(harness, "Prompt after resuming missing attached plan");
+
+	assert.equal(existsSync(planPath), false);
+	assert.deepEqual(getLastPlanState(harness), createPlanningState(planPath));
+});
+
 void test("planning widget uses editorPaddingX from Pi settings", async () => {
 	const homeDir = temp.makeTempDir("nplan-runtime-home-widget-padding-");
 	const cwd = temp.makeTempDir("nplan-runtime-cwd-widget-padding-");
@@ -203,7 +207,13 @@ void test("planning widget uses editorPaddingX from Pi settings", async () => {
 
 	await harness.emit("session_start", { type: "session_start", reason: "resume" });
 
-	const line = renderWidgetLine(harness.ui.widgets.get("plan-progress"));
+	const widget = harness.ui.widgets.get("plan-progress");
+	const line = typeof widget === "function"
+		? widget(
+			{ requestRender() {} },
+			{ fg: (_color: string, text: string) => text },
+		).render(60)[0]
+		: undefined;
 	assert.equal(line?.startsWith("  ⏸ plan"), true);
 });
 
@@ -348,78 +358,26 @@ void test("ordinary later turns while restarted planning do not emit another sta
 	assert.match(getMessageContentAt(harness, -1), /^Plan Started /);
 });
 
-void test("stopping planning stays silent on toggle and emits an ended message on the next real turn", async () => {
-	const homeDir = temp.makeTempDir("nplan-runtime-home-stop-turn-");
-	const cwd = temp.makeTempDir("nplan-runtime-cwd-stop-turn-");
+void test("session_start resume restores active planning state persisted with thinkingLevel off", async () => {
+	const homeDir = temp.makeTempDir("nplan-runtime-home-resume-off-");
+	const cwd = temp.makeTempDir("nplan-runtime-cwd-resume-off-");
 	process.env.HOME = homeDir;
+	const planPath = writePlanFile(homeDir, "resume-off");
 	const harness = createHarness(cwd);
+	appendPersistedPlanState(harness, createPlanningState(planPath, {
+		thinkingLevel: "off",
+	}));
 	nplan(harness.api);
 
-	await harness.emit("session_start", { type: "session_start", reason: "startup" });
-	await harness.runCommand("plan", "stop-turn");
-	await emitBeforeAgentStart(harness, "First planning prompt");
-	await harness.emit("agent_end", { type: "agent_end", messages: [] });
+	await harness.emit("session_start", { type: "session_start", reason: "resume" });
 
-	assert.equal(harness.sentMessages.length, 1);
-
-	await harness.runCommand("plan");
-
-	assert.equal(harness.sentMessages.length, 1);
-
-	await emitBeforeAgentStart(harness, "Normal prompt after stopping planning");
-
-	assert.equal(harness.sentMessages.length, 2);
-	assert.match(getLastMessageContent(harness), /^Plan Ended /);
-	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), false);
 	assert.deepEqual(
 		getLastPlanState(harness),
-		createIdleState(join(homeDir, ".n", "pi", "plans", "stop-turn.md"), { idleKind: "manual" }),
+		createPlanningState(planPath, { thinkingLevel: "off" }),
 	);
-});
-
-void test("stopping planning does not depend on plan-event transcript history", async () => {
-	const homeDir = temp.makeTempDir("nplan-runtime-home-stop-no-history-");
-	const cwd = temp.makeTempDir("nplan-runtime-cwd-stop-no-history-");
-	process.env.HOME = homeDir;
-	const harness = createHarness(cwd);
-	nplan(harness.api);
-
-	await harness.emit("session_start", { type: "session_start", reason: "startup" });
-	await harness.runCommand("plan", "stop-no-history");
-	await emitBeforeAgentStart(harness, "Initial planning prompt");
-	await harness.emit("agent_end", { type: "agent_end", messages: [] });
-	removePlanEventHistory(harness);
-
-	await harness.runCommand("plan");
-	await emitBeforeAgentStart(harness, "Prompt after stopping planning with missing history");
-
-	assert.match(getLastMessageContent(harness), /^Plan Ended /);
-});
-
-void test("repeated off-on toggles that net back to the committed planning state stay silent", async () => {
-	const homeDir = temp.makeTempDir("nplan-runtime-home-toggle-net-");
-	const cwd = temp.makeTempDir("nplan-runtime-cwd-toggle-net-");
-	process.env.HOME = homeDir;
-	const harness = createHarness(cwd);
-	nplan(harness.api);
-
-	await harness.emit("session_start", { type: "session_start", reason: "startup" });
-	await harness.runCommand("plan", "net-state");
-	await emitBeforeAgentStart(harness, "First planning prompt");
-	await harness.emit("agent_end", { type: "agent_end", messages: [] });
-
-	assert.equal(harness.sentMessages.length, 1);
-
-	await harness.runCommand("plan");
-	await harness.runCommand("plan");
-	await harness.runCommand("plan");
-	await harness.runCommand("plan");
-
-	assert.equal(harness.sentMessages.length, 1);
-
-	await emitBeforeAgentStart(harness, "Second planning prompt after net-zero toggles");
-
-	assert.equal(harness.sentMessages.length, 1);
+	assertPlanDeliveryState({ harness });
+	assert.deepEqual(harness.ui.notifications, []);
+	assert.equal(harness.sentMessages.length, 0);
 });
 
 void test("plan_submit approval exits planning without a second completion row", async () => {
@@ -457,7 +415,7 @@ void test("plan-clear outside planning stays silent on the next real turn", asyn
 	await harness.runCommand("plan", "clear-idle");
 	await emitBeforeAgentStart(harness, "Initial planning prompt");
 	await harness.emit("agent_end", { type: "agent_end", messages: [] });
-	await harness.runCommand("plan");
+	await harness.runCommand("plan-clear");
 	await emitBeforeAgentStart(harness, "Prompt after stopping planning");
 	await harness.emit("agent_end", { type: "agent_end", messages: [] });
 

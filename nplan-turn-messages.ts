@@ -104,11 +104,15 @@ function ensureCommittedPlanningFile(runtime: Runtime): void {
 	if (!enteredPlanning) {
 		return;
 	}
+	if (!runtime.planState.bootstrapPending) {
+		return;
+	}
 
 	ensureTextFile(
 		runtime.planState.attachedPlanPath,
 		resolvePlanTemplate(runtime.planConfig) ?? "# Plan\n",
 	);
+	runtime.planState = runtime.planState.with({ bootstrapPending: false });
 }
 
 export function emitPlanTurnMessages(runtime: Runtime, ctx: ExtensionContext): boolean {

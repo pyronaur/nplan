@@ -7,6 +7,7 @@ type IdleKind = "manual" | "approved";
 type PlanStateInput = {
 	phase: Phase;
 	attachedPlanPath: string | null;
+	bootstrapPending: boolean;
 	idleKind: IdleKind | null;
 	savedState: SavedPhaseState | null;
 };
@@ -14,10 +15,12 @@ type PlanStateInput = {
 function isPlanStateInput(value: {
 	phase: Phase;
 	attachedPlanPath: string | null | undefined;
+	bootstrapPending: boolean | undefined;
 	idleKind: IdleKind | null | undefined;
 	savedState: SavedPhaseState | null | undefined;
 }): value is PlanStateInput {
 	return value.attachedPlanPath !== undefined
+		&& value.bootstrapPending !== undefined
 		&& value.idleKind !== undefined
 		&& value.savedState !== undefined;
 }
@@ -25,12 +28,14 @@ function isPlanStateInput(value: {
 export class PlanState {
 	readonly phase: Phase;
 	readonly attachedPlanPath: string | null;
+	readonly bootstrapPending: boolean;
 	readonly idleKind: IdleKind | null;
 	readonly savedState: SavedPhaseState | null;
 
 	constructor(input: PlanStateInput) {
 		this.phase = input.phase;
 		this.attachedPlanPath = input.attachedPlanPath;
+		this.bootstrapPending = input.bootstrapPending;
 		this.idleKind = input.idleKind;
 		this.savedState = input.savedState;
 	}
@@ -39,6 +44,7 @@ export class PlanState {
 		return new PlanState({
 			phase: "idle",
 			attachedPlanPath: null,
+			bootstrapPending: false,
 			idleKind: null,
 			savedState: null,
 		});
@@ -81,6 +87,7 @@ export class PlanState {
 		const parsed = {
 			phase,
 			attachedPlanPath: PlanState.readAttachedPlanPath(value),
+			bootstrapPending: PlanState.readBootstrapPending(value),
 			idleKind: PlanState.readIdleKind(value),
 			savedState: PlanState.readSavedState(value),
 		};
@@ -98,6 +105,15 @@ export class PlanState {
 		}
 
 		return attachedPlanPath;
+	}
+
+	private static readBootstrapPending(value: Record<string, unknown>): boolean | undefined {
+		const bootstrapPending = value.bootstrapPending ?? false;
+		if (typeof bootstrapPending !== "boolean") {
+			return undefined;
+		}
+
+		return bootstrapPending;
 	}
 
 	private static readIdleKind(value: Record<string, unknown>): IdleKind | null | undefined {
@@ -123,12 +139,14 @@ export class PlanState {
 	toData(): {
 		phase: Phase;
 		attachedPlanPath: string | null;
+		bootstrapPending: boolean;
 		idleKind: IdleKind | null;
 		savedState: ReturnType<SavedPhaseState["toData"]> | null;
 	} {
 		return {
 			phase: this.phase,
 			attachedPlanPath: this.attachedPlanPath,
+			bootstrapPending: this.bootstrapPending,
 			idleKind: this.idleKind,
 			savedState: this.savedState?.toData() ?? null,
 		};
@@ -137,6 +155,7 @@ export class PlanState {
 	with(input: {
 		phase?: Phase;
 		attachedPlanPath?: string | null;
+		bootstrapPending?: boolean;
 		idleKind?: IdleKind | null;
 		savedState?: SavedPhaseState | null;
 	}): PlanState {
@@ -145,6 +164,9 @@ export class PlanState {
 			attachedPlanPath: "attachedPlanPath" in input
 				? input.attachedPlanPath ?? null
 				: this.attachedPlanPath,
+			bootstrapPending: "bootstrapPending" in input
+				? input.bootstrapPending ?? false
+				: this.bootstrapPending,
 			idleKind: "idleKind" in input ? input.idleKind ?? null : this.idleKind,
 			savedState: "savedState" in input ? input.savedState ?? null : this.savedState,
 		});

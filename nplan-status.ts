@@ -18,19 +18,19 @@ export function getPlanStatusLines(input: {
 }
 
 export function getMissingPlanMessage(planFilePath: string, toolName: string): string {
-	return `Error: ${planFilePath} does not exist. Write your plan using the write tool first, then call ${toolName} again.`;
+	return `Error: ${planFilePath} does not exist. Stop here. Do not write or recreate the plan in this turn. Wait for the next user turn before calling ${toolName} again.`;
 }
 
 export function getEmptyPlanMessage(planFilePath: string, toolName: string): string {
-	return `Error: ${planFilePath} is empty. Write your plan first, then call ${toolName} again.`;
+	return `Error: ${planFilePath} is empty. Stop here. Do not revise the plan in this turn. Wait for the next user turn before calling ${toolName} again.`;
 }
 
 export function getAutoApprovePlanMessage(hasUI: boolean): string {
 	if (hasUI) {
-		return "Plan auto-approved (review unavailable). Execute the plan now.";
+		return "Plan auto-approved (review unavailable). Planning session ended. Wait for the next user turn.";
 	}
 
-	return "Plan auto-approved (non-interactive mode). Execute the plan now.";
+	return "Plan auto-approved (non-interactive mode). Planning session ended. Wait for the next user turn.";
 }
 
 export function getPendingReviewMessage(reviewUrl?: string): string {
@@ -43,11 +43,9 @@ export function getPendingReviewMessage(reviewUrl?: string): string {
 
 export function getApprovedPlanMessage(planFilePath: string, feedback: string | null): string {
 	if (!feedback) {
-		return `Plan approved. You now have full tool access (read, bash, edit, write). Execute the plan in ${planFilePath}.`;
+		return `Plan approved for ${planFilePath}. Planning session ended. Wait for the next user turn.`;
 	}
 
-	return `Plan approved with notes! You now have full tool access (read, bash, edit, write). Execute the plan in ${planFilePath}.\n\n`
-		+ `## Implementation Notes\n\n`
-		+ `The user approved your plan but added the following notes to consider during implementation:\n\n${feedback}\n\n`
-		+ "Proceed with implementation, incorporating these notes where applicable.";
+	return `Plan approved for ${planFilePath} with implementation notes. Planning session ended. Wait for the next user turn.`
+		+ `\n\n## Implementation Notes\n\n${feedback}`;
 }

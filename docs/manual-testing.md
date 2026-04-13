@@ -53,16 +53,8 @@ This section is intentionally verbatim. Do not paraphrase it away.
 > Note: we're doing all this setup, because I want you to test the plan mode thoroughly and log all the bugs, maybe in docs/manual-testing-results.md - we'll fix all of those bugs, and then you'll test again, and look for more bugs, and test again, etc. - so this document is monumentally foundational to your quality of work.
 
 ### Plannotator quick note
-
-Most of the time you do not need to drive `plannotator` directly.
-
-`nplan` will usually spawn the review instance for you.
-
-Useful support command:
-
-```bash
-plannotator sessions
-```
+Most of the time you do not need to drive `plannotator` directly. `nplan` will usually spawn the review instance for you.
+Useful support command: `plannotator sessions`
 
 Use it when you want to inspect active review instances or recover the current review URL.
 
@@ -107,6 +99,7 @@ Useful path anchors:
 
 - `../README.md` = `nplan/README.md`
 - `./prompts.md` = `nplan/docs/prompts.md`
+- `./manual-testing-piux-client.md` = `nplan/docs/manual-testing-piux-client.md`
 - `./mermaid-planning-message-lifecycle.md` = `nplan/docs/mermaid-planning-message-lifecycle.md`
 - `./mermaid-plan-state-information-architecture.md` = `nplan/docs/mermaid-plan-state-information-architecture.md`
 - `./plannotator-review-url.md` = `nplan/docs/plannotator-review-url.md`
@@ -134,6 +127,8 @@ Use JSONL when:
 - ordering looks suspicious
 - you need to confirm what was persisted after a weird turn
 - branch / compaction behavior is confusing
+
+If `piux_client` looks broken, read `./manual-testing-piux-client.md` before blaming the tool.
 
 Good default loop:
 
@@ -276,5 +271,6 @@ Add JSONL notes only when they helped debug or confirm a suspicious case.
 - `/session` is the fastest way to confirm the active JSONL file
 - draft-only plan changes can be real runtime state without being committed session state yet
 - when the screen looks wrong, JSONL becomes useful
+- after `/tree` lands on a user-turn selection, inspect or clear the editor before sending slash commands
 - bare file names in a runbook are sloppy; anchor docs by exact relative or absolute path
 - the real agent-browser skill source on this machine is `/Users/n14/.agents/skills/n/agent-browser/SKILL.md`

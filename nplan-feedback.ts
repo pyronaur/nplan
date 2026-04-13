@@ -8,10 +8,10 @@ export function planDenyFeedback(
 	options?: PlanDenyFeedbackOptions,
 ): string {
 	const planFileRule = options?.planFilePath
-		? `- Your plan is saved at: ${options.planFilePath}\n  You can edit this file to make targeted changes, then pass its path to ${toolName}.\n`
+		? `Plan file: ${options.planFilePath}\n`
 		: "";
 
-	return `YOUR PLAN WAS NOT APPROVED.\n\nYou MUST revise the plan to address ALL of the feedback below before calling ${toolName} again.\n\nRules:\n${planFileRule}- Do not resubmit the same plan unchanged.\n- Do NOT change the plan title (first # heading) unless the user explicitly asks you to.\n\n${
+	return `Plan rejected.\n\n${planFileRule}Feedback for the next planning turn:\n${
 		feedback || "Plan changes requested"
-	}`;
+	}\n\nWait for the next user turn before revising the plan or calling ${toolName} again.`;
 }

@@ -9,6 +9,10 @@ import { PlanDeliveryState } from "./models/plan-delivery-state.ts";
 import { PlanState } from "./models/plan-state.ts";
 import { loadPlanConfig } from "./nplan-config.ts";
 import { registerPlanEventRenderer } from "./nplan-events.ts";
+import {
+	applyPendingForkRestore,
+	registerSessionBeforeForkHandler,
+} from "./nplan-fork-restore.ts";
 import { isRecord } from "./nplan-guards.ts";
 import {
 	applyPhaseConfig,
@@ -54,6 +58,7 @@ type PiLeaderOpenEvent = {
 		]
 	) => void;
 };
+
 function isPiLeaderOpenEvent(event: unknown): event is PiLeaderOpenEvent {
 	return isRecord(event) && typeof event.add === "function";
 }
@@ -177,6 +182,7 @@ async function attachRequestedPlan(
 	}
 
 	runtime.planState = runtime.planState.with({ attachedPlanPath: targetPath });
+	runtime.planState = runtime.planState.with({ bootstrapPending: !targetExists });
 	await enterPlanning(runtime, ctx);
 }
 
@@ -214,7 +220,6 @@ async function handlePlanCommand(
 ): Promise<void> {
 	const targetArg = args.trim();
 	if (runtime.planState.phase === "planning" && !targetArg) {
-		await exitToIdle(runtime, ctx);
 		return;
 	}
 
@@ -355,7 +360,11 @@ function registerToolResultHandler(runtime: Runtime): void {
 	runtime.pi.on("tool_result", async (event) => patchPlanSubmitResult(event));
 }
 
-async function handleSessionStart(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
+async function handleSessionStart(
+	runtime: Runtime,
+	event: { reason?: string; previousSessionFile?: string },
+	ctx: ExtensionContext,
+): Promise<void> {
 	const loadedConfig = loadPlanConfig(ctx.cwd);
 	runtime.planConfig = loadedConfig.config;
 	for (const warning of loadedConfig.warnings) {
@@ -375,10 +384,19 @@ async function handleSessionStart(runtime: Runtime, ctx: ExtensionContext): Prom
 	if (persistedDeliveryState) {
 		runtime.planDeliveryState = persistedDeliveryState;
 	}
+	applyPendingForkRestore({
+		runtime,
+		event,
+		persistedState,
+		persistedDeliveryState,
+		sessionFile: ctx.sessionManager.getSessionFile(),
+	});
 	if (runtime.pi.getFlag("plan") === true) {
 		const wasPlanning = runtime.planState.phase === "planning";
+		const hadAttachedPlan = runtime.planState.attachedPlanPath !== null;
 		runtime.planState = runtime.planState.with({
 			attachedPlanPath: runtime.planState.attachedPlanPath ?? getDefaultPlanPath(),
+			bootstrapPending: hadAttachedPlan ? runtime.planState.bootstrapPending : true,
 		});
 		if (!wasPlanning) {
 			await enterPlanning(runtime, ctx);
@@ -395,7 +413,37 @@ async function handleSessionStart(runtime: Runtime, ctx: ExtensionContext): Prom
 }
 
 function registerSessionStartHandler(runtime: Runtime): void {
-	runtime.pi.on("session_start", async (_event, ctx) => await handleSessionStart(runtime, ctx));
+	runtime.pi.on("session_start", async (event, ctx) =>
+		await handleSessionStart(
+			runtime,
+			isRecord(event) ? event : {},
+			ctx,
+		));
+}
+
+async function handleSessionTree(runtime: Runtime, ctx: ExtensionContext): Promise<void> {
+	const persistedState = PlanState.load(getSessionEntries(ctx));
+	runtime.planState = persistedState
+		? persistedState.with({
+			attachedPlanPath: persistedState.attachedPlanPath
+				? resolveGlobalPlanPath(persistedState.attachedPlanPath)
+				: null,
+		})
+		: PlanState.idle();
+	runtime.committedPlanState = runtime.planState;
+	runtime.planDeliveryState = PlanDeliveryState.load(getSessionEntries(ctx))
+		?? PlanDeliveryState.idle();
+
+	if (runtime.planState.phase === "planning") {
+		notifyReviewAvailability(ctx);
+	}
+
+	await syncSessionPhase(runtime, ctx);
+	updateUi(runtime, ctx);
+}
+
+function registerSessionTreeHandler(runtime: Runtime): void {
+	runtime.pi.on("session_tree", async (_event, ctx) => await handleSessionTree(runtime, ctx));
 }
 
 function registerLeaderHandler(runtime: Runtime): void {
@@ -438,5 +486,7 @@ export default function nplan(pi: ExtensionAPI): void {
 	registerBeforeAgentStartHandler(runtime);
 	registerSubmitInterceptor(runtime);
 	registerSessionStartHandler(runtime);
+	registerSessionTreeHandler(runtime);
+	registerSessionBeforeForkHandler(pi);
 	registerLeaderHandler(runtime);
 }

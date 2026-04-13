@@ -104,7 +104,11 @@ function createUiApi(state: UiState) {
 	};
 }
 
-function createSessionManager(cwd: string, entries: Array<Record<string, unknown>>) {
+function createSessionManager(
+	cwd: string,
+	entries: Array<Record<string, unknown>>,
+	branchEntries: { current?: Array<Record<string, unknown>> },
+) {
 	return {
 		getCwd: () => cwd,
 		getSessionDir: () => cwd,
@@ -114,7 +118,7 @@ function createSessionManager(cwd: string, entries: Array<Record<string, unknown
 		getLeafEntry: () => undefined,
 		getEntry: () => undefined,
 		getLabel: () => undefined,
-		getBranch: () => entries,
+		getBranch: () => branchEntries.current ?? entries,
 		getHeader: () => undefined,
 		getEntries: () => entries,
 		getTree: () => ({ rootId: null, nodes: [] }),
@@ -139,15 +143,17 @@ export function createUiState(): UiState {
 export function createContext(input: {
 	cwd: string;
 	entries: Array<Record<string, unknown>>;
+	branchEntries?: { current?: Array<Record<string, unknown>> };
 	uiState: UiState;
 	hasUI?: boolean;
 	signal?: AbortSignal;
 }) {
+	const branchEntries = input.branchEntries ?? { current: undefined };
 	return {
 		ui: createUiApi(input.uiState),
 		hasUI: input.hasUI ?? true,
 		cwd: input.cwd,
-		sessionManager: createSessionManager(input.cwd, input.entries),
+		sessionManager: createSessionManager(input.cwd, input.entries, branchEntries),
 		modelRegistry: { find: () => undefined },
 		model: undefined,
 		isIdle: () => true,

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
@@ -21,7 +22,13 @@ function setPath(path: string): void {
 function installFakePlannotator(lines: string[]): void {
 	const dir = temp.makeTempDir("nplan-runtime-review-bin-");
 	const binPath = join(dir, "plannotator");
-	writeFileSync(binPath, ["#!/bin/sh", ...lines].join("\n"), {
+	writeFileSync(binPath, [
+		"#!/bin/sh",
+		"if [ \"$1\" = \"--help\" ]; then",
+		"  exit 0",
+		"fi",
+		...lines,
+	].join("\n"), {
 		encoding: "utf-8",
 		mode: 0o755,
 	});
@@ -70,6 +77,7 @@ afterEach(() => {
 	}
 
 	process.env.PATH = originalPath;
+
 	resetPlannotatorCliAvailabilityCache();
 });
 
@@ -87,15 +95,49 @@ void test("plan_submit auto-approves when interactive review is unavailable", as
 	assert.equal(result.isError, false);
 	assert.equal(
 		getToolText(result),
-		"Plan auto-approved (review unavailable). Execute the plan now.",
+		"Plan auto-approved (review unavailable). Planning session ended. Wait for the next user turn.",
 	);
 	assert.equal(harness.ui.editorText, `Implement the plan @${planPath}`);
 	assert.deepEqual(getLastPlanState(harness), {
 		phase: "idle",
 		attachedPlanPath: planPath,
+		bootstrapPending: false,
 		idleKind: "approved",
 		savedState: null,
 	});
+});
+
+void test("hasPlannotatorCli checks the real process PATH instead of trusting the login shell", () => {
+	const shellDir = temp.makeTempDir("nplan-runtime-review-shell-bin-");
+	const shellPath = join(shellDir, "fake-shell");
+	writeFileSync(shellPath, "#!/bin/sh\nexit 0\n", {
+		encoding: "utf-8",
+		mode: 0o755,
+	});
+	chmodSync(shellPath, 0o755);
+	const emptyBin = temp.makeTempDir("nplan-runtime-review-empty-path-shell-lie-");
+	const modulePath = new URL("../nplan-review.ts", import.meta.url).pathname;
+	const result = spawnSync(process.execPath, [
+		"--input-type=module",
+		"-e",
+		[
+			`import { hasPlannotatorCli, resetPlannotatorCliAvailabilityCache } from ${
+				JSON.stringify(modulePath)
+			};`,
+			"resetPlannotatorCliAvailabilityCache();",
+			"process.stdout.write(String(hasPlannotatorCli()));",
+		].join("\n"),
+	], {
+		encoding: "utf-8",
+		env: {
+			...process.env,
+			PATH: `${emptyBin}:/bin:/usr/bin`,
+			SHELL: shellPath,
+		},
+	});
+
+	assert.equal(result.status, 0);
+	assert.equal(result.stdout.trim(), "false");
 });
 
 void test("plan_submit returns Error text when plannotator output is invalid", async () => {
@@ -109,19 +151,16 @@ void test("plan_submit returns Error text when plannotator output is invalid", a
 
 	const result = await harness.runTool("plan_submit");
 
-	assert.equal(result.isError, true);
+	assert.equal(result.isError, false);
 	assert.equal(
 		getToolText(result),
-		"Error: Plannotator review returned an invalid decision: Plannotator review output was not valid JSON.",
+		"Error: Plannotator review returned an invalid decision: Plannotator review output was not valid JSON. Wait for the next user turn.",
 	);
-	assert.deepEqual(harness.ui.notifications.at(-1), {
-		message:
-			"Error: Plannotator review returned an invalid decision: Plannotator review output was not valid JSON.",
-		type: "error",
-	});
+	assert.equal(harness.ui.notifications.at(-1), undefined);
 	assert.deepEqual(getLastPlanState(harness), {
 		phase: "planning",
 		attachedPlanPath: planPath,
+		bootstrapPending: false,
 		idleKind: null,
 		savedState: {
 			activeTools: ["read", "bash", "edit", "write"],
@@ -141,8 +180,11 @@ void test("plan_submit returns Error text when plannotator exits non-zero", asyn
 	await startPlanning(harness, "exit-review");
 	const result = await harness.runTool("plan_submit");
 
-	assert.equal(result.isError, true);
-	assert.equal(getToolText(result), "Error: Plannotator CLI review failed: review exploded");
+	assert.equal(result.isError, false);
+	assert.equal(
+		getToolText(result),
+		"Error: Plannotator CLI review failed: review exploded Wait for the next user turn.",
+	);
 });
 
 void test("plan_submit returns Error text when review is cancelled", async () => {
@@ -163,9 +205,9 @@ void test("plan_submit returns Error text when review is cancelled", async () =>
 	setTimeout(() => controller.abort(), 20);
 	const result = await harness.runTool("plan_submit");
 
-	assert.equal(result.isError, true);
+	assert.equal(result.isError, false);
 	assert.equal(
 		getToolText(result),
-		"Error: Plannotator review was cancelled before a decision was captured.",
+		"Error: Plannotator review was cancelled before a decision was captured. Wait for the next user turn.",
 	);
 });

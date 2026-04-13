@@ -175,10 +175,12 @@ function createHarnessState(cwd: string, options: { hasUI?: boolean; signal?: Ab
 	const thinkingLevel: { current: ThinkingLevel } = { current: "medium" };
 	const activeTools = { current: ["read", "bash", "edit", "write"] };
 	const entryCount = { current: 0 };
+	const branchEntries: { current?: Array<Record<string, unknown>> } = { current: undefined };
 	const ui = createUiState();
 	const ctx = createContext({
 		cwd,
 		entries,
+		branchEntries,
 		uiState: ui,
 		hasUI: options.hasUI,
 		signal: options.signal,
@@ -211,6 +213,7 @@ function createHarnessState(cwd: string, options: { hasUI?: boolean; signal?: Ab
 		thinkingLevel,
 		tools,
 		ui,
+		branchEntries,
 	};
 }
 
@@ -369,6 +372,9 @@ export function createHarness(
 		tools: state.tools,
 		sentMessages: state.sentMessages,
 		ui: state.ui,
+		setBranchEntries(entries: Array<Record<string, unknown>> | undefined) {
+			state.branchEntries.current = entries;
+		},
 		emit: actions.emit,
 		pressKey: actions.pressKey,
 		runCommand: actions.runCommand,

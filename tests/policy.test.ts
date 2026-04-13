@@ -137,8 +137,70 @@ void test("PlanState.load keeps the latest idle plan state with a null savedStat
 	assert.deepEqual(state?.toData(), {
 		phase: "idle",
 		attachedPlanPath: "/abs/path/plan.md",
+		bootstrapPending: false,
 		idleKind: null,
 		savedState: null,
+	});
+});
+
+void test("PlanState.load accepts persisted planning state with thinkingLevel off", () => {
+	const state = PlanState.load([
+		createPlanEntry(
+			{
+				phase: "planning",
+				attachedPlanPath: "/abs/path/plan.md",
+				idleKind: null,
+				savedState: {
+					activeTools: ["read", "bash", "edit", "write"],
+					model: { provider: "opencode-go", id: "minimax-m2.7" },
+					thinkingLevel: "off",
+				},
+			},
+			"planning-off",
+			null,
+		),
+	]);
+
+	assert.deepEqual(state?.toData(), {
+		phase: "planning",
+		attachedPlanPath: "/abs/path/plan.md",
+		bootstrapPending: false,
+		idleKind: null,
+		savedState: {
+			activeTools: ["read", "bash", "edit", "write"],
+			model: { provider: "opencode-go", id: "minimax-m2.7" },
+			thinkingLevel: "off",
+		},
+	});
+});
+
+void test("PlanState.load preserves bootstrapPending when present", () => {
+	const state = PlanState.load([
+		createPlanEntry(
+			{
+				phase: "planning",
+				attachedPlanPath: "/abs/path/new-plan.md",
+				bootstrapPending: true,
+				idleKind: null,
+				savedState: {
+					activeTools: ["read", "bash", "edit", "write"],
+					thinkingLevel: "medium",
+				},
+			},
+			"planning-bootstrap",
+			null,
+		),
+	]);
+
+	assert.deepEqual(state?.toData(), {
+		phase: "planning",
+		attachedPlanPath: "/abs/path/new-plan.md",
+		bootstrapPending: true,
+		idleKind: null,
+		savedState: {
+			activeTools: ["read", "bash", "edit", "write"],
+			thinkingLevel: "medium",
+		},
 	});
 });
 

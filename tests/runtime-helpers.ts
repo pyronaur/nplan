@@ -6,16 +6,24 @@ import type { Harness } from "./runtime-harness.ts";
 const DEFAULT_ACTIVE_TOOLS = ["read", "bash", "edit", "write"];
 
 export function createSavedState(includeModel = true): Record<string, unknown> {
-	if (includeModel) {
+	return createSavedStateWithOptions({ includeModel });
+}
+
+export function createSavedStateWithOptions(options: {
+	includeModel?: boolean;
+	thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+} = {}): Record<string, unknown> {
+	const thinkingLevel = options.thinkingLevel ?? "medium";
+	if (options.includeModel ?? true) {
 		return {
 			activeTools: DEFAULT_ACTIVE_TOOLS,
-			thinkingLevel: "medium",
+			thinkingLevel,
 		};
 	}
 
 	return {
 		activeTools: DEFAULT_ACTIVE_TOOLS,
-		thinkingLevel: "medium",
+		thinkingLevel,
 	};
 }
 
@@ -23,13 +31,19 @@ export function createPlanningState(
 	planPath: string,
 	options: {
 		includeModel?: boolean;
+		thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+		bootstrapPending?: boolean;
 	} = {},
 ): Record<string, unknown> {
 	return {
 		phase: "planning",
 		attachedPlanPath: planPath,
+		bootstrapPending: options.bootstrapPending ?? false,
 		idleKind: null,
-		savedState: createSavedState(options.includeModel ?? true),
+		savedState: createSavedStateWithOptions({
+			includeModel: options.includeModel ?? true,
+			thinkingLevel: options.thinkingLevel,
+		}),
 	};
 }
 
@@ -42,6 +56,7 @@ export function createIdleState(
 	return {
 		phase: "idle",
 		attachedPlanPath: planPath,
+		bootstrapPending: false,
 		idleKind: options.idleKind ?? null,
 		savedState: null,
 	};

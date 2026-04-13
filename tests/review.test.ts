@@ -3,12 +3,11 @@ import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
+import { planDenyFeedback } from "../nplan-feedback.ts";
 import {
 	getPlanSubmitCallText,
 	getPlanSubmitResultText,
 	patchPlanSubmitResult,
-	renderPlanSubmitCall,
-	renderPlanSubmitResult,
 } from "../nplan-review-ui.ts";
 import {
 	buildPlannotatorRequest,
@@ -17,8 +16,11 @@ import {
 	resetPlannotatorCliAvailabilityCache,
 	runPlanReviewCli,
 } from "../nplan-review.ts";
-import nplan from "../nplan.ts";
-import { createHarness } from "./runtime-harness.ts";
+import {
+	getApprovedPlanMessage,
+	getEmptyPlanMessage,
+	getMissingPlanMessage,
+} from "../nplan-status.ts";
 
 const originalPath = process.env.PATH;
 const originalHome = process.env.HOME;
@@ -101,28 +103,6 @@ async function runPlanReviewCliCase(output: string) {
 	};
 }
 
-function createTheme() {
-	return {
-		fg: (_color: string, text: string) => text,
-		bg: (_color: string, text: string) => text,
-		bold: (text: string) => text,
-	};
-}
-
-function renderComponentText(component: { render(width: number): string[] }): string {
-	return component.render(120).join("\n");
-}
-
-type PlanEventRenderer = (
-	message: Record<string, unknown>,
-	options: { expanded: boolean },
-	theme: ReturnType<typeof createTheme>,
-) => { render(width: number): string[] };
-
-function isPlanEventRenderer(value: unknown): value is PlanEventRenderer {
-	return typeof value === "function";
-}
-
 void test("buildPlannotatorRequest serializes the full plan content", () => {
 	const repoRoot = mkdtempSync(join(tmpdir(), "nplan-plan-review-request-"));
 	const planFilePath = join(repoRoot, "plan.md");
@@ -190,6 +170,25 @@ void test("getImplementationHandoffText formats the approved plan path for the i
 	);
 });
 
+void test("approved and rejected plan messages stop at the current turn boundary", () => {
+	assert.equal(
+		getApprovedPlanMessage("/abs/path/plan.md", null),
+		"Plan approved for /abs/path/plan.md. Planning session ended. Wait for the next user turn.",
+	);
+	assert.equal(
+		planDenyFeedback("Add rollout guidance.", "plan_submit", { planFilePath: "/abs/path/plan.md" }),
+		"Plan rejected.\n\nPlan file: /abs/path/plan.md\nFeedback for the next planning turn:\nAdd rollout guidance.\n\nWait for the next user turn before revising the plan or calling plan_submit again.",
+	);
+	assert.equal(
+		getMissingPlanMessage("/abs/path/plan.md", "plan_submit"),
+		"Error: /abs/path/plan.md does not exist. Stop here. Do not write or recreate the plan in this turn. Wait for the next user turn before calling plan_submit again.",
+	);
+	assert.equal(
+		getEmptyPlanMessage("/abs/path/plan.md", "plan_submit"),
+		"Error: /abs/path/plan.md is empty. Stop here. Do not revise the plan in this turn. Wait for the next user turn before calling plan_submit again.",
+	);
+});
+
 void test("getPlanSubmitCallText includes the summary when present", () => {
 	assert.equal(getPlanSubmitCallText(undefined), "Plan Review");
 	assert.equal(getPlanSubmitCallText("ship the auth cleanup"), "Plan Review ship the auth cleanup");
@@ -218,51 +217,6 @@ void test("getPlanSubmitResultText renders approved and rejected states without 
 	);
 });
 
-void test("pending plan_submit review rows show the review URL without expansion", () => {
-	const reviewUrl = "http://localhost:19432";
-	assert.equal(
-		getPlanSubmitResultText({
-			details: {
-				status: "pending",
-				planFilePath: "/abs/path/plan.md",
-				reviewUrl,
-			},
-			content: [{ type: "text", text: `Open this URL to review:\n${reviewUrl}` }],
-			expanded: false,
-		}),
-		`Plan Review Pending /abs/path/plan.md\n\nOpen this URL to review:\n${reviewUrl}`,
-	);
-
-	const rendered = renderComponentText(
-		renderPlanSubmitResult(
-			{
-				content: [{ type: "text", text: `Open this URL to review:\n${reviewUrl}` }],
-				details: {
-					status: "pending",
-					planFilePath: "/abs/path/plan.md",
-					reviewUrl,
-				},
-			},
-			{ expanded: false, isPartial: true },
-			createTheme(),
-		),
-	);
-
-	assert.match(rendered, /Plan Review Pending \/abs\/path\/plan\.md/);
-	assert.match(rendered, /Open this URL to review:/);
-	assert.ok(rendered.includes(reviewUrl));
-});
-
-void test("plan_submit call renderer uses a review-specific visible title", () => {
-	const rendered = renderComponentText(
-		renderPlanSubmitCall({ summary: "ship the auth cleanup" }, createTheme()),
-	);
-
-	assert.equal(rendered.includes("plan_submit"), false);
-	assert.match(rendered, /Plan Review/);
-	assert.match(rendered, /ship the auth cleanup/);
-});
-
 void test("patchPlanSubmitResult flips rejected reviews to tool errors and approvals to success", () => {
 	assert.deepEqual(
 		patchPlanSubmitResult({
@@ -282,6 +236,13 @@ void test("patchPlanSubmitResult flips rejected reviews to tool errors and appro
 		}),
 		{ isError: true },
 	);
+	assert.deepEqual(
+		patchPlanSubmitResult({
+			toolName: "plan_submit",
+			details: { status: "error", planFilePath: "/abs/path/plan.md" },
+		}),
+		{ isError: false },
+	);
 	assert.equal(
 		patchPlanSubmitResult({
 			toolName: "read",
@@ -289,88 +250,6 @@ void test("patchPlanSubmitResult flips rejected reviews to tool errors and appro
 		}),
 		undefined,
 	);
-});
-
-void test("rejected plan_submit review record uses failed semantics and the exact decision header", () => {
-	const result = renderPlanSubmitResult(
-		{
-			content: [{ type: "text", text: "Plan rejected." }],
-			details: {
-				status: "rejected",
-				planFilePath: "/abs/path/plan.md",
-				feedback: "Revise the rollout section.\n\n- Add rollback guidance.",
-			},
-		},
-		{ expanded: true },
-		createTheme(),
-	);
-	const rendered = renderComponentText(result);
-
-	assert.match(rendered, /Plan Rejected \/abs\/path\/plan\.md/);
-	assert.match(rendered, /Revise the rollout section\./);
-	assert.match(rendered, /Add rollback guidance\./);
-	assert.deepEqual(
-		patchPlanSubmitResult({
-			toolName: "plan_submit",
-			details: {
-				status: "rejected",
-				planFilePath: "/abs/path/plan.md",
-				feedback: "Revise the rollout section.\n\n- Add rollback guidance.",
-			},
-		}),
-		{ isError: true },
-	);
-});
-
-void test("error plan_submit results render the raw Error row text", () => {
-	const text =
-		"Error: Plannotator review returned an invalid decision: Plannotator review output was not valid JSON.";
-	assert.equal(
-		getPlanSubmitResultText({
-			details: { status: "error", planFilePath: "/abs/path/plan.md" },
-			content: [{ type: "text", text }],
-			expanded: true,
-		}),
-		text,
-	);
-
-	const rendered = renderComponentText(
-		renderPlanSubmitResult(
-			{
-				content: [{ type: "text", text }],
-				details: { status: "error", planFilePath: "/abs/path/plan.md" },
-			},
-			{ expanded: true },
-			createTheme(),
-		),
-	);
-
-	assert.equal(rendered.trimEnd(), text);
-});
-
-void test("collapsed plan-event renderer shows the Ctrl+O expand affordance", () => {
-	const harness = createHarness(mkdtempSync(join(tmpdir(), "nplan-event-renderer-")));
-	nplan(harness.api);
-	const renderer = harness.messageRenderers.get("plan-event");
-	if (!isPlanEventRenderer(renderer)) {
-		throw new Error("plan-event renderer was not registered");
-	}
-
-	const message = {
-		details: {
-			kind: "started",
-			planFilePath: "/abs/path/plan.md",
-			title: "Plan Started /abs/path/plan.md",
-			body: "[PLAN - PLANNING PHASE]",
-		},
-		content: "Plan Started /abs/path/plan.md\n\n[PLAN - PLANNING PHASE]",
-	};
-	const collapsed = renderComponentText(renderer(message, { expanded: false }, createTheme()));
-	const expanded = renderComponentText(renderer(message, { expanded: true }, createTheme()));
-
-	assert.match(collapsed, /Ctrl\+O to expand/);
-	assert.equal(collapsed.includes("[PLAN - PLANNING PHASE]"), false);
-	assert.equal(expanded.includes("[PLAN - PLANNING PHASE]"), true);
 });
 
 void test("runPlanReviewCli sends the plan text to plannotator stdin and approves allow", async () => {

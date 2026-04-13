@@ -125,7 +125,12 @@ function makeToolResult(
 
 function formatReviewError(message: string): string {
 	const text = message.trim() || "Unknown review error.";
-	return text.startsWith("Error:") ? text : `Error: ${text}`;
+	const prefixed = text.startsWith("Error:") ? text : `Error: ${text}`;
+	if (prefixed.includes("Wait for the next user turn.")) {
+		return prefixed;
+	}
+
+	return `${prefixed} Wait for the next user turn.`;
 }
 
 function validatePlanFile(fullPath: string, planFilePath: string): PlanSubmitResult | undefined {
@@ -184,7 +189,6 @@ async function runSubmitPlanTool(
 		});
 	} catch (error) {
 		const message = formatReviewError(error instanceof Error ? error.message : String(error));
-		ctx.ui.notify(message, "error");
 		return makeToolResult(message, { status: "error", planFilePath });
 	}
 	if (result.status === "approved") {
@@ -216,9 +220,9 @@ export function hasPlannotatorCli(): boolean {
 		return cliAvailable;
 	}
 
-	const shell = process.env.SHELL || "/bin/sh";
-	const result = spawnSync(shell, ["-lc", "command -v plannotator >/dev/null 2>&1"], {
+	const result = spawnSync("plannotator", ["--help"], {
 		stdio: "ignore",
+		env: process.env,
 	});
 	cliAvailable = result.status === 0;
 	return cliAvailable;
