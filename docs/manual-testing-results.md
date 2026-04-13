@@ -117,14 +117,14 @@ read_when:
 - setup: approve live review for `qa-live-c` and `qa-live-e`
 - expected visible: `Plan Approved <path>` with no same-turn `Plan Ended <path>`; editor prefills `Implement the plan @<path>`
 - actual: visible approval rows matched and no same-turn `Plan Ended ...` appeared
-- result: pass with bug follow-up below
+- result: pass; direct artifact proof rerun in `MT-037`
 
 ### MT-013 — rejection stays in planning and shows `Plan Rejected ...`
 
 - setup: reject live review for `qa-live-c` using plannotator feedback
 - expected visible: `Plan Rejected /Users/n14/.n/pi/plans/qa-live-c.md`; planning footer remains active; no `Plan Ended ...`
 - actual: all matched
-- result: pass with bug follow-up below
+- result: pass; direct artifact proof rerun in `MT-038`
 
 ### MT-014 — idle attached `/plan-clear` is silent and does not flush `Plan Ended ...`
 
@@ -145,21 +145,21 @@ read_when:
 - setup: relaunched inner Pi with a fake `plannotator` that printed invalid JSON, then submitted review for `qa-live-invalid`
 - expected visible: `Plan Review invalid output check` followed by `Error: ...`; plan mode remains active
 - actual: the `Error: Plannotator review returned an invalid decision: Plannotator review output was not valid JSON.` row appeared and `/plan-status` still showed `Phase: planning`
-- result: pass with bug follow-up below
+- result: pass; direct artifact proof rerun in `MT-039`
 
 ### MT-017 — `/tree` navigation while planning keeps planning active after the branch jump
 
 - setup: while planning on `qa-live-tree-sum` and `qa-live-tree-custom`, navigated back to the first planning user turn with `/tree` using `No summary`, `Summarize`, and `Summarize with custom prompt`
 - expected visible: after landing on the older planning branch, plan mode remains active on the same plan path
 - actual: `/plan-status` still showed `Phase: planning` and the expected attached plan path after the jump
-- result: pass with bug follow-up below
+- result: pass; later tree reruns and JSONL checks tightened this proof
 
 ### MT-018 — zero-byte plan file shows the empty-plan `Error: ...` row live
 
 - setup: created `/Users/n14/.n/pi/plans/qa-live-empty.md` as a zero-byte file, resumed it through `/plan qa-live-empty`, then submitted review
-- expected visible: `Plan Review empty file check` followed by `Error: /Users/n14/.n/pi/plans/qa-live-empty.md is empty. Write your plan first, then call plan_submit again.`
+- expected visible: `Plan Review empty file check` followed by an `Error: ... is empty` stop-boundary message
 - actual: the expected `Error: ...` row appeared
-- result: pass with bug follow-up below
+- result: pass; exact current wording rerun in `MT-041`
 
 ### MT-019 — `/resume` returns to the right named session file but loses `nplan` state
 
@@ -315,6 +315,67 @@ read_when:
 - actual visible: `/plan-status` ran immediately and returned `Phase: planning` with `Attached plan: /Users/n14/.n/pi/plans/qa-live-tree-branch-summary-final.md`
 - result: pass; the older assumption that this resume path required an editor clear was not reproducible
 
+### MT-037 — approval stays on tool-row flow with no same-turn `Plan Ended ...`
+
+- setup: relaunched inner Pi with fake approve CLI on `PATH` (`/tmp/piux/nplan-test-bin-approve/plannotator`), then in `nplan-final-review-approve` started `qa-final-review-approve` and used one real planning turn that wrote `RA1` and called `plan_submit` with summary `final approve`
+- expected visible:
+  - `Plan Review final approve`
+  - `Plan Approved /Users/n14/.n/pi/plans/qa-final-review-approve.md`
+  - no same-turn `Plan Ended /Users/n14/.n/pi/plans/qa-final-review-approve.md`
+  - input editor prefills `Implement the plan @/Users/n14/.n/pi/plans/qa-final-review-approve.md`
+- expected persisted: review stays on the `plan_submit` tool call/result path; no extra custom review message layer appears
+- actual visible: all matched exactly
+- actual persisted: JSONL showed `plan_submit` tool call plus `toolResult`; no custom review message artifact was added
+- result: pass
+
+### MT-038 — rejection stays on tool-row flow, keeps planning active, and does not append `Plan Ended ...`
+
+- setup: relaunched inner Pi with fake reject CLI on `PATH` (`/tmp/piux/nplan-test-bin-reject/plannotator`), then in `nplan-final-review-reject` started `qa-final-review-reject` and used one real planning turn that wrote `RR1` and called `plan_submit` with summary `final reject`
+- expected visible:
+  - `Plan Review final reject`
+  - `Plan Rejected /Users/n14/.n/pi/plans/qa-final-review-reject.md`
+  - no same-turn `Plan Ended /Users/n14/.n/pi/plans/qa-final-review-reject.md`
+  - planning footer remains active on the same plan path
+- expected persisted: review stays on the `plan_submit` tool call/result path; no extra custom review message layer appears
+- actual visible: all matched exactly
+- actual persisted: JSONL showed `plan_submit` tool call plus `toolResult`; no custom review message artifact was added
+- result: pass
+
+### MT-039 — invalid plannotator output renders one `Error: ...` tool result and keeps planning active
+
+- setup: relaunched inner Pi with invalid-output CLI on `PATH` (`/tmp/piux/nplan-test-bin-invalid/plannotator`), then in `nplan-final-review-invalid` started `qa-final-review-invalid` and used one real planning turn that wrote `RI1` and called `plan_submit` with summary `final invalid`
+- expected visible:
+  - `Plan Review final invalid`
+  - `Error: Plannotator review returned an invalid decision: Plannotator review output was not valid JSON. Wait for the next user turn.`
+  - planning footer remains active on the same plan path
+- expected persisted: the error is the `plan_submit` tool result; no extra custom review message layer appears
+- actual visible: all matched exactly
+- actual persisted: JSONL showed `plan_submit` tool call plus `toolResult`; no custom review message artifact was added
+- audit note: an earlier provider `529` retry happened before the successful turn and was discarded as non-product noise
+- result: pass
+
+### MT-040 — missing `plannotator` PATH warns and then auto-approves on submit
+
+- setup: relaunched inner Pi with `PATH` that omitted `plannotator` (`/tmp/piux/nplan-test-bin-noplannotator`), then in `nplan-final-review-autoapprove` started `qa-final-review-autoapprove` and used one real planning turn that wrote `RF1` and called `plan_submit` with summary `final fallback`
+- expected visible:
+  - planning start shows `Warning: Plan mode: CLI plan review is unavailable in this session (missing \`plannotator\` on PATH). Plans will auto-approve on submit.`
+  - `Plan Review final fallback`
+  - `Plan Approved /Users/n14/.n/pi/plans/qa-final-review-autoapprove.md`
+  - no same-turn `Plan Ended /Users/n14/.n/pi/plans/qa-final-review-autoapprove.md`
+  - input editor prefills `Implement the plan @/Users/n14/.n/pi/plans/qa-final-review-autoapprove.md`
+- actual visible: all matched exactly
+- result: pass
+
+### MT-041 — zero-byte plan file uses the current stop-boundary empty-file wording
+
+- setup: created zero-byte `/Users/n14/.n/pi/plans/qa-final-empty-audit.md`, then in `nplan-final-empty-audit` started planning on that file and used a tool-only prompt: `Use only the plan_submit tool right now. Do not read files. Do not write files. Submit with summary: final empty.`
+- expected visible:
+  - `Plan Review final empty`
+  - `Error: /Users/n14/.n/pi/plans/qa-final-empty-audit.md is empty. Stop here. Do not revise the plan in this turn. Wait for the next user turn before calling plan_submit again.`
+  - planning footer remains active on the same plan path
+- actual visible: all matched exactly
+- result: pass
+
 ## Fixed In Current Branch
 
 - `BUG-001` fixed locally and live-verified: approval no longer executes tools in the same turn; it now stops with the handoff prompt prepared for the next turn.
@@ -343,6 +404,11 @@ read_when:
   - exact-phrase resume into the branch-summary session still accepts `/plan-status` immediately; no editor-clear key was required in the rerun
   - `/plan-status` unknown-command suspicion was disproven; the failure came from `piux` settings drift (`extensions: []`), and the command works again after restoring the `nplan` extension and reloading
   - full planning prompt body now has direct proof: one visible/persisted full prompt on the first planning turn of each compaction window, none on ordinary later turns in the same window, no hidden `plan-context`
+  - approval now has direct JSONL proof: `Plan Approved ...` is the `plan_submit` tool result path, with no extra custom review message artifact and no same-turn `Plan Ended ...`
+  - rejection now has direct JSONL proof: `Plan Rejected ...` is the `plan_submit` tool result path, with no extra custom review message artifact and no same-turn `Plan Ended ...`
+  - invalid plannotator output now has direct JSONL proof: one `Error: ...` tool result, planning preserved, no custom review message artifact
+  - missing `plannotator` fallback now has fresh live proof: warning on enter planning, then visible auto-approval on submit
+  - empty plan-file stop wording now has fresh live proof with the current `Stop here ... Wait for the next user turn ...` text
   - approval stops cleanly without same-turn execution
   - invalid review error shows once and stops
   - missing attached file shows one `Error: ... does not exist` and stops
