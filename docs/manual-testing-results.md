@@ -284,6 +284,15 @@ read_when:
 - operator note: the resumed branch-summary point restored editor text, so slash commands needed the normal editor-clear key before use; this is the existing Pi/editor workflow caveat, not a new `nplan` bug
 - result: pass
 
+### MT-034 — `/plan-status` unknown-command report was a broken `piux` extension setup, not an `nplan` bug
+
+- setup: observed live `Status: Unknown command /plan-status`, then inspected `/tmp/piux/.pi/settings.json`
+- expected if setup is correct: `/tmp/piux/.pi/settings.json` should keep `"extensions": ["/Users/n14/Projects/Tools/Pi/nplan"]` and `/plan-status` should work
+- actual broken setup: `/tmp/piux/.pi/settings.json` had `"extensions": []`, so `nplan` was not loaded in the inner Pi at all
+- fix/proof: restored `"extensions": ["/Users/n14/Projects/Tools/Pi/nplan"]`, ran `/reload`, then re-ran `/plan-status`
+- actual after restore: `/plan-status` returned `Phase: idle / Attached plan: none`, and even the intentional immediate `/new` -> `/plan-status` race still worked
+- result: pass; prior `Unknown command /plan-status` report was invalid because the test base had drifted out of the intended extension setup
+
 ## Fixed In Current Branch
 
 - `BUG-001` fixed locally and live-verified: approval no longer executes tools in the same turn; it now stops with the handoff prompt prepared for the next turn.
@@ -309,6 +318,7 @@ read_when:
   - `/tree` with `No summary`, `Summarize`, and `Summarize with custom prompt` keeps `plan-event` count flat in JSONL; the visible `Plan Started ...` after selecting historical entries is historical content, not a newly emitted lifecycle row
   - `/tree` selecting the visible `[branch summary]` row also keeps `plan-event` count flat and planning active
   - `/resume` exact-phrase picker search also returns the expected named session
+  - `/plan-status` unknown-command suspicion was disproven; the failure came from `piux` settings drift (`extensions: []`), and the command works again after restoring the `nplan` extension and reloading
   - approval stops cleanly without same-turn execution
   - invalid review error shows once and stops
   - missing attached file shows one `Error: ... does not exist` and stops

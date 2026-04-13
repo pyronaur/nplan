@@ -272,5 +272,6 @@ Add JSONL notes only when they helped debug or confirm a suspicious case.
 - draft-only plan changes can be real runtime state without being committed session state yet
 - when the screen looks wrong, JSONL becomes useful
 - after `/tree` lands on a user-turn selection, inspect or clear the editor before sending slash commands
+- if an `nplan` slash command suddenly becomes `Unknown command ...`, first check `/tmp/piux/.pi/settings.json`; if `"extensions"` no longer includes `/Users/n14/Projects/Tools/Pi/nplan`, the inner test setup drifted and the result is invalid until you restore the extension and `/reload`
 - bare file names in a runbook are sloppy; anchor docs by exact relative or absolute path
 - the real agent-browser skill source on this machine is `/Users/n14/.agents/skills/n/agent-browser/SKILL.md`
