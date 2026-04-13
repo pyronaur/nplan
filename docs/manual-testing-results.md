@@ -503,6 +503,19 @@ read_when:
 - actual persisted: JSONL showed two `Plan Started ...qa-final-reload-restore-window.md` artifacts; the first had full prompt body, the second had empty body (`details.body: ""`)
 - result: pass
 
+### MT-051 — continuing planning after `/tree` jump to an older planning point does not append another `Plan Started ...`
+
+- setup: in `nplan-final-tree-continue-silent`, started planning on `qa-final-tree-continue-silent`, sent two planning turns (`TC1`, `TC2`), used `/tree` to jump back to the older planning user turn `TC1` with `No summary`, then sent one more planning turn that wrote `TC3`
+- expected visible:
+  - `/tree` selection itself emits no new lifecycle row
+  - the follow-up planning turn after the jump emits no new `Plan Started /Users/n14/.n/pi/plans/qa-final-tree-continue-silent.md`
+- expected persisted:
+  - session JSONL still contains exactly one `Plan Started ...qa-final-tree-continue-silent.md` artifact for the whole session
+  - that single artifact is the original one and still carries the full `[PLAN - PLANNING PHASE]` body
+- actual visible: matched exactly; after `Navigated to selected point`, the `TC3` turn edited the plan and replied, but no new `Plan Started ...` row appeared
+- actual persisted: JSONL contained exactly one `Plan Started ...qa-final-tree-continue-silent.md` artifact, and it carried the full prompt body
+- result: pass
+
 ## Fixed In Current Branch
 
 - `BUG-001` fixed locally and live-verified: approval no longer executes tools in the same turn; it now stops with the handoff prompt prepared for the next turn.
@@ -545,6 +558,7 @@ read_when:
   - idle-attached ordinary-turn pause before bare `/plan` resume now has direct JSONL proof: the resumed `Plan Started` row is visible but its body is still empty, so ordinary non-planning turns do not reopen prompt allowance before compaction
   - `/resume` now also has direct JSONL proof on the same rule: restoring an idle-attached session and then using bare `/plan` still produces a visible `Plan Started` row with empty body, not a second full planning prompt
   - `/reload` now also has direct JSONL proof on the same rule: reloading an idle-attached session and then using bare `/plan` still produces a visible `Plan Started` row with empty body, not a second full planning prompt
+  - `/tree` continuation now also has direct JSONL proof on the same rule: jumping back to an older planning point and then continuing planning adds no new `Plan Started ...` while the same window still has the original prompt
   - approval stops cleanly without same-turn execution
   - invalid review error shows once and stops
   - missing attached file shows one `Error: ... does not exist` and stops
