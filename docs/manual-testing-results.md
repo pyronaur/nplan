@@ -445,6 +445,19 @@ read_when:
 - actual persisted: JSONL showed two `Plan Started ...qa-final-idle-attached-resume-window.md` artifacts; the first had full prompt body, the second had empty body (`details.body: ""`)
 - result: pass
 
+### MT-047 — rejection does not trigger another planning prompt message on the next planning turn in the same window
+
+- setup: relaunched inner Pi with fake reject CLI on `PATH` (`/tmp/piux/nplan-test-bin-reject/plannotator`), then in `nplan-final-reject-no-reprompt` started `qa-final-reject-no-reprompt`, used one real planning turn that wrote `RJ1` and called `plan_submit` with summary `reject no reprompt`, then sent one more planning turn in the same compaction window that wrote `RJ2`
+- expected visible:
+  - first turn shows `Plan Started /Users/n14/.n/pi/plans/qa-final-reject-no-reprompt.md`, then `Plan Review reject no reprompt`, then `Plan Rejected /Users/n14/.n/pi/plans/qa-final-reject-no-reprompt.md`
+  - follow-up planning turn shows no new `Plan Started /Users/n14/.n/pi/plans/qa-final-reject-no-reprompt.md`
+- expected persisted:
+  - session JSONL contains exactly one `Plan Started ...qa-final-reject-no-reprompt.md` artifact with the full `[PLAN - PLANNING PHASE]` body
+  - follow-up planning turn adds no second `plan-event`
+- actual visible: matched exactly; the `RJ2` follow-up turn stayed silent on lifecycle and only edited the plan file
+- actual persisted: JSONL contained exactly one `Plan Started ...qa-final-reject-no-reprompt.md` artifact, and it carried the full prompt body
+- result: pass
+
 ## Fixed In Current Branch
 
 - `BUG-001` fixed locally and live-verified: approval no longer executes tools in the same turn; it now stops with the handoff prompt prepared for the next turn.
@@ -483,6 +496,7 @@ read_when:
   - active A -> stage B -> clear before submit now has direct proof: next real prompt emits only `Plan Ended A`, no `Plan Started B`, and B is never created
   - same-window A -> B switch now has direct JSONL proof: `Plan Ended A`, then `Plan Started B`, and B's start row carries no second full planning prompt body
   - idle-attached resume before compaction now has direct JSONL proof: the resumed `Plan Started` row is visible but its body is empty, so no second full planning prompt is sent
+  - rejection follow-up now has direct JSONL proof: after `Plan Rejected ...`, the next planning turn in the same window adds no new `Plan Started ...`
   - approval stops cleanly without same-turn execution
   - invalid review error shows once and stops
   - missing attached file shows one `Error: ... does not exist` and stops
