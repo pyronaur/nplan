@@ -473,6 +473,21 @@ read_when:
 - actual persisted: JSONL showed two `Plan Started ...qa-final-pause-ordinary-resume-window-2.md` artifacts; the first had full prompt body, the second had empty body (`details.body: ""`)
 - result: pass
 
+### MT-049 — `/resume` preserves prompt-window state for later bare `/plan` resume
+
+- setup: relaunched inner Pi with fake approve CLI on `PATH` (`/tmp/piux/nplan-test-bin-approve/plannotator`), then in `nplan-final-idle-resume-restore-window` started `qa-final-idle-resume-restore-window`, used one real planning turn that wrote `RRW1` and auto-approved to idle-attached, cleared the handoff prefill with `Ctrl+C`, ran `/new`, used `/resume` to return to `nplan-final-idle-resume-restore-window`, then ran bare `/plan` and sent one resumed planning turn that wrote `RRW2`
+- expected visible:
+  - first planning turn emits `Plan Started /Users/n14/.n/pi/plans/qa-final-idle-resume-restore-window.md`
+  - approval ends planning without `Plan Ended ...`
+  - `/resume` restores the idle-attached session cleanly
+  - resumed planning emits another `Plan Started /Users/n14/.n/pi/plans/qa-final-idle-resume-restore-window.md`
+- expected persisted:
+  - first `Plan Started ...qa-final-idle-resume-restore-window.md` contains the full `[PLAN - PLANNING PHASE]` body
+  - second `Plan Started ...qa-final-idle-resume-restore-window.md` contains no prompt body because the restored session still carries the same compaction-window prompt allowance state
+- actual visible: matched exactly; after `/resume`, bare `/plan` produced another visible `Plan Started ...` on the same plan path
+- actual persisted: JSONL showed two `Plan Started ...qa-final-idle-resume-restore-window.md` artifacts; the first had full prompt body, the second had empty body (`details.body: ""`)
+- result: pass
+
 ## Fixed In Current Branch
 
 - `BUG-001` fixed locally and live-verified: approval no longer executes tools in the same turn; it now stops with the handoff prompt prepared for the next turn.
@@ -513,6 +528,7 @@ read_when:
   - idle-attached resume before compaction now has direct JSONL proof: the resumed `Plan Started` row is visible but its body is empty, so no second full planning prompt is sent
   - rejection follow-up now has direct JSONL proof: after `Plan Rejected ...`, the next planning turn in the same window adds no new `Plan Started ...`
   - idle-attached ordinary-turn pause before bare `/plan` resume now has direct JSONL proof: the resumed `Plan Started` row is visible but its body is still empty, so ordinary non-planning turns do not reopen prompt allowance before compaction
+  - `/resume` now also has direct JSONL proof on the same rule: restoring an idle-attached session and then using bare `/plan` still produces a visible `Plan Started` row with empty body, not a second full planning prompt
   - approval stops cleanly without same-turn execution
   - invalid review error shows once and stops
   - missing attached file shows one `Error: ... does not exist` and stops
