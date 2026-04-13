@@ -525,6 +525,21 @@ read_when:
 - actual visible: matched exactly; the first real child prompt in the forked session showed a visible `Plan Started /Users/n14/.n/pi/plans/qa-final-fork-live-fix-check.md` row before `Reply exactly: child-ready`
 - result: pass
 
+### MT-055 — clearing the remembered plan while already idle stays fully silent
+
+- setup: relaunched inner Pi with fake approve CLI on `PATH` (`/tmp/piux/nplan-test-bin-approve/plannotator`); in `nplan-final-idle-clear-silent` started `qa-final-idle-clear-silent`, used one real planning turn that wrote `IC1` and auto-approved to idle-attached, cleared the handoff prefill with `Ctrl+C`, ran `/plan-clear`, then sent one ordinary non-planning turn `Reply exactly: idle-clear-ok`
+- expected visible:
+  - approval ends planning without `Plan Ended /Users/n14/.n/pi/plans/qa-final-idle-clear-silent.md`
+  - `/plan-clear` while idle-attached emits no lifecycle row
+  - next ordinary turn also emits no lifecycle row
+- expected persisted/state:
+  - session JSONL contains exactly one `Plan Started ...qa-final-idle-clear-silent.md` artifact with the full `[PLAN - PLANNING PHASE]` body
+  - no `Plan Ended ...qa-final-idle-clear-silent.md` artifact is appended
+  - `/plan-status` after the ordinary turn reports `Phase: idle` and `Attached plan: none`
+- actual visible: matched exactly; `/plan-clear` was silent and the later ordinary turn only showed `idle-clear-ok`
+- actual persisted/state: JSONL contained exactly one `Plan Started ...qa-final-idle-clear-silent.md` artifact with full prompt body, no `Plan Ended ...` artifact was appended, and `/plan-status` reported `Phase: idle` with `Attached plan: none`
+- result: pass
+
 ### MT-054 — non-zero review failure does not trigger another planning prompt message on the next planning turn
 
 - setup: relaunched inner Pi with fake failing CLI on `PATH` (`/tmp/piux/nplan-test-bin-exit/plannotator`) that writes `review exploded` to stderr and exits `1`; in `nplan-final-exit-error-followup` started `qa-final-exit-error-followup`, used one real planning turn that wrote `EX1` and called `plan_submit` with summary `exit error`, then sent one more planning turn in the same compaction window that wrote `EX2`
@@ -599,6 +614,7 @@ read_when:
   - `/fork` child sessions now have direct live proof on the same rule boundary: the first real child planning turn re-emits a visible `Plan Started ...` so the child transcript has its own prompt artifact before continuing planning
   - `/fork` child sessions now also have direct JSONL proof for later turns: after that one child-local `Plan Started ...`, later child planning turns stay lifecycle-silent in the same child window
   - non-zero review failure now also has direct JSONL proof on the same rule boundary: after `Error: Plannotator CLI review failed: review exploded ...`, the next planning turn in the same window adds no new `Plan Started ...`
+  - idle-attached `/plan-clear` now has direct JSONL proof for the detach-only invalid outcome: clearing the remembered plan while already idle stays fully silent and appends no `Plan Ended ...`
   - approval stops cleanly without same-turn execution
   - invalid review error shows once and stops
   - missing attached file shows one `Error: ... does not exist` and stops
