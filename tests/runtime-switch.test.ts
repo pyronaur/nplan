@@ -75,7 +75,7 @@ void test("switching plans while planning emits end then start markers on the ne
 	assert.equal(getMessageContentAt(harness, -1).includes("[PLAN - PLANNING PHASE]"), false);
 });
 
-void test("forking from an active planning user turn restores planning state in the child session", async () => {
+void test("forking from an active planning user turn restores planning state and re-emits the prompt in the child session", async () => {
 	const homeDir = temp.makeTempDir("nplan-runtime-home-fork-planning-");
 	const cwd = temp.makeTempDir("nplan-runtime-cwd-fork-planning-");
 	process.env.HOME = homeDir;
@@ -106,6 +106,13 @@ void test("forking from an active planning user turn restores planning state in 
 	});
 
 	assert.deepEqual(getLastPlanState(child), createPlanningState(planPath));
-	assertPlanDeliveryState({ harness: child, options: { planningPromptWindowKey: "root" } });
+	assertPlanDeliveryState({ harness: child });
 	assert.equal(child.sentMessages.length, 0);
+
+	await emitBeforeAgentStart(child, "Prompt after fork");
+
+	assert.equal(child.sentMessages.length, 1);
+	assert.match(getMessageContentAt(child, -1), new RegExp(`^Plan Started ${planPath}`));
+	assert.equal(getMessageContentAt(child, -1).includes("[PLAN - PLANNING PHASE]"), true);
+	assertPlanDeliveryState({ harness: child, options: { planningPromptWindowKey: "root" } });
 });

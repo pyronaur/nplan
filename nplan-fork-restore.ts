@@ -53,7 +53,7 @@ export function applyPendingForkRestore(input: {
 		input.runtime.committedPlanState = pendingForkRestore.planState;
 	}
 	if (!input.persistedDeliveryState && pendingForkRestore.planDeliveryState) {
-		input.runtime.planDeliveryState = pendingForkRestore.planDeliveryState;
+		input.runtime.planDeliveryState = PlanDeliveryState.idle();
 	}
 	PendingForkRestore.clear(input.sessionFile);
 }

@@ -516,6 +516,15 @@ read_when:
 - actual persisted: JSONL contained exactly one `Plan Started ...qa-final-tree-continue-silent.md` artifact, and it carried the full prompt body
 - result: pass
 
+### MT-052 — `/fork` child re-emits visible planning prompt on the first real child planning turn
+
+- setup: after fixing fork prompt-window restore, started `qa-final-fork-live-fix-check`, sent one real planning turn, used `/fork` on that planning user turn, cleared the restored editor text in the child with `Ctrl+C`, then sent one tiny child prompt `Reply exactly: child-ready`
+- expected visible:
+  - child session opens in planning state on the same attached plan path
+  - first real child planning turn emits `Plan Started /Users/n14/.n/pi/plans/qa-final-fork-live-fix-check.md` before the user message because the child session file has no inherited visible `plan-event` artifact of its own
+- actual visible: matched exactly; the first real child prompt in the forked session showed a visible `Plan Started /Users/n14/.n/pi/plans/qa-final-fork-live-fix-check.md` row before `Reply exactly: child-ready`
+- result: pass
+
 ## Fixed In Current Branch
 
 - `BUG-001` fixed locally and live-verified: approval no longer executes tools in the same turn; it now stops with the handoff prompt prepared for the next turn.
@@ -529,6 +538,7 @@ read_when:
 - `BUG-009` fixed locally and live-verified: empty plan files now stop with one `Error: ... is empty` and are not revised/resubmitted in the same turn.
 - `BUG-010` fixed locally and live-verified: selecting the `plan-event` row no longer leaves stale planning state active after the normal editor-clear key.
 - `BUG-011` fixed locally and live-verified: selecting the root pre-plan user node now clears stale planning state; after the normal editor-clear key, `/plan-status` reports `Phase: idle` and `Attached plan: none`.
+- `BUG-012` fixed locally and live-verified: `/fork` child sessions no longer keep prompt-window state without a visible planning prompt artifact; the first real child planning turn now re-emits `Plan Started ...` so the visible transcript remains the source of truth.
 
 ## Fresh Regression Sweep After Fixes
 
@@ -559,6 +569,7 @@ read_when:
   - `/resume` now also has direct JSONL proof on the same rule: restoring an idle-attached session and then using bare `/plan` still produces a visible `Plan Started` row with empty body, not a second full planning prompt
   - `/reload` now also has direct JSONL proof on the same rule: reloading an idle-attached session and then using bare `/plan` still produces a visible `Plan Started` row with empty body, not a second full planning prompt
   - `/tree` continuation now also has direct JSONL proof on the same rule: jumping back to an older planning point and then continuing planning adds no new `Plan Started ...` while the same window still has the original prompt
+  - `/fork` child sessions now have direct live proof on the same rule boundary: the first real child planning turn re-emits a visible `Plan Started ...` so the child transcript has its own prompt artifact before continuing planning
   - approval stops cleanly without same-turn execution
   - invalid review error shows once and stops
   - missing attached file shows one `Error: ... does not exist` and stops
