@@ -540,6 +540,22 @@ read_when:
 - actual persisted/state: JSONL contained exactly one `Plan Started ...qa-final-idle-clear-silent.md` artifact with full prompt body, no `Plan Ended ...` artifact was appended, and `/plan-status` reported `Phase: idle` with `Attached plan: none`
 - result: pass
 
+### MT-056 — auto-approve fallback stays on ordinary `plan_submit` tool flow with no extra review transcript row
+
+- setup: relaunched inner Pi with `PATH` that omitted `plannotator` (`/tmp/piux/nplan-test-bin-noplannotator`); in `nplan-final-fallback-toolflow` started `qa-final-fallback-toolflow`, used one real planning turn that wrote `FB1` and called `plan_submit` with summary `fallback toolflow`
+- expected visible:
+  - planning start shows `Warning: Plan mode: CLI plan review is unavailable in this session (missing \`plannotator\` on PATH). Plans will auto-approve on submit.`
+  - then `Plan Review fallback toolflow`
+  - then `Plan Approved /Users/n14/.n/pi/plans/qa-final-fallback-toolflow.md`
+  - no same-turn `Plan Ended /Users/n14/.n/pi/plans/qa-final-fallback-toolflow.md`
+- expected persisted:
+  - session JSONL contains one `custom_message` `plan-event` for `Plan Started ...qa-final-fallback-toolflow.md`
+  - review stays on the `plan_submit` tool call/result path
+  - no extra custom review message artifact is appended
+- actual visible: matched exactly; warning, review, and approval all appeared, with no same-turn `Plan Ended ...`
+- actual persisted: JSONL contained one `Plan Started ...qa-final-fallback-toolflow.md` `plan-event`, then one `plan_submit` tool call with `summary: fallback toolflow`, then one `plan_submit` `toolResult` with `details.status: approved`; no extra custom review message artifact was appended
+- result: pass
+
 ### MT-054 — non-zero review failure does not trigger another planning prompt message on the next planning turn
 
 - setup: relaunched inner Pi with fake failing CLI on `PATH` (`/tmp/piux/nplan-test-bin-exit/plannotator`) that writes `review exploded` to stderr and exits `1`; in `nplan-final-exit-error-followup` started `qa-final-exit-error-followup`, used one real planning turn that wrote `EX1` and called `plan_submit` with summary `exit error`, then sent one more planning turn in the same compaction window that wrote `EX2`
@@ -615,6 +631,7 @@ read_when:
   - `/fork` child sessions now also have direct JSONL proof for later turns: after that one child-local `Plan Started ...`, later child planning turns stay lifecycle-silent in the same child window
   - non-zero review failure now also has direct JSONL proof on the same rule boundary: after `Error: Plannotator CLI review failed: review exploded ...`, the next planning turn in the same window adds no new `Plan Started ...`
   - idle-attached `/plan-clear` now has direct JSONL proof for the detach-only invalid outcome: clearing the remembered plan while already idle stays fully silent and appends no `Plan Ended ...`
+  - missing-`plannotator` fallback now also has direct JSONL proof: warning on enter planning, then ordinary `plan_submit` tool call/result flow, no extra custom review transcript layer, no same-turn `Plan Ended ...`
   - approval stops cleanly without same-turn execution
   - invalid review error shows once and stops
   - missing attached file shows one `Error: ... does not exist` and stops
