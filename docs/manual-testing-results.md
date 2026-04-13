@@ -525,6 +525,20 @@ read_when:
 - actual visible: matched exactly; the first real child prompt in the forked session showed a visible `Plan Started /Users/n14/.n/pi/plans/qa-final-fork-live-fix-check.md` row before `Reply exactly: child-ready`
 - result: pass
 
+### MT-053 — later child planning turns after `/fork` stay lifecycle-silent in the same child window
+
+- setup: in `nplan-final-fork-child-window`, started planning on `qa-final-fork-child-window`, sent one seed planning turn, used `/fork` on that planning user turn, cleared the restored editor text in the child with `Ctrl+C`, then sent one first child prompt and later two tiny child follow-up prompts in the same child session
+- expected visible:
+  - first real child planning turn emits `Plan Started /Users/n14/.n/pi/plans/qa-final-fork-child-window.md`
+  - later child planning turns emit no additional `Plan Started /Users/n14/.n/pi/plans/qa-final-fork-child-window.md`
+- expected persisted:
+  - child session JSONL contains exactly one `Plan Started ...qa-final-fork-child-window.md` artifact
+  - that child-local artifact carries the full `[PLAN - PLANNING PHASE]` body
+- actual visible: matched exactly; the first child prompt showed one visible `Plan Started ...`, and later child turns stayed lifecycle-silent
+- actual persisted: child JSONL contained exactly one `Plan Started ...qa-final-fork-child-window.md` artifact, and it carried the full prompt body
+- audit note: one provider `529` happened on an intermediate child prompt during this live pass, but the successful later child turn still kept the `plan-event` count flat at one
+- result: pass
+
 ## Fixed In Current Branch
 
 - `BUG-001` fixed locally and live-verified: approval no longer executes tools in the same turn; it now stops with the handoff prompt prepared for the next turn.
@@ -570,6 +584,7 @@ read_when:
   - `/reload` now also has direct JSONL proof on the same rule: reloading an idle-attached session and then using bare `/plan` still produces a visible `Plan Started` row with empty body, not a second full planning prompt
   - `/tree` continuation now also has direct JSONL proof on the same rule: jumping back to an older planning point and then continuing planning adds no new `Plan Started ...` while the same window still has the original prompt
   - `/fork` child sessions now have direct live proof on the same rule boundary: the first real child planning turn re-emits a visible `Plan Started ...` so the child transcript has its own prompt artifact before continuing planning
+  - `/fork` child sessions now also have direct JSONL proof for later turns: after that one child-local `Plan Started ...`, later child planning turns stay lifecycle-silent in the same child window
   - approval stops cleanly without same-turn execution
   - invalid review error shows once and stops
   - missing attached file shows one `Error: ... does not exist` and stops
