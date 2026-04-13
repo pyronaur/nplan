@@ -110,7 +110,7 @@ read_when:
   - `Plan Review`
   - `Plan Review Pending <path>` plus visible URL
 - actual: all matched
-- result: pass
+- result: pass; direct no-summary pending rerun in `MT-042`
 
 ### MT-012 — approval exits planning without appending same-turn `Plan Ended ...`
 
@@ -376,6 +376,31 @@ read_when:
 - actual visible: all matched exactly
 - result: pass
 
+### MT-042 — no-summary review call shows live pending URL before final approval
+
+- setup: relaunched inner Pi with fake pending-review CLI on `PATH` (`/tmp/piux/nplan-test-bin-pending/plannotator`) that wrote a real `~/.plannotator/sessions/<pid>.json` URL, slept, then approved; in `nplan-final-pending-capture` started `qa-final-pending-capture` and used one real planning turn that wrote `RP2.` and called `plan_submit` with no summary
+- expected visible while pending:
+  - `Plan Review`
+  - `Plan Review Pending /Users/n14/.n/pi/plans/qa-final-pending-capture.md`
+  - visible review URL `http://127.0.0.1:43123/review/final-pending`
+- expected visible after completion:
+  - `Plan Approved /Users/n14/.n/pi/plans/qa-final-pending-capture.md`
+  - no same-turn `Plan Ended /Users/n14/.n/pi/plans/qa-final-pending-capture.md`
+- actual visible: all matched exactly; the pending URL stayed on screen during the fake review sleep, then the approved row replaced the pending state cleanly
+- actual persisted: the final session JSONL retained the `plan_submit` tool call and the final approved `toolResult`; it did not retain a separate final pending-result entry after approval
+- audit note: that persisted shape is factual current behavior; this rerun did not classify it as a bug because `nplan/docs/prompts.md` defines review as tool-call/result flow but does not require pending-state persistence as a separate final artifact
+- result: pass
+
+### MT-043 — missing attached plan file uses the current stop-boundary missing-file wording
+
+- setup: created non-empty `/Users/n14/.n/pi/plans/qa-final-missing-audit.md`, entered planning on it in `nplan-final-missing-audit`, then deleted the attached file with `trash` and used a tool-only prompt: `Use only the plan_submit tool right now. Do not read files. Do not write files. Submit with summary: final missing.`
+- expected visible:
+  - `Plan Review final missing`
+  - `Error: /Users/n14/.n/pi/plans/qa-final-missing-audit.md does not exist. Stop here. Do not write or recreate the plan in this turn. Wait for the next user turn before calling plan_submit again.`
+  - planning footer remains active on the same now-missing plan path
+- actual visible: all matched exactly
+- result: pass
+
 ## Fixed In Current Branch
 
 - `BUG-001` fixed locally and live-verified: approval no longer executes tools in the same turn; it now stops with the handoff prompt prepared for the next turn.
@@ -409,6 +434,8 @@ read_when:
   - invalid plannotator output now has direct JSONL proof: one `Error: ...` tool result, planning preserved, no custom review message artifact
   - missing `plannotator` fallback now has fresh live proof: warning on enter planning, then visible auto-approval on submit
   - empty plan-file stop wording now has fresh live proof with the current `Stop here ... Wait for the next user turn ...` text
+  - no-summary review plus pending URL now has fresh live proof: `Plan Review`, then visible `Plan Review Pending <path>` with URL, then clean approval
+  - missing attached file now has fresh live proof with the current `does not exist. Stop here ... Do not write or recreate ... Wait for the next user turn ...` text
   - approval stops cleanly without same-turn execution
   - invalid review error shows once and stops
   - missing attached file shows one `Error: ... does not exist` and stops
