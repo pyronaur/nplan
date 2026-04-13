@@ -401,6 +401,36 @@ read_when:
 - actual visible: all matched exactly
 - result: pass
 
+### MT-044 — active A -> stage B -> clear before submit emits only `Plan Ended A`
+
+- setup: in `nplan-final-self-cancel-switch`, started active planning on `qa-final-self-cancel-a`, then staged `qa-final-self-cancel-b`, accepted `Replace plan`, ran `/plan-clear` before any submit for B, and finally sent an ordinary prompt `Reply exactly: self-cancel-ok`
+- expected visible:
+  - no lifecycle row on `/plan qa-final-self-cancel-b`
+  - no lifecycle row on `/plan-clear`
+  - next real prompt emits `Plan Ended /Users/n14/.n/pi/plans/qa-final-self-cancel-a.md`
+  - no `Plan Started /Users/n14/.n/pi/plans/qa-final-self-cancel-b.md`
+- expected persisted/filesystem:
+  - session JSONL contains one `Plan Started ...qa-final-self-cancel-a.md` and later one `Plan Ended ...qa-final-self-cancel-a.md`
+  - no `plan-event` for `qa-final-self-cancel-b.md`
+  - `/Users/n14/.n/pi/plans/qa-final-self-cancel-b.md` is never created
+- actual visible: matched exactly; the next real prompt showed only `Plan Ended /Users/n14/.n/pi/plans/qa-final-self-cancel-a.md`
+- actual persisted/filesystem: JSONL contained only the start/end artifacts for A, no lifecycle artifact for B, and `qa-final-self-cancel-b.md` stayed absent
+- result: pass
+
+### MT-045 — A -> B switch in the same compaction window does not resend full planning prompt on `Plan Started B`
+
+- setup: in `nplan-final-switch-window-body`, started active planning on `qa-final-switch-a`, then staged `qa-final-switch-b`, accepted `Replace plan`, and sent the next planning prompt in the same compaction window
+- expected visible:
+  - next real prompt emits `Plan Ended /Users/n14/.n/pi/plans/qa-final-switch-a.md`
+  - then `Plan Started /Users/n14/.n/pi/plans/qa-final-switch-b.md`
+- expected persisted:
+  - `Plan Started ...qa-final-switch-a.md` contains the full `[PLAN - PLANNING PHASE]` body
+  - same-turn `Plan Ended ...qa-final-switch-a.md` contains no prompt body
+  - same-turn `Plan Started ...qa-final-switch-b.md` contains no prompt body because the compaction window already has the planning prompt
+- actual visible: matched exactly; the turn showed `Plan Ended A` then `Plan Started B`
+- actual persisted: JSONL showed `Plan Started ...qa-final-switch-a.md` with full prompt body, then same-turn `Plan Ended ...qa-final-switch-a.md` with empty body, then same-turn `Plan Started ...qa-final-switch-b.md` with empty body
+- result: pass
+
 ## Fixed In Current Branch
 
 - `BUG-001` fixed locally and live-verified: approval no longer executes tools in the same turn; it now stops with the handoff prompt prepared for the next turn.
@@ -436,6 +466,8 @@ read_when:
   - empty plan-file stop wording now has fresh live proof with the current `Stop here ... Wait for the next user turn ...` text
   - no-summary review plus pending URL now has fresh live proof: `Plan Review`, then visible `Plan Review Pending <path>` with URL, then clean approval
   - missing attached file now has fresh live proof with the current `does not exist. Stop here ... Do not write or recreate ... Wait for the next user turn ...` text
+  - active A -> stage B -> clear before submit now has direct proof: next real prompt emits only `Plan Ended A`, no `Plan Started B`, and B is never created
+  - same-window A -> B switch now has direct JSONL proof: `Plan Ended A`, then `Plan Started B`, and B's start row carries no second full planning prompt body
   - approval stops cleanly without same-turn execution
   - invalid review error shows once and stops
   - missing attached file shows one `Error: ... does not exist` and stops
