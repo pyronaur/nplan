@@ -267,6 +267,23 @@ read_when:
 	- `/fork` child now keeps `Phase: planning` and the attached plan path after clearing the restored editor text
 - result: pass
 
+### MT-032 — `/tree` selecting the visible `[branch summary]` row keeps planning active and does not append lifecycle
+
+- setup: in `nplan-tree-branch-summary-final`, created a branch summary from an earlier planning user turn, then reopened `/tree`, selected the visible `[branch summary]` row with `No summary`, checked the session JSONL, and then checked status
+- expected visible: jump to the branch-summary point with no new `Plan Started ...`; planning footer stays on the same attached plan
+- expected persisted: `plan-event` count stays flat; existing `branch_summary` row stays single
+- actual visible: jump landed cleanly, planning footer stayed on `/Users/n14/.n/pi/plans/qa-live-tree-branch-summary-final.md`
+- actual persisted: JSONL stayed at `plan_event = 1`, `branch_summary = 1`
+- result: pass
+
+### MT-033 — `/resume` exact-phrase search returns the named branch-summary session
+
+- setup: from a fresh session, opened `/resume`, typed exact query `"nplan-tree-branch-summary-final"`, and selected the only match
+- expected visible: resume picker narrows to the named session and resumes it
+- actual visible: picker narrowed to one match and resumed `nplan-tree-branch-summary-final`
+- operator note: the resumed branch-summary point restored editor text, so slash commands needed the normal editor-clear key before use; this is the existing Pi/editor workflow caveat, not a new `nplan` bug
+- result: pass
+
 ## Fixed In Current Branch
 
 - `BUG-001` fixed locally and live-verified: approval no longer executes tools in the same turn; it now stops with the handoff prompt prepared for the next turn.
@@ -290,6 +307,8 @@ read_when:
   - `/fork` preserves active planning after the normal editor-clear key
   - `/fork` from an approved idle-attached session also restores the selected planning branch state after the normal editor-clear key
   - `/tree` with `No summary`, `Summarize`, and `Summarize with custom prompt` keeps `plan-event` count flat in JSONL; the visible `Plan Started ...` after selecting historical entries is historical content, not a newly emitted lifecycle row
+  - `/tree` selecting the visible `[branch summary]` row also keeps `plan-event` count flat and planning active
+  - `/resume` exact-phrase picker search also returns the expected named session
   - approval stops cleanly without same-turn execution
   - invalid review error shows once and stops
   - missing attached file shows one `Error: ... does not exist` and stops
