@@ -431,6 +431,20 @@ read_when:
 - actual persisted: JSONL showed `Plan Started ...qa-final-switch-a.md` with full prompt body, then same-turn `Plan Ended ...qa-final-switch-a.md` with empty body, then same-turn `Plan Started ...qa-final-switch-b.md` with empty body
 - result: pass
 
+### MT-046 — idle-attached resume before compaction does not resend full planning prompt body
+
+- setup: relaunched inner Pi with fake approve CLI on `PATH` (`/tmp/piux/nplan-test-bin-approve/plannotator`), then in `nplan-final-idle-attached-resume-window` started `qa-final-idle-attached-resume-window`, used one real planning turn that wrote `IR1` and auto-approved to idle-attached, cleared the handoff prefill with `Ctrl+C`, ran bare `/plan`, and sent one more planning prompt in the same compaction window
+- expected visible:
+  - first planning turn emits `Plan Started /Users/n14/.n/pi/plans/qa-final-idle-attached-resume-window.md`
+  - approval ends planning without `Plan Ended ...`
+  - resumed planning emits another `Plan Started /Users/n14/.n/pi/plans/qa-final-idle-attached-resume-window.md`
+- expected persisted:
+  - first `Plan Started ...qa-final-idle-attached-resume-window.md` contains the full `[PLAN - PLANNING PHASE]` body
+  - second `Plan Started ...qa-final-idle-attached-resume-window.md` contains no prompt body because the compaction window already has the planning prompt
+- actual visible: matched exactly; the resumed planning turn showed a second `Plan Started ...` on the same plan path
+- actual persisted: JSONL showed two `Plan Started ...qa-final-idle-attached-resume-window.md` artifacts; the first had full prompt body, the second had empty body (`details.body: ""`)
+- result: pass
+
 ## Fixed In Current Branch
 
 - `BUG-001` fixed locally and live-verified: approval no longer executes tools in the same turn; it now stops with the handoff prompt prepared for the next turn.
@@ -468,6 +482,7 @@ read_when:
   - missing attached file now has fresh live proof with the current `does not exist. Stop here ... Do not write or recreate ... Wait for the next user turn ...` text
   - active A -> stage B -> clear before submit now has direct proof: next real prompt emits only `Plan Ended A`, no `Plan Started B`, and B is never created
   - same-window A -> B switch now has direct JSONL proof: `Plan Ended A`, then `Plan Started B`, and B's start row carries no second full planning prompt body
+  - idle-attached resume before compaction now has direct JSONL proof: the resumed `Plan Started` row is visible but its body is empty, so no second full planning prompt is sent
   - approval stops cleanly without same-turn execution
   - invalid review error shows once and stops
   - missing attached file shows one `Error: ... does not exist` and stops
