@@ -525,6 +525,19 @@ read_when:
 - actual visible: matched exactly; the first real child prompt in the forked session showed a visible `Plan Started /Users/n14/.n/pi/plans/qa-final-fork-live-fix-check.md` row before `Reply exactly: child-ready`
 - result: pass
 
+### MT-054 — non-zero review failure does not trigger another planning prompt message on the next planning turn
+
+- setup: relaunched inner Pi with fake failing CLI on `PATH` (`/tmp/piux/nplan-test-bin-exit/plannotator`) that writes `review exploded` to stderr and exits `1`; in `nplan-final-exit-error-followup` started `qa-final-exit-error-followup`, used one real planning turn that wrote `EX1` and called `plan_submit` with summary `exit error`, then sent one more planning turn in the same compaction window that wrote `EX2`
+- expected visible:
+  - first turn shows `Plan Started /Users/n14/.n/pi/plans/qa-final-exit-error-followup.md`, then `Plan Review exit error`, then `Error: Plannotator CLI review failed: review exploded Wait for the next user turn.`
+  - follow-up planning turn shows no new `Plan Started /Users/n14/.n/pi/plans/qa-final-exit-error-followup.md`
+- expected persisted:
+  - session JSONL contains exactly one `Plan Started ...qa-final-exit-error-followup.md` artifact with the full `[PLAN - PLANNING PHASE]` body
+  - follow-up planning turn adds no second `plan-event`
+- actual visible: matched exactly; the `EX2` follow-up turn stayed silent on lifecycle and only edited the plan file
+- actual persisted: JSONL contained exactly one `Plan Started ...qa-final-exit-error-followup.md` artifact, and it carried the full prompt body
+- result: pass
+
 ### MT-053 — later child planning turns after `/fork` stay lifecycle-silent in the same child window
 
 - setup: in `nplan-final-fork-child-window`, started planning on `qa-final-fork-child-window`, sent one seed planning turn, used `/fork` on that planning user turn, cleared the restored editor text in the child with `Ctrl+C`, then sent one first child prompt and later two tiny child follow-up prompts in the same child session
@@ -585,6 +598,7 @@ read_when:
   - `/tree` continuation now also has direct JSONL proof on the same rule: jumping back to an older planning point and then continuing planning adds no new `Plan Started ...` while the same window still has the original prompt
   - `/fork` child sessions now have direct live proof on the same rule boundary: the first real child planning turn re-emits a visible `Plan Started ...` so the child transcript has its own prompt artifact before continuing planning
   - `/fork` child sessions now also have direct JSONL proof for later turns: after that one child-local `Plan Started ...`, later child planning turns stay lifecycle-silent in the same child window
+  - non-zero review failure now also has direct JSONL proof on the same rule boundary: after `Error: Plannotator CLI review failed: review exploded ...`, the next planning turn in the same window adds no new `Plan Started ...`
   - approval stops cleanly without same-turn execution
   - invalid review error shows once and stops
   - missing attached file shows one `Error: ... does not exist` and stops
