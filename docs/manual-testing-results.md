@@ -281,7 +281,7 @@ read_when:
 - setup: from a fresh session, opened `/resume`, typed exact query `"nplan-tree-branch-summary-final"`, and selected the only match
 - expected visible: resume picker narrows to the named session and resumes it
 - actual visible: picker narrowed to one match and resumed `nplan-tree-branch-summary-final`
-- operator note: the resumed branch-summary point restored editor text, so slash commands needed the normal editor-clear key before use; this is the existing Pi/editor workflow caveat, not a new `nplan` bug
+- audit note: this case only proved picker narrowing and resume selection; the old claim that slash commands then needed an editor clear was too strong and is superseded by `MT-036`
 - result: pass
 
 ### MT-034 — `/plan-status` unknown-command report was a broken `piux` extension setup, not an `nplan` bug
@@ -292,6 +292,28 @@ read_when:
 - fix/proof: restored `"extensions": ["/Users/n14/Projects/Tools/Pi/nplan"]`, ran `/reload`, then re-ran `/plan-status`
 - actual after restore: `/plan-status` returned `Phase: idle / Attached plan: none`, and even the intentional immediate `/new` -> `/plan-status` race still worked
 - result: pass; prior `Unknown command /plan-status` report was invalid because the test base had drifted out of the intended extension setup
+
+### MT-035 — full planning prompt body appears exactly once per compaction window
+
+- setup: in `nplan-final-compaction-contract`, started planning on `qa-final-compaction-contract`, sent three planning prompts with manual `/compact` between prompt 2 and prompt 3, then inspected the live screen and session JSONL
+- expected visible:
+  - prompt 1 emits `Plan Started /Users/n14/.n/pi/plans/qa-final-compaction-contract.md`
+  - prompt 2 emits no new `Plan Started ...`
+  - after `/compact`, prompt 3 emits exactly one new `Plan Started ...`
+- expected persisted:
+  - exactly two visible `plan-event` rows total for the whole session
+  - both `plan-event` rows contain the full `[PLAN - PLANNING PHASE]` body
+  - no hidden `plan-context` artifact appears
+- actual visible: matched exactly; prompt 2 stayed silent, and prompt 3 emitted one renewed `Plan Started ...` after compaction
+- actual persisted: the session JSONL contained exactly two `custom_message plan-event` rows for `qa-final-compaction-contract`, both carried the full planning prompt body, and no hidden `plan-context` artifact was present
+- result: pass
+
+### MT-036 — resumed branch-summary session accepts `/plan-status` immediately without editor clear
+
+- setup: from a fresh session, opened `/resume`, typed exact query `"nplan-tree-branch-summary-final"`, selected the only match, and immediately ran `/plan-status` with no editor-clear key in between
+- expected visible: if the resumed session is healthy, `/plan-status` should run as a slash command and report the active planning state
+- actual visible: `/plan-status` ran immediately and returned `Phase: planning` with `Attached plan: /Users/n14/.n/pi/plans/qa-live-tree-branch-summary-final.md`
+- result: pass; the older assumption that this resume path required an editor clear was not reproducible
 
 ## Fixed In Current Branch
 
@@ -318,7 +340,9 @@ read_when:
   - `/tree` with `No summary`, `Summarize`, and `Summarize with custom prompt` keeps `plan-event` count flat in JSONL; the visible `Plan Started ...` after selecting historical entries is historical content, not a newly emitted lifecycle row
   - `/tree` selecting the visible `[branch summary]` row also keeps `plan-event` count flat and planning active
   - `/resume` exact-phrase picker search also returns the expected named session
+  - exact-phrase resume into the branch-summary session still accepts `/plan-status` immediately; no editor-clear key was required in the rerun
   - `/plan-status` unknown-command suspicion was disproven; the failure came from `piux` settings drift (`extensions: []`), and the command works again after restoring the `nplan` extension and reloading
+  - full planning prompt body now has direct proof: one visible/persisted full prompt on the first planning turn of each compaction window, none on ordinary later turns in the same window, no hidden `plan-context`
   - approval stops cleanly without same-turn execution
   - invalid review error shows once and stops
   - missing attached file shows one `Error: ... does not exist` and stops
