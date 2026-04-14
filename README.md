@@ -15,7 +15,7 @@ Keep the current local `nplan` interaction surface focused and explicit:
 - restricted planning tools with `plan_submit`
 - editor-prefilled implementation handoff after approval
 
-`/plan <slug>` stages `~/.n/pi/plans/<slug>.md` as the next planning target. Missing targets do not create a file until the next real user prompt is submitted. Existing foreign targets ask for confirmation and then resume. Bare `/plan` or `pi-leader` follow-up `p` resumes the currently attached plan when one exists, otherwise it prompts for a slug. `/plan-clear` detaches the current plan and exits planning when necessary. `--plan` stages the same planning-start flow during session startup.
+`/plan <slug>` stages `~/.n/pi/plans/<slug>.md` as the next planning target. Missing targets do not create a file until the next real user prompt is submitted. Existing foreign targets ask for confirmation and then resume. Bare `/plan` toggles plan mode for the current attachment: it exits active planning without detaching, resumes the currently attached plan when idle, and prompts for a slug only when nothing is attached. `pi-leader` follow-up `p` uses the same toggle. `/plan-clear` detaches the current plan and exits planning when necessary. `--plan` stages the same planning-start flow during session startup.
 
 ## Architecture
 

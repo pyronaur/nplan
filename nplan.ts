@@ -212,8 +212,10 @@ async function handlePlanCommand(
 	if (runtime.planState.phase === "planning" && !targetArg) {
 		if (runtime.committedPlanState.phase !== "planning") {
 			await revertDraftPlanning(runtime, ctx);
+			return;
 		}
 
+		await exitToIdle(runtime, ctx);
 		return;
 	}
 

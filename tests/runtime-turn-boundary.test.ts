@@ -5,6 +5,7 @@ import nplan from "../nplan.ts";
 import { createHarness } from "./runtime-harness.ts";
 import {
 	appendPersistedPlanState,
+	createIdleState,
 	createPlanningState,
 	emitBeforeAgentStart,
 	getLastMessageContent,
@@ -57,7 +58,7 @@ void test("session_tree resets to idle when the selected branch no longer contai
 	assert.equal(harness.ui.widgets.get("plan-progress"), undefined);
 });
 
-void test("bare /plan while already planning stays silent and keeps planning active", async () => {
+void test("bare /plan while already planning exits planning and keeps the plan attached", async () => {
 	const homeDir = temp.makeTempDir("nplan-runtime-home-stop-turn-");
 	const cwd = temp.makeTempDir("nplan-runtime-cwd-stop-turn-");
 	process.env.HOME = homeDir;
@@ -72,19 +73,23 @@ void test("bare /plan while already planning stays silent and keeps planning act
 	assert.equal(harness.sentMessages.length, 1);
 
 	await harness.runCommand("plan");
+	await harness.runCommand("plan-status");
 
 	assert.equal(harness.sentMessages.length, 1);
-	assert.deepEqual(
-		getLastPlanState(harness),
-		createPlanningState(join(homeDir, ".n", "pi", "plans", "stop-turn.md")),
-	);
+	assert.deepEqual(harness.ui.notifications.at(-1), {
+		message: `Phase: idle\nAttached plan: ${join(homeDir, ".n", "pi", "plans", "stop-turn.md")}`,
+		type: "info",
+	});
 
 	await emitBeforeAgentStart(harness, "Normal prompt after bare plan while planning");
 
-	assert.equal(harness.sentMessages.length, 1);
+	assert.equal(harness.sentMessages.length, 2);
+	assert.match(getLastMessageContent(harness), /^Plan Ended /);
 	assert.deepEqual(
 		getLastPlanState(harness),
-		createPlanningState(join(homeDir, ".n", "pi", "plans", "stop-turn.md")),
+		createIdleState(join(homeDir, ".n", "pi", "plans", "stop-turn.md"), {
+			idleKind: "manual",
+		}),
 	);
 });
 
