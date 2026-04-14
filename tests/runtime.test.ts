@@ -30,6 +30,25 @@ function assertNoCommittedPlanChange(harness: ReturnType<typeof createHarness>):
 	assert.deepEqual(harness.sentMessages, []);
 }
 
+async function setupDraftPlanToggle(input: {
+	homeDir: string;
+	cwd: string;
+	finalAction?: "cancel" | "switch";
+}) {
+	process.env.HOME = input.homeDir;
+	const harness = createHarness(input.cwd);
+	nplan(harness.api);
+
+	await harness.emit("session_start", { type: "session_start", reason: "startup" });
+	await harness.runCommand("plan", "plan-a");
+	await harness.runCommand("plan");
+	if (input.finalAction === "switch") {
+		await harness.runCommand("plan", "plan-b");
+	}
+
+	return harness;
+}
+
 void test("registers plan-clear and removes the legacy plan-file command", () => {
 	const harness = createHarness(temp.makeTempDir("nplan-runtime-cwd-register-"));
 	nplan(harness.api);
@@ -264,13 +283,7 @@ void test("declining a plan switch while planning keeps the current plan attache
 void test("draft planning can be canceled with bare /plan before the first real submit", async () => {
 	const homeDir = temp.makeTempDir("nplan-runtime-home-second-start-");
 	const cwd = temp.makeTempDir("nplan-runtime-cwd-second-start-");
-	process.env.HOME = homeDir;
-	const harness = createHarness(cwd);
-	nplan(harness.api);
-
-	await harness.emit("session_start", { type: "session_start", reason: "startup" });
-	await harness.runCommand("plan", "plan-a");
-	await harness.runCommand("plan");
+	const harness = await setupDraftPlanToggle({ homeDir, cwd, finalAction: "cancel" });
 	await harness.runCommand("plan-status");
 
 	const planPath = join(homeDir, ".n", "pi", "plans", "plan-a.md");
@@ -291,14 +304,7 @@ void test("draft planning can be canceled with bare /plan before the first real 
 void test("fresh start after canceling an earlier draft still carries the planning prompt", async () => {
 	const homeDir = temp.makeTempDir("nplan-runtime-home-second-start-");
 	const cwd = temp.makeTempDir("nplan-runtime-cwd-second-start-");
-	process.env.HOME = homeDir;
-	const harness = createHarness(cwd);
-	nplan(harness.api);
-
-	await harness.emit("session_start", { type: "session_start", reason: "startup" });
-	await harness.runCommand("plan", "plan-a");
-	await harness.runCommand("plan");
-	await harness.runCommand("plan", "plan-b");
+	const harness = await setupDraftPlanToggle({ homeDir, cwd, finalAction: "switch" });
 
 	const planPath = join(homeDir, ".n", "pi", "plans", "plan-b.md");
 	assert.equal(harness.ui.confirmCalls.length, 0);

@@ -20,7 +20,7 @@ For full state map, read `docs/mermaid-plan-state-information-architecture.md`.
 - Review rows are ordinary `plan_submit` tool call/result rows with custom visible rendering.
 - `nplan` does not use hidden `plan-context` messages.
 - `nplan` does not register a `context` hook or rewrite model context for planning/review rows.
-- Interactive planning lifecycle emission has one owner: submit interception in `nplan-submit-interceptor.ts`.
+- Interactive planning lifecycle emission has one owner: pre-submit `input` handling in `nplan-input-lifecycle.ts`.
 - Slash commands stage draft planning state in runtime memory only.
 - Draft plan changes do not append lifecycle rows, create missing plan files, or commit persisted plan state on their own.
 - Full planning prompt body appears only on `Plan Started` rows, and only once per compaction window.
@@ -33,12 +33,12 @@ flowchart TD
     A[User: slash commands] --> B[nplan: mutate draft runtime plan state]
     B --> C[UI: footer and tool scope update]
 
-    D[User: real prompt submit] --> E[nplan: submit interceptor owns JIT flush]
+    D[User: real prompt submit] --> E[nplan: input hook owns JIT flush]
     E --> F[nplan: emitPlanTurnMessages]
     F --> G[Pi: pi.sendMessage plan-event triggerTurn:false]
     G --> H[Transcript: visible plan-event row]
     F --> I[nplan: commit draft state to persisted state]
-    I --> J[Pi: sendUserMessage original prompt]
+	I --> J[Pi: native prompt submit continues]
 
     K[Non-UI prompt submit] --> L[Pi: before_agent_start fallback]
     L --> F
@@ -64,22 +64,21 @@ flowchart TD
 
 That owner is reached from two transport paths:
 
-1. `registerSubmitInterceptor(...)` in `nplan-submit-interceptor.ts`
-   - interactive Enter submit
-   - consumes default submit
+1. `registerInputLifecycle(...)` in `nplan-input-lifecycle.ts`
+   - `input` event for non-extension submits with UI
    - emits any owed lifecycle rows
-   - commits draft state
-   - replays original prompt with `pi.sendUserMessage(...)`
+   - commits draft state through `emitPlanTurnMessages(...)`
+   - returns `continue` so Pi keeps native prompt routing
 2. `registerBeforeAgentStartHandler(...)` in `nplan.ts`
    - fallback only when `ctx.hasUI === false`
-   - used for non-UI submit paths that cannot use terminal interception
+   - used for non-UI submit paths that cannot use `input` lifecycle ownership
 
 Interactive UI flow has exactly one lifecycle injection owner.
 
 ## Planning Turns
 
-Interactive Enter submit is JIT boundary.
-`registerSubmitInterceptor(...)` emits any owed `plan-event` row before replaying submitted user prompt.
+Interactive submit is JIT boundary.
+`registerInputLifecycle(...)` emits any owed `plan-event` row before Pi appends the real user prompt.
 
 Lifecycle rows derive only from:
 
@@ -120,7 +119,7 @@ There is no hidden review rewrite layer and no duplicate custom review row.
 
 ## Important Files
 
-- `nplan-submit-interceptor.ts`: interactive submit owner for JIT lifecycle emission
+- `nplan-input-lifecycle.ts`: interactive pre-submit owner for JIT lifecycle emission
 - `models/plan-state.ts`: canonical committed planning state shape
 - `models/plan-delivery-state.ts`: canonical persisted compaction-window prompt-delivery state
 - `nplan-turn-messages.ts`: computes lifecycle rows from committed state, draft state, and compaction window

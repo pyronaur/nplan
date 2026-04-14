@@ -14,6 +14,8 @@ import {
 	registerSessionBeforeForkHandler,
 } from "./nplan-fork-restore.ts";
 import { isRecord } from "./nplan-guards.ts";
+import { registerInputLifecycle } from "./nplan-input-lifecycle.ts";
+import { registerLeaderHandler } from "./nplan-leader.ts";
 import {
 	applyPhaseConfig,
 	captureSavedState,
@@ -39,29 +41,7 @@ import {
 	getPlanReviewAvailabilityWarning,
 } from "./nplan-review.ts";
 import { getPlanStatusLines } from "./nplan-status.ts";
-import { registerSubmitInterceptor } from "./nplan-submit-interceptor.ts";
 import { emitPlanTurnMessages } from "./nplan-turn-messages.ts";
-
-type PiLeaderOpenEvent = {
-	add: (
-		...args: [
-			key: string,
-			label: string,
-			run: () => void | Promise<void>,
-			options?: {
-				side?: "left" | "right";
-				group?: string;
-				groupOrder?: number;
-				order?: number;
-				keyLabel?: string;
-			},
-		]
-	) => void;
-};
-
-function isPiLeaderOpenEvent(event: unknown): event is PiLeaderOpenEvent {
-	return isRecord(event) && typeof event.add === "function";
-}
 
 function registerFlags(pi: ExtensionAPI): void {
 	pi.registerFlag("plan", {
@@ -460,35 +440,6 @@ function registerSessionTreeHandler(runtime: Runtime): void {
 	runtime.pi.on("session_tree", async (_event, ctx) => await handleSessionTree(runtime, ctx));
 }
 
-function registerLeaderHandler(runtime: Runtime): void {
-	let ctx: ExtensionContext | undefined;
-	const offLeader = runtime.pi.events.on("pi-leader", (event) => {
-		if (!isPiLeaderOpenEvent(event)) {
-			return;
-		}
-
-		event.add("p", getPlanLeaderLabel(runtime), async () => {
-			if (!ctx) {
-				return;
-			}
-			await handlePlanCommand(runtime, "", ctx);
-		}, {
-			side: "right",
-			group: "default",
-			order: 20,
-		});
-	});
-
-	runtime.pi.on("session_start", async (_event, nextCtx) => {
-		ctx = nextCtx;
-	});
-
-	runtime.pi.on("session_shutdown", () => {
-		ctx = undefined;
-		offLeader();
-	});
-}
-
 export default function nplan(pi: ExtensionAPI): void {
 	const runtime = createRuntime(pi);
 	registerFlags(pi);
@@ -498,9 +449,13 @@ export default function nplan(pi: ExtensionAPI): void {
 	registerToolCallHandler(runtime);
 	registerToolResultHandler(runtime);
 	registerBeforeAgentStartHandler(runtime);
-	registerSubmitInterceptor(runtime);
+	registerInputLifecycle(runtime);
 	registerSessionStartHandler(runtime);
 	registerSessionTreeHandler(runtime);
 	registerSessionBeforeForkHandler(pi);
-	registerLeaderHandler(runtime);
+	registerLeaderHandler({
+		runtime,
+		getLabel: () => getPlanLeaderLabel(runtime),
+		run: async (ctx) => await handlePlanCommand(runtime, "", ctx),
+	});
 }

@@ -1,3 +1,5 @@
+import type { ImageContent, TextContent } from "@mariozechner/pi-ai";
+
 function appendEntryBase(input: {
 	entries: Array<Record<string, unknown>>;
 	entryCount: { current: number };
@@ -51,7 +53,13 @@ export function appendUserMessageEntry(input: {
 	entries: Array<Record<string, unknown>>;
 	entryCount: { current: number };
 	prompt: string;
+	images?: ImageContent[];
 }): void {
+	const content: Array<TextContent | ImageContent> = [
+		{ type: "text", text: input.prompt },
+		...(input.images ?? []),
+	];
+
 	appendEntryBase({
 		entries: input.entries,
 		entryCount: input.entryCount,
@@ -59,7 +67,7 @@ export function appendUserMessageEntry(input: {
 			type: "message",
 			message: {
 				role: "user",
-				content: [{ type: "text", text: input.prompt }],
+				content,
 				timestamp: 1,
 			},
 		},

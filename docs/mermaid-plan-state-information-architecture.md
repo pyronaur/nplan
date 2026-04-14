@@ -206,12 +206,11 @@ Lifecycle rows are computed in one owner: `emitPlanTurnMessages(...)` in `nplan-
 
 That owner is reached from:
 
-1. `registerSubmitInterceptor(...)` in `nplan-submit-interceptor.ts`
-   - interactive Enter submit
-   - consumes normal submit
+1. `registerInputLifecycle(...)` in `nplan-input-lifecycle.ts`
+   - non-extension `input` with UI
    - emits rows JIT
    - commits draft state
-   - replays original prompt with `pi.sendUserMessage(...)`
+   - returns `continue` so Pi keeps native prompt routing
 2. `registerBeforeAgentStartHandler(...)` in `nplan.ts`
    - fallback only for `ctx.hasUI === false`
 

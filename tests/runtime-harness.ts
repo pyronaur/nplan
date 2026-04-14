@@ -1,74 +1,16 @@
 import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
+import type { ImageContent } from "@mariozechner/pi-ai";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import {
-	appendCustomEntry,
-	appendUserMessageEntry,
-	getReturnedMessage,
-	statefulPushMessage,
-} from "./runtime-session.ts";
-import { createContext, createUiState, type UiState } from "./runtime-ui.ts";
-
-function addEventHandler(
-	eventHandlers: Map<string, Array<(event: unknown, ctx: unknown) => unknown>>,
-	name: string,
-	handler: (event: unknown, ctx: unknown) => unknown,
-): void {
-	const handlers = eventHandlers.get(name) ?? [];
-	handlers.push(handler);
-	eventHandlers.set(name, handlers);
-}
-
-function createMessageApi(state: {
-	entries: Array<Record<string, unknown>>;
-	sentMessages: Array<Record<string, unknown>>;
-	entryCount: { current: number };
-	eventHandlers: Map<string, Array<(event: unknown, ctx: unknown) => unknown>>;
-	ctx: ReturnType<typeof createContext>;
-}) {
-	return {
-		sendMessage(message: Record<string, unknown>) {
-			statefulPushMessage({
-				sentMessages: state.sentMessages,
-				entries: state.entries,
-				entryCount: state.entryCount,
-				message,
-			});
-		},
-		async sendUserMessage(content: string | Array<{ type: string; text?: string }>) {
-			const prompt = typeof content === "string"
-				? content
-				: content
-					.filter((part) => part.type === "text" && typeof part.text === "string")
-					.map((part) => part.text)
-					.join("\n");
-			appendUserMessageEntry({
-				entries: state.entries,
-				entryCount: state.entryCount,
-				prompt,
-			});
-			for (const handler of state.eventHandlers.get("before_agent_start") ?? []) {
-				const result = await handler({
-					type: "before_agent_start",
-					prompt,
-					systemPrompt: "",
-				}, state.ctx);
-				const message = getReturnedMessage(result);
-				if (!message) {
-					continue;
-				}
-				statefulPushMessage({
-					sentMessages: state.sentMessages,
-					entries: state.entries,
-					entryCount: state.entryCount,
-					message,
-				});
-			}
-		},
-		appendEntry(customType: string, data?: unknown) {
-			appendCustomEntry({ entries: state.entries, entryCount: state.entryCount, customType, data });
-		},
-	};
-}
+	addEventHandler,
+	createMessageApi,
+	type EventHandlers,
+	pressTerminalKey,
+	processEventResult,
+	type RuntimePromptContext,
+	submitPrompt,
+} from "./runtime-prompt-pipeline.ts";
+import { createContext, createUiState } from "./runtime-ui.ts";
 
 function createToolStateApi(state: {
 	activeTools: { current: string[] };
@@ -99,19 +41,15 @@ function createToolStateApi(state: {
 	};
 }
 
-function createExtensionApi(state: {
-	commands: Map<string, { handler: (args: string, ctx: any) => Promise<void> | void }>;
-	ctx: ReturnType<typeof createContext>;
-	flags: Map<string, boolean | string | undefined>;
-	entries: Array<Record<string, unknown>>;
-	messageRenderers: Map<string, unknown>;
-	tools: Map<string, any>;
-	sentMessages: Array<Record<string, unknown>>;
-	eventHandlers: Map<string, Array<(event: unknown, ctx: unknown) => unknown>>;
-	thinkingLevel: { current: ThinkingLevel };
-	activeTools: { current: string[] };
-	entryCount: { current: number };
-}): ExtensionAPI {
+function createExtensionApi(
+	state: RuntimePromptContext & {
+		flags: Map<string, boolean | string | undefined>;
+		messageRenderers: Map<string, unknown>;
+		tools: Map<string, any>;
+		thinkingLevel: { current: ThinkingLevel };
+		activeTools: { current: string[] };
+	},
+): ExtensionAPI {
 	return {
 		registerFlag(name: string, options: { default?: boolean | string }) {
 			state.flags.set(name, options.default);
@@ -145,13 +83,7 @@ function createExtensionApi(state: {
 			},
 			emit() {},
 		},
-		...createMessageApi({
-			ctx: state.ctx,
-			entries: state.entries,
-			sentMessages: state.sentMessages,
-			entryCount: state.entryCount,
-			eventHandlers: state.eventHandlers,
-		}),
+		...createMessageApi(state),
 		setSessionName() {},
 		getSessionName() {
 			return undefined;
@@ -171,7 +103,7 @@ function createHarnessState(cwd: string, options: { hasUI?: boolean; signal?: Ab
 	const messageRenderers = new Map<string, unknown>();
 	const tools = new Map<string, any>();
 	const sentMessages: Array<Record<string, unknown>> = [];
-	const eventHandlers = new Map<string, Array<(event: unknown, ctx: unknown) => unknown>>();
+	const eventHandlers: EventHandlers = new Map();
 	const thinkingLevel: { current: ThinkingLevel } = { current: "medium" };
 	const activeTools = { current: ["read", "bash", "edit", "write"] };
 	const entryCount = { current: 0 };
@@ -185,47 +117,41 @@ function createHarnessState(cwd: string, options: { hasUI?: boolean; signal?: Ab
 		hasUI: options.hasUI,
 		signal: options.signal,
 	});
-	const api = createExtensionApi({
+	const promptCtx: RuntimePromptContext = {
 		commands,
 		ctx,
-		flags,
 		entries,
+		entryCount,
+		eventHandlers,
+		sentMessages,
+		ui,
+	};
+	const api = createExtensionApi({
+		...promptCtx,
+		flags,
 		messageRenderers,
 		tools,
-		sentMessages,
-		eventHandlers,
 		thinkingLevel,
 		activeTools,
-		entryCount,
 	});
 
 	return {
-		activeTools,
 		api,
+		branchEntries,
 		commands,
-		ctx,
 		entries,
 		entryCount,
-		eventHandlers,
 		flags,
 		messageRenderers,
+		promptCtx,
 		sentMessages,
-		thinkingLevel,
 		tools,
 		ui,
-		branchEntries,
 	};
 }
 
-type HarnessActionInput = {
-	commands: Map<string, { handler: (args: string, ctx: any) => Promise<void> | void }>;
-	ctx: ReturnType<typeof createContext>;
-	entries: Array<Record<string, unknown>>;
-	entryCount: { current: number };
-	eventHandlers: Map<string, Array<(event: unknown, ctx: unknown) => unknown>>;
-	sentMessages: Array<Record<string, unknown>>;
+type HarnessActionInput = RuntimePromptContext & {
 	tools: Map<string, any>;
-	ui: UiState;
 };
 
 async function emitEvent(
@@ -237,15 +163,11 @@ async function emitEvent(
 	for (const handler of input.eventHandlers.get(name) ?? []) {
 		const result = await handler(event, input.ctx);
 		results.push(result);
-		const message = getReturnedMessage(result);
-		if (!message) {
-			continue;
-		}
-		statefulPushMessage({
+		processEventResult({
+			result,
 			sentMessages: input.sentMessages,
 			entries: input.entries,
 			entryCount: input.entryCount,
-			message,
 		});
 	}
 	return results;
@@ -297,43 +219,6 @@ async function runRegisteredTool(input: {
 	return patched;
 }
 
-function pressTerminalKey(ui: UiState, data: string): string {
-	let current = data;
-	for (const listener of ui.terminalInputListeners) {
-		const result = listener(current);
-		if (result?.consume) {
-			return "";
-		}
-		if (result?.data !== undefined) {
-			current = result.data;
-		}
-	}
-
-	return current;
-}
-
-async function submitPrompt(
-	input: HarnessActionInput,
-	emit: (name: string, event: unknown) => Promise<unknown[]>,
-	prompt: string,
-): Promise<void> {
-	input.ui.editorText = prompt;
-	const submitData = pressTerminalKey(input.ui, "\r");
-	if (!submitData) {
-		return;
-	}
-	appendUserMessageEntry({
-		entries: input.entries,
-		entryCount: input.entryCount,
-		prompt,
-	});
-	await emit("before_agent_start", {
-		type: "before_agent_start",
-		prompt,
-		systemPrompt: "",
-	});
-}
-
 function createHarnessActions(input: HarnessActionInput) {
 	const emit = async (name: string, event: unknown) => await emitEvent(input, name, event);
 	const runCommand = async (name: string, args = "") =>
@@ -341,7 +226,8 @@ function createHarnessActions(input: HarnessActionInput) {
 	const runTool = async (name: string, params: Record<string, unknown> = {}) =>
 		await runRegisteredTool({ harness: input, emit, name, params });
 	const pressKey = (data: string) => pressTerminalKey(input.ui, data);
-	const submit = async (prompt: string) => await submitPrompt(input, emit, prompt);
+	const submit = async (prompt: string, options?: { images?: ImageContent[] }) =>
+		await submitPrompt(input, prompt, options);
 
 	return { emit, pressKey, runCommand, runTool, submitPrompt: submit };
 }
@@ -352,26 +238,20 @@ export function createHarness(
 ) {
 	const state = createHarnessState(cwd, options);
 	const actions = createHarnessActions({
-		commands: state.commands,
-		ctx: state.ctx,
-		entries: state.entries,
-		entryCount: state.entryCount,
-		eventHandlers: state.eventHandlers,
-		sentMessages: state.sentMessages,
+		...state.promptCtx,
 		tools: state.tools,
-		ui: state.ui,
 	});
 
 	return {
 		api: state.api,
-		commands: state.commands,
-		entryCount: state.entryCount,
+		commands: state.promptCtx.commands,
+		entryCount: state.promptCtx.entryCount,
 		flags: state.flags,
-		entries: state.entries,
+		entries: state.promptCtx.entries,
 		messageRenderers: state.messageRenderers,
 		tools: state.tools,
-		sentMessages: state.sentMessages,
-		ui: state.ui,
+		sentMessages: state.promptCtx.sentMessages,
+		ui: state.promptCtx.ui,
 		setBranchEntries(entries: Array<Record<string, unknown>> | undefined) {
 			state.branchEntries.current = entries;
 		},
