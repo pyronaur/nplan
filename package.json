@@ -12,9 +12,9 @@
     ]
   },
   "dependencies": {
-    "@mariozechner/pi-agent-core": "0.65.2",
-    "@mariozechner/pi-ai": "0.65.2",
-    "@mariozechner/pi-coding-agent": "0.65.2"
+    "@mariozechner/pi-agent-core": "0.68.0",
+    "@mariozechner/pi-ai": "0.68.0",
+    "@mariozechner/pi-coding-agent": "0.68.0"
   },
   "devDependencies": {
     "dprint": "^0.54.0",
