@@ -454,7 +454,7 @@ export default function nplan(pi: ExtensionAPI): void {
 	registerInputLifecycle(runtime);
 	registerSessionStartHandler(runtime);
 	registerSessionTreeHandler(runtime);
-	registerSessionBeforeForkHandler(pi);
+	registerSessionBeforeForkHandler(pi, runtime);
 	registerLeaderHandler({
 		runtime,
 		getLabel: () => getPlanLeaderLabel(runtime),

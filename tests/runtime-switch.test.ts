@@ -19,6 +19,36 @@ import { createTempTracker } from "./test-temp.ts";
 
 const temp = createTempTracker();
 
+function getLastEntryId(harness: ReturnType<typeof createHarness>): string {
+	const entry = harness.entries.at(-1);
+	assert.ok(entry && typeof entry === "object" && "id" in entry);
+	const entryId = typeof entry.id === "string" ? entry.id : "";
+	assert.notEqual(entryId, "");
+	return entryId;
+}
+
+async function createForkChild(input: {
+	parent: ReturnType<typeof createHarness>;
+	cwd: string;
+	entryId: string;
+	position: "before" | "at";
+}) {
+	await input.parent.emit("session_before_fork", {
+		type: "session_before_fork",
+		entryId: input.entryId,
+		position: input.position,
+	});
+
+	const child = createHarness(input.cwd);
+	nplan(child.api);
+	await child.emit("session_start", {
+		type: "session_start",
+		reason: "fork",
+		previousSessionFile: join(input.cwd, "session.jsonl"),
+	});
+	return child;
+}
+
 afterEach(() => {
 	temp.cleanup();
 });
@@ -95,14 +125,11 @@ void test("forking from an active planning user turn restores planning state and
 	const selectedId = typeof selectedUser.id === "string" ? selectedUser.id : "";
 	assert.notEqual(selectedId, "");
 
-	await parent.emit("session_before_fork", { type: "session_before_fork", entryId: selectedId });
-
-	const child = createHarness(cwd);
-	nplan(child.api);
-	await child.emit("session_start", {
-		type: "session_start",
-		reason: "fork",
-		previousSessionFile: join(cwd, "session.jsonl"),
+	const child = await createForkChild({
+		parent,
+		cwd,
+		entryId: selectedId,
+		position: "before",
 	});
 
 	assert.deepEqual(getLastPlanState(child), createPlanningState(planPath));
@@ -110,6 +137,39 @@ void test("forking from an active planning user turn restores planning state and
 	assert.equal(child.sentMessages.length, 0);
 
 	await emitBeforeAgentStart(child, "Prompt after fork");
+
+	assert.equal(child.sentMessages.length, 1);
+	assert.match(getMessageContentAt(child, -1), new RegExp(`^Plan Started ${planPath}`));
+	assert.equal(getMessageContentAt(child, -1).includes("[PLAN - PLANNING PHASE]"), true);
+	assertPlanDeliveryState({ harness: child, options: { planningPromptWindowKey: "root" } });
+});
+
+void test("cloning at the current point restores draft planning state before it is persisted", async () => {
+	const homeDir = temp.makeTempDir("nplan-runtime-home-clone-planning-");
+	const cwd = temp.makeTempDir("nplan-runtime-cwd-clone-planning-");
+	process.env.HOME = homeDir;
+	const parent = createHarness(cwd);
+	nplan(parent.api);
+	const planPath = writePlanFile(homeDir, "plan-a");
+
+	await parent.emit("session_start", { type: "session_start", reason: "startup" });
+	await emitBeforeAgentStart(parent, "Initial non-planning prompt");
+	await parent.emit("agent_end", { type: "agent_end", messages: [] });
+	parent.ui.confirmResponses.push(true);
+	await parent.runCommand("plan", "plan-a");
+
+	const child = await createForkChild({
+		parent,
+		cwd,
+		entryId: getLastEntryId(parent),
+		position: "at",
+	});
+
+	assert.deepEqual(getLastPlanState(child), createPlanningState(planPath));
+	assertPlanDeliveryState({ harness: child });
+	assert.equal(child.sentMessages.length, 0);
+
+	await emitBeforeAgentStart(child, "Prompt after clone");
 
 	assert.equal(child.sentMessages.length, 1);
 	assert.match(getMessageContentAt(child, -1), new RegExp(`^Plan Started ${planPath}`));

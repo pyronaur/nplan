@@ -15,18 +15,45 @@ function hasAttachedPlan(state: PlanState | undefined): state is PlanState & {
 function capturePendingForkRestore(input: {
 	ctx: ExtensionContext;
 	entryId: string;
+	planState: PlanState | undefined;
+	planDeliveryState: PlanDeliveryState | undefined;
 }): void {
-	const branch = input.ctx.sessionManager.getBranch(input.entryId);
-	const planState = PlanState.load(branch);
-	const planDeliveryState = PlanDeliveryState.load(branch);
 	new PendingForkRestore({
 		previousSessionFile: input.ctx.sessionManager.getSessionFile(),
 		entryId: input.entryId,
-		planState: hasAttachedPlan(planState)
-			? planState.with({ attachedPlanPath: resolveGlobalPlanPath(planState.attachedPlanPath) })
-			: planState,
-		planDeliveryState,
+		planState: hasAttachedPlan(input.planState)
+			? input.planState.with({
+				attachedPlanPath: resolveGlobalPlanPath(input.planState.attachedPlanPath),
+			})
+			: input.planState,
+		planDeliveryState: input.planDeliveryState,
 	}).save(input.ctx.sessionManager.getSessionFile());
+}
+
+function captureBranchPendingForkRestore(input: {
+	ctx: ExtensionContext;
+	entryId: string;
+}): void {
+	const branch = input.ctx.sessionManager.getBranch(input.entryId);
+	capturePendingForkRestore({
+		ctx: input.ctx,
+		entryId: input.entryId,
+		planState: PlanState.load(branch),
+		planDeliveryState: PlanDeliveryState.load(branch),
+	});
+}
+
+function captureRuntimePendingForkRestore(input: {
+	ctx: ExtensionContext;
+	entryId: string;
+	runtime: Runtime;
+}): void {
+	capturePendingForkRestore({
+		ctx: input.ctx,
+		entryId: input.entryId,
+		planState: input.runtime.planState,
+		planDeliveryState: input.runtime.planDeliveryState,
+	});
 }
 
 export function applyPendingForkRestore(input: {
@@ -58,17 +85,19 @@ export function applyPendingForkRestore(input: {
 	PendingForkRestore.clear(input.sessionFile);
 }
 
-export function registerSessionBeforeForkHandler(pi: ExtensionAPI): void {
+export function registerSessionBeforeForkHandler(pi: ExtensionAPI, runtime: Runtime): void {
 	pi.on("session_before_fork", async (event, ctx) => {
 		if (!isRecord(event) || typeof event.entryId !== "string") {
 			PendingForkRestore.clear(ctx.sessionManager.getSessionFile());
 			return undefined;
 		}
 
-		capturePendingForkRestore({
-			ctx,
-			entryId: event.entryId,
-		});
+		if (event.position === "at") {
+			captureRuntimePendingForkRestore({ ctx, entryId: event.entryId, runtime });
+			return undefined;
+		}
+
+		captureBranchPendingForkRestore({ ctx, entryId: event.entryId });
 		return undefined;
 	});
 }
