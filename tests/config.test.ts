@@ -46,7 +46,7 @@ void test("loadPlanConfig loads the shipped internal base config", () => {
 	assert.deepEqual(loaded.warnings, []);
 	assert.equal(planning.statusLabel, "⏸ plan");
 	assert.deepEqual(planning.activeTools, ["grep", "find", "ls", "plan_submit"]);
-	assert.match(planning.planningPrompt ?? "", /\[PLAN - PLANNING PHASE\]/);
+	assert.match(planning.planningPrompt ?? "", /^# Plan Mode$/m);
 	assert.match(resolvePlanTemplate(loaded.config) ?? "", /^# Plan/m);
 });
 

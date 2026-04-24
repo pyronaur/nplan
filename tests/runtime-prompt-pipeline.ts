@@ -1,9 +1,10 @@
-import type { ImageContent, TextContent } from "@mariozechner/pi-ai";
 import {
 	appendCustomEntry,
 	appendUserMessageEntry,
 	getReturnedMessage,
+	type ImageContent,
 	statefulPushMessage,
+	type TextContent,
 } from "./runtime-session.ts";
 import type { UiState } from "./runtime-ui.ts";
 

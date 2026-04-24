@@ -1,5 +1,4 @@
 import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
-import type { ImageContent } from "@mariozechner/pi-ai";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import {
 	addEventHandler,
@@ -10,6 +9,7 @@ import {
 	type RuntimePromptContext,
 	submitPrompt,
 } from "./runtime-prompt-pipeline.ts";
+import type { ImageContent } from "./runtime-session.ts";
 import { createContext, createUiState } from "./runtime-ui.ts";
 
 function createToolStateApi(state: {

@@ -75,7 +75,7 @@ void test("switching plans while idle emits only a new start marker on the next 
 
 	assert.equal(harness.sentMessages.length, 1);
 	assert.match(getMessageContentAt(harness, -1), new RegExp(`^Plan Started ${planBPath}`));
-	assert.equal(getMessageContentAt(harness, -1).includes("[PLAN - PLANNING PHASE]"), true);
+	assert.equal(getMessageContentAt(harness, -1).includes("# Plan Mode"), true);
 	assert.equal(getMessageContentAt(harness, -1).includes(planAPath), false);
 });
 
@@ -102,7 +102,7 @@ void test("switching plans while planning emits end then start markers on the ne
 	assert.equal(harness.sentMessages.length, 3);
 	assert.match(getMessageContentAt(harness, -2), new RegExp(`^Plan Ended ${planAPath}`));
 	assert.match(getMessageContentAt(harness, -1), new RegExp(`^Plan Started ${planBPath}`));
-	assert.equal(getMessageContentAt(harness, -1).includes("[PLAN - PLANNING PHASE]"), false);
+	assert.equal(getMessageContentAt(harness, -1).includes("# Plan Mode"), false);
 });
 
 void test("forking from an active planning user turn restores planning state and re-emits the prompt in the child session", async () => {
@@ -140,7 +140,7 @@ void test("forking from an active planning user turn restores planning state and
 
 	assert.equal(child.sentMessages.length, 1);
 	assert.match(getMessageContentAt(child, -1), new RegExp(`^Plan Started ${planPath}`));
-	assert.equal(getMessageContentAt(child, -1).includes("[PLAN - PLANNING PHASE]"), true);
+	assert.equal(getMessageContentAt(child, -1).includes("# Plan Mode"), true);
 	assertPlanDeliveryState({ harness: child, options: { planningPromptWindowKey: "root" } });
 });
 
@@ -173,6 +173,6 @@ void test("cloning at the current point restores draft planning state before it 
 
 	assert.equal(child.sentMessages.length, 1);
 	assert.match(getMessageContentAt(child, -1), new RegExp(`^Plan Started ${planPath}`));
-	assert.equal(getMessageContentAt(child, -1).includes("[PLAN - PLANNING PHASE]"), true);
+	assert.equal(getMessageContentAt(child, -1).includes("# Plan Mode"), true);
 	assertPlanDeliveryState({ harness: child, options: { planningPromptWindowKey: "root" } });
 });

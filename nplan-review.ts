@@ -1,8 +1,8 @@
-import { Type } from "@mariozechner/pi-ai";
 import { defineTool, type ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { Type } from "typebox";
 import { PlannotatorSession } from "./models/plannotator-session.ts";
 import { planDenyFeedback } from "./nplan-feedback.ts";
 import {

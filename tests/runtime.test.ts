@@ -79,7 +79,7 @@ void test("/plan with a new slug attaches the normalized plan path and enters pl
 	await emitBeforeAgentStart(harness, "Plan it");
 
 	assert.match(getLastMessageContent(harness), /^Plan Started /);
-	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), true);
+	assert.equal(getLastMessageContent(harness).includes("# Plan Mode"), true);
 	assertPlanningState({
 		harness,
 		planPath: join(homeDir, ".n", "pi", "plans", "auth-plan.md"),
@@ -314,7 +314,7 @@ void test("fresh start after canceling an earlier draft still carries the planni
 	await emitBeforeAgentStart(harness, "New turn");
 
 	assert.match(getLastMessageContent(harness), new RegExp(`^Plan Started ${planPath}`));
-	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), true);
+	assert.equal(getLastMessageContent(harness).includes("# Plan Mode"), true);
 });
 
 void test("repeated plan toggles do not append transcript messages", async () => {
@@ -353,7 +353,7 @@ void test("later planning turns stay silent before compaction", async () => {
 
 	assert.equal(harness.sentMessages.length, 1);
 	assert.match(getMessageContentAt(harness, -1), /^Plan Started /);
-	assert.equal(getMessageContentAt(harness, -1).includes("[PLAN - PLANNING PHASE]"), true);
+	assert.equal(getMessageContentAt(harness, -1).includes("# Plan Mode"), true);
 });
 
 void test("ordinary later turns while planning do not emit another started row before compaction", async () => {

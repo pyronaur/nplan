@@ -175,5 +175,5 @@ export function assertPlanningMessage(input: {
 }): void {
 	const content = getMessageContentAt(input.harness, input.index ?? -1);
 	assert.match(content, new RegExp(`^Plan Started ${input.planPath}`));
-	assert.equal(content.includes("[PLAN - PLANNING PHASE]"), true);
+	assert.equal(content.includes("# Plan Mode"), true);
 }

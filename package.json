@@ -11,18 +11,21 @@
       "./index.ts"
     ]
   },
-  "dependencies": {
-    "@mariozechner/pi-agent-core": "0.68.0",
-    "@mariozechner/pi-ai": "0.68.0",
-    "@mariozechner/pi-coding-agent": "0.68.0"
+  "peerDependencies": {
+    "@mariozechner/pi-agent-core": "*",
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*",
+    "typebox": "*"
   },
   "devDependencies": {
+    "@mariozechner/pi-coding-agent": "^0.70.2",
     "dprint": "^0.54.0",
     "jscpd": "^4.0.8",
     "knip": "^6.3.1",
     "oxlint": "^1.59.0",
     "oxlint-plugin-inhuman": "^0.1.7",
     "oxlint-tsgolint": "^0.20.0",
+    "typebox": "^1.1.24",
     "typescript": "^6.0.2"
   }
 }

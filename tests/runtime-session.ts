@@ -1,4 +1,13 @@
-import type { ImageContent, TextContent } from "@mariozechner/pi-ai";
+export type ImageContent = {
+	type: "image";
+	data: string;
+	mimeType: string;
+};
+
+export type TextContent = {
+	type: "text";
+	text: string;
+};
 
 function appendEntryBase(input: {
 	entries: Array<Record<string, unknown>>;

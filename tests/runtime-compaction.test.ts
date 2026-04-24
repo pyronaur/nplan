@@ -31,7 +31,7 @@ void test("compaction allows the next planning turn to resend the full planning 
 	await harness.emit("agent_end", { type: "agent_end", messages: [] });
 
 	assert.equal(harness.sentMessages.length, 1);
-	assert.equal(getMessageContentAt(harness, -1).includes("[PLAN - PLANNING PHASE]"), true);
+	assert.equal(getMessageContentAt(harness, -1).includes("# Plan Mode"), true);
 
 	const latestEntry = harness.entries.at(-1);
 	if (!latestEntry?.id || typeof latestEntry.id !== "string") {
@@ -43,5 +43,5 @@ void test("compaction allows the next planning turn to resend the full planning 
 
 	assert.equal(harness.sentMessages.length, 2);
 	assert.match(getLastMessageContent(harness), /^Plan Started /);
-	assert.equal(getLastMessageContent(harness).includes("[PLAN - PLANNING PHASE]"), true);
+	assert.equal(getLastMessageContent(harness).includes("# Plan Mode"), true);
 });

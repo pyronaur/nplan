@@ -150,14 +150,14 @@ void test("collapsed plan-event renderer shows the Ctrl+O expand affordance", ()
 			kind: "started",
 			planFilePath: "/abs/path/plan.md",
 			title: "Plan Started /abs/path/plan.md",
-			body: "[PLAN - PLANNING PHASE]",
+			body: "# Plan Mode",
 		},
-		content: "Plan Started /abs/path/plan.md\n\n[PLAN - PLANNING PHASE]",
+		content: "Plan Started /abs/path/plan.md\n\n# Plan Mode",
 	};
 	const collapsed = renderComponentText(renderer(message, { expanded: false }, createTheme()));
 	const expanded = renderComponentText(renderer(message, { expanded: true }, createTheme()));
 
 	assert.match(collapsed, /Ctrl\+O to expand/);
-	assert.equal(collapsed.includes("[PLAN - PLANNING PHASE]"), false);
-	assert.equal(expanded.includes("[PLAN - PLANNING PHASE]"), true);
+	assert.equal(collapsed.includes("# Plan Mode"), false);
+	assert.equal(expanded.includes("# Plan Mode"), true);
 });
