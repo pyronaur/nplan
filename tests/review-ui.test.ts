@@ -79,7 +79,7 @@ void test("plan_submit call renderer uses a review-specific visible title", () =
 	assert.match(rendered, /ship the auth cleanup/);
 });
 
-void test("rejected plan_submit review record uses failed semantics and the exact decision header", () => {
+void test("rejected plan_submit review record uses review semantics and the exact decision header", () => {
 	const result = renderPlanSubmitResult(
 		{
 			content: [{ type: "text", text: "Plan rejected." }],
@@ -106,7 +106,7 @@ void test("rejected plan_submit review record uses failed semantics and the exac
 				feedback: "Revise the rollout section.\n\n- Add rollback guidance.",
 			},
 		}),
-		{ isError: true },
+		{ isError: false },
 	);
 });
 

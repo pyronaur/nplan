@@ -11,7 +11,7 @@ export function planDenyFeedback(
 		? `Plan file: ${options.planFilePath}\n`
 		: "";
 
-	return `Plan rejected.\n\n${planFileRule}Feedback for the next planning turn:\n${
+	return `Plan rejected.\n\n${planFileRule}User instructions to follow now:\n${
 		feedback || "Plan changes requested"
-	}\n\nWait for the next user turn before revising the plan or calling ${toolName} again.`;
+	}\n\nContinue in plan mode. Follow the user's instructions above, then call ${toolName} again when the plan is ready for another review.`;
 }

@@ -270,7 +270,11 @@ export function patchPlanSubmitResult(event: {
 	if (event.toolName !== PLAN_SUBMIT_TOOL || !isPlanSubmitDetails(event.details)) {
 		return undefined;
 	}
-	if (event.details.status === "pending" || event.details.status === "approved") {
+	if (
+		event.details.status === "pending"
+		|| event.details.status === "approved"
+		|| event.details.status === "rejected"
+	) {
 		return { isError: false };
 	}
 	if (event.details.status === "error") {

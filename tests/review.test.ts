@@ -170,14 +170,14 @@ void test("getImplementationHandoffText formats the approved plan path for the i
 	);
 });
 
-void test("approved and rejected plan messages stop at the current turn boundary", () => {
+void test("approved plan messages stop and rejected plan messages request immediate revision", () => {
 	assert.equal(
 		getApprovedPlanMessage("/abs/path/plan.md", null),
 		"Plan approved for /abs/path/plan.md. Planning session ended. Wait for the next user turn.",
 	);
 	assert.equal(
 		planDenyFeedback("Add rollout guidance.", "plan_submit", { planFilePath: "/abs/path/plan.md" }),
-		"Plan rejected.\n\nPlan file: /abs/path/plan.md\nFeedback for the next planning turn:\nAdd rollout guidance.\n\nWait for the next user turn before revising the plan or calling plan_submit again.",
+		"Plan rejected.\n\nPlan file: /abs/path/plan.md\nUser instructions to follow now:\nAdd rollout guidance.\n\nContinue in plan mode. Follow the user's instructions above, then call plan_submit again when the plan is ready for another review.",
 	);
 	assert.equal(
 		getMissingPlanMessage("/abs/path/plan.md", "plan_submit"),
@@ -217,7 +217,7 @@ void test("getPlanSubmitResultText renders approved and rejected states without 
 	);
 });
 
-void test("patchPlanSubmitResult flips rejected reviews to tool errors and approvals to success", () => {
+void test("patchPlanSubmitResult treats review decisions as successful tool results", () => {
 	assert.deepEqual(
 		patchPlanSubmitResult({
 			toolName: "plan_submit",
@@ -234,7 +234,7 @@ void test("patchPlanSubmitResult flips rejected reviews to tool errors and appro
 				feedback: "Revise the rollout section.",
 			},
 		}),
-		{ isError: true },
+		{ isError: false },
 	);
 	assert.deepEqual(
 		patchPlanSubmitResult({
