@@ -35,7 +35,7 @@ Do not reintroduce vendored upstream extension code, git submodules, or a fork-s
 	- `write` only to the active plan file
 	- `edit` only to the active plan file
 	- `apply_patch` only when every touched path is the active plan file
-	- restricted read-only `bash` allowlist during planning
+	- `bash` during planning is allowed except for clear file/system mutation patterns
 - `plan_submit` approval exits plan mode and prefills the editor with an implementation handoff
 - denied plans return revision feedback and keep planning mode active
 - persisted phase state restores from the current session branch

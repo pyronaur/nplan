@@ -38,11 +38,37 @@ void test("resolveGlobalPlanPath preserves absolute stored markdown paths", () =
 	assert.equal(resolveGlobalPlanPath(path), path);
 });
 
-void test("getPlanningToolBlockResult allows safe read-only bash commands during planning", () => {
+void test("getPlanningToolBlockResult allows non-mutating bash commands during planning", () => {
 	assert.equal(
 		getPlanningToolBlockResult({
 			toolName: "bash",
-			input: { command: "git status" },
+			input: { command: "bunx @nshipster/sosumi fetch /documentation/SwiftUI/Glass/regular" },
+			cwd: "/repo",
+			allowedPath: "/repo/plan.md",
+			planFilePath: "/repo/plan.md",
+		}),
+		undefined,
+	);
+});
+
+void test("getPlanningToolBlockResult allows inspection commands with mutating words as arguments", () => {
+	assert.equal(
+		getPlanningToolBlockResult({
+			toolName: "bash",
+			input: { command: "rg 'npm install|rm'" },
+			cwd: "/repo",
+			allowedPath: "/repo/plan.md",
+			planFilePath: "/repo/plan.md",
+		}),
+		undefined,
+	);
+});
+
+void test("getPlanningToolBlockResult allows stderr redirection to dev null", () => {
+	assert.equal(
+		getPlanningToolBlockResult({
+			toolName: "bash",
+			input: { command: "find . -name package.json 2>/dev/null" },
 			cwd: "/repo",
 			allowedPath: "/repo/plan.md",
 			planFilePath: "/repo/plan.md",
@@ -63,7 +89,41 @@ void test("getPlanningToolBlockResult blocks mutating bash commands during plann
 		{
 			block: true,
 			reason:
-				"Plan mode: bash commands that can modify files or system state are blocked during planning. Blocked: npm install",
+				"Plan mode: bash commands that can modify files or system state are blocked during planning. Plan mode is for planning; edit only the active plan file. Blocked: npm install",
+		},
+	);
+});
+
+void test("getPlanningToolBlockResult blocks mutating bash command positions during planning", () => {
+	assert.deepEqual(
+		getPlanningToolBlockResult({
+			toolName: "bash",
+			input: { command: "rg TODO -0 | xargs -0 rm" },
+			cwd: "/repo",
+			allowedPath: "/repo/plan.md",
+			planFilePath: "/repo/plan.md",
+		}),
+		{
+			block: true,
+			reason:
+				"Plan mode: bash commands that can modify files or system state are blocked during planning. Plan mode is for planning; edit only the active plan file. Blocked: rg TODO -0 | xargs -0 rm",
+		},
+	);
+});
+
+void test("getPlanningToolBlockResult blocks file redirection during planning", () => {
+	assert.deepEqual(
+		getPlanningToolBlockResult({
+			toolName: "bash",
+			input: { command: "echo todo > TODO.md" },
+			cwd: "/repo",
+			allowedPath: "/repo/plan.md",
+			planFilePath: "/repo/plan.md",
+		}),
+		{
+			block: true,
+			reason:
+				"Plan mode: bash commands that can modify files or system state are blocked during planning. Plan mode is for planning; edit only the active plan file. Blocked: echo todo > TODO.md",
 		},
 	);
 });

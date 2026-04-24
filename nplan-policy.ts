@@ -27,102 +27,65 @@ const STATUS_KEY = "plan";
 const WIDGET_KEY = "plan-progress";
 const WIDGET_GAP = 4;
 
-const PLANNING_MUTATING_BASH_PATTERNS = [
-	/\brm\b/i,
-	/\brmdir\b/i,
-	/\bmv\b/i,
-	/\bcp\b/i,
-	/\bmkdir\b/i,
-	/\btouch\b/i,
-	/\bchmod\b/i,
-	/\bchown\b/i,
-	/\bchgrp\b/i,
-	/\bln\b/i,
-	/\btee\b/i,
-	/\btruncate\b/i,
-	/\bdd\b/i,
-	/\brsync\b/i,
-	/\bscp\b/i,
-	/\bsftp\b/i,
-	/(^|[^<])>(?!>)/,
-	/>>/,
-	/<<<?/,
-	/\bsed\s+-i\b/i,
-	/\bnpm\s+(install|uninstall|update|ci|link|publish)\b/i,
-	/\byarn\s+(add|remove|install|publish)\b/i,
-	/\bpnpm\s+(add|remove|install|publish)\b/i,
-	/\bpip(?:3)?\s+(install|uninstall)\b/i,
-	/\bapt(?:-get)?\s+(install|remove|purge|update|upgrade)\b/i,
-	/\bbrew\s+(install|uninstall|upgrade)\b/i,
-	/\bgit\s+(add|commit|push|pull|merge|rebase|reset|checkout|switch|branch\s+-[dD]|stash|cherry-pick|revert|tag|init|clone)\b/i,
-	/\bsudo\b/i,
-	/\bsu\b/i,
-	/\bkill\b/i,
-	/\bpkill\b/i,
-	/\bkillall\b/i,
-	/\breboot\b/i,
-	/\bshutdown\b/i,
-	/\bsystemctl\s+(start|stop|restart|enable|disable)\b/i,
-	/\bservice\s+\S+\s+(start|stop|restart)\b/i,
-	/\b(vim?|nano|emacs|code|subl|mate)\b/i,
-	/\bpython(?:3)?\b(?!\s+--version\b)/i,
-	/\bnode\b(?!\s+--version\b)/i,
-	/\bperl\b(?!\s+-v\b)/i,
-	/\bruby\b(?!\s+--version\b)/i,
-	/\bphp\b(?!\s+-v\b)/i,
-	/\blua\b(?!\s+-v\b)/i,
+const PLANNING_MUTATING_BASH_COMMANDS = [
+	"rm",
+	"rmdir",
+	"mv",
+	"cp",
+	"mkdir",
+	"touch",
+	"chmod",
+	"chown",
+	"chgrp",
+	"ln",
+	"tee",
+	"truncate",
+	"dd",
+	"rsync",
+	"scp",
+	"sftp",
+	"apply_patch",
+	"sudo",
+	"su",
+	"kill",
+	"pkill",
+	"killall",
+	"reboot",
+	"shutdown",
+	"vi",
+	"vim",
+	"nano",
+	"emacs",
+	"code",
+	"subl",
+	"mate",
 ] as const;
 
-const PLANNING_SAFE_BASH_PATTERNS = [
-	/^\s*cat\b/i,
-	/^\s*head\b/i,
-	/^\s*tail\b/i,
-	/^\s*less\b/i,
-	/^\s*more\b/i,
-	/^\s*grep\b/i,
-	/^\s*find\b/i,
-	/^\s*ls\b/i,
-	/^\s*pwd\b/i,
-	/^\s*echo\b/i,
-	/^\s*printf\b/i,
-	/^\s*wc\b/i,
-	/^\s*sort\b/i,
-	/^\s*uniq\b/i,
-	/^\s*diff\b/i,
-	/^\s*file\b/i,
-	/^\s*stat\b/i,
-	/^\s*du\b/i,
-	/^\s*df\b/i,
-	/^\s*tree\b/i,
-	/^\s*which\b/i,
-	/^\s*whereis\b/i,
-	/^\s*type\b/i,
-	/^\s*env\b/i,
-	/^\s*printenv\b/i,
-	/^\s*uname\b/i,
-	/^\s*whoami\b/i,
-	/^\s*id\b/i,
-	/^\s*date\b/i,
-	/^\s*uptime\b/i,
-	/^\s*ps\b/i,
-	/^\s*top\b/i,
-	/^\s*htop\b/i,
-	/^\s*git\s+(status|log|diff|show|branch|remote|config\s+--get|ls-files)\b/i,
-	/^\s*npm\s+(list|ls|view|info|search|outdated|audit)\b/i,
-	/^\s*yarn\s+(list|info|why|audit)\b/i,
-	/^\s*pnpm\s+(list|why|audit)\b/i,
-	/^\s*python(?:3)?\s+--version\b/i,
-	/^\s*node\s+--version\b/i,
-	/^\s*curl\b/i,
-	/^\s*wget\b.*(?:-O\s*-|-O-)\b/i,
-	/^\s*jq\b/i,
-	/^\s*sed\s+-n\b/i,
-	/^\s*awk\b/i,
-	/^\s*rg\b/i,
-	/^\s*fd\b/i,
-	/^\s*bat\b/i,
-	/^\s*exa\b/i,
+const PLANNING_MUTATING_BASH_COMMAND_PATTERNS = [
+	{ command: "sed", args: String.raw`\s+-i\b` },
+	{ command: "npm", args: String.raw`\s+(install|uninstall|update|ci|link|publish)\b` },
+	{ command: "yarn", args: String.raw`\s+(add|remove|install|publish)\b` },
+	{ command: "pnpm", args: String.raw`\s+(add|remove|install|publish)\b` },
+	{ command: "pip", args: String.raw`(?:3)?\s+(install|uninstall)\b` },
+	{ command: "apt", args: String.raw`(?:-get)?\s+(install|remove|purge|update|upgrade)\b` },
+	{ command: "brew", args: String.raw`\s+(install|uninstall|upgrade)\b` },
+	{
+		command: "git",
+		args: String
+			.raw`\s+(add|commit|push|pull|merge|rebase|reset|checkout|switch|branch\s+-[dD]|stash|cherry-pick|revert|tag|init|clone)\b`,
+	},
+	{ command: "systemctl", args: String.raw`\s+(start|stop|restart|enable|disable)\b` },
+	{ command: "service", args: String.raw`\s+\S+\s+(start|stop|restart)\b` },
 ] as const;
+
+const BASH_REDIRECT_PATTERN = /(?:^|[\s;&|])(?:\d?>|&>|>>)\s*(\S*)/g;
+
+const BASH_COMMAND_PREFIX = [
+	String.raw`(^|[;&|()\n]\s*`,
+	String.raw`|\bxargs(?:\s+-\S+)*\s+`,
+	String.raw`|\b(?:env|command|exec|time|timeout|nohup)\s+)`,
+	String.raw`(?:\w+=\S+\s+)*`,
+].join("");
 
 function slugifyPlanName(input: string): string {
 	const base = parse(basename(input)).name;
@@ -154,6 +117,33 @@ function block(reason: string): PlanningBlockResult {
 	return { block: true, reason };
 }
 
+function escapePattern(input: string): string {
+	return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasBashCommand(command: string, name: string, args = String.raw`(\s|$)`): boolean {
+	const pattern = new RegExp(`${BASH_COMMAND_PREFIX}${escapePattern(name)}${args}`, "i");
+	return pattern.test(command);
+}
+
+function hasMutatingBashCommand(command: string): boolean {
+	return PLANNING_MUTATING_BASH_COMMANDS.some((name) => hasBashCommand(command, name))
+		|| PLANNING_MUTATING_BASH_COMMAND_PATTERNS.some((pattern) =>
+			hasBashCommand(command, pattern.command, pattern.args)
+		);
+}
+
+function hasMutatingBashText(command: string): boolean {
+	for (const match of command.matchAll(BASH_REDIRECT_PATTERN)) {
+		const target = match[1] ?? "";
+		if (target === "/dev/null" || /^&\d+$/.test(target)) {
+			continue;
+		}
+		return true;
+	}
+	return false;
+}
+
 function getBashBlockResult(input: Record<string, unknown>): PlanningBlockResult | undefined {
 	const command = typeof input.command === "string" ? input.command : "";
 	const trimmed = command.trim();
@@ -161,19 +151,16 @@ function getBashBlockResult(input: Record<string, unknown>): PlanningBlockResult
 		return block("Plan mode: empty bash commands are not allowed during planning.");
 	}
 
-	if (PLANNING_MUTATING_BASH_PATTERNS.some((pattern) => pattern.test(trimmed))) {
+	if (
+		hasMutatingBashCommand(trimmed)
+		|| hasMutatingBashText(trimmed)
+	) {
 		return block(
-			`Plan mode: bash commands that can modify files or system state are blocked during planning. Blocked: ${command}`,
+			`Plan mode: bash commands that can modify files or system state are blocked during planning. Plan mode is for planning; edit only the active plan file. Blocked: ${command}`,
 		);
 	}
 
-	if (PLANNING_SAFE_BASH_PATTERNS.some((pattern) => pattern.test(trimmed))) {
-		return undefined;
-	}
-
-	return block(
-		`Plan mode: bash is restricted to allowlisted read-only inspection commands during planning. Blocked: ${command}`,
-	);
+	return undefined;
 }
 
 function readApplyPatchActions(
