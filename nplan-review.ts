@@ -289,7 +289,7 @@ export function createPlanSubmitTool(runtime: SubmitPlanToolRuntime) {
 		description: "Submit your plan for user review. "
 			+ "Call this only while plan mode is active, after drafting or revising your plan file. "
 			+ "The user will review the plan through the `plannotator` CLI and can approve or deny with feedback. "
-			+ "If denied, use the edit tool to make targeted revisions (not write), then call this again.",
+			+ "If denied, continue in plan mode and follow the user's feedback before calling this again.",
 		parameters: Type.Object({
 			summary: Type.Optional(
 				Type.String({
