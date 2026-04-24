@@ -4,14 +4,10 @@
 
 ## User Decisions
 
-## Pi Mechanics
-
-## Explicit Flow Decisions
-
 ## Files to modify
 
 ## Reuse
 
-## Steps
+## Documentation
 
-## Follow-up Manual Flow Test Pass
+## Steps
