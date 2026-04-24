@@ -14,6 +14,7 @@ import {
 } from "./nplan-policy.ts";
 import { buildPromptVariables, renderTemplate } from "./nplan-template.ts";
 import { getToolsForPhase, stripPlanningOnlyTools } from "./nplan-tool-scope.ts";
+import { TEMPLATE_PLAN } from "./src/config/plan.definitions.ts";
 
 export type Runtime = {
 	pi: ExtensionAPI;
@@ -41,7 +42,11 @@ async function applyModelRef(input: {
 	const model = input.ctx.modelRegistry.find(input.ref.provider, input.ref.id);
 	if (!model) {
 		input.ctx.ui.notify(
-			`Plan mode: ${input.reason} model ${input.ref.provider}/${input.ref.id} not found.`,
+			TEMPLATE_PLAN.modelNotFound({
+				reason: input.reason,
+				provider: input.ref.provider,
+				id: input.ref.id,
+			}),
 			"warning",
 		);
 		return;
@@ -50,7 +55,7 @@ async function applyModelRef(input: {
 	const success = await input.runtime.pi.setModel(model);
 	if (!success) {
 		input.ctx.ui.notify(
-			`Plan mode: no API key for ${input.ref.provider}/${input.ref.id}.`,
+			TEMPLATE_PLAN.modelApiKeyMissing({ provider: input.ref.provider, id: input.ref.id }),
 			"warning",
 		);
 	}
@@ -103,9 +108,10 @@ export function renderPlanningPrompt(
 		}),
 	);
 	const warning = rendered.unknownVariables.length > 0
-		? `Plan mode: unknown template variables in ${runtime.planState.phase} prompt: ${
-			rendered.unknownVariables.join(", ")
-		}`
+		? TEMPLATE_PLAN.templateUnknownVariables({
+			phase: runtime.planState.phase,
+			variables: rendered.unknownVariables,
+		})
 		: null;
 	if (warning && warning !== runtime.lastPromptWarning) {
 		ctx.ui.notify(warning, "warning");

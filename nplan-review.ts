@@ -26,6 +26,19 @@ import {
 	getPendingReviewMessage,
 } from "./nplan-status.ts";
 import { PLAN_SUBMIT_TOOL } from "./nplan-tool-scope.ts";
+import {
+	PLAN_REVIEW_DEFAULT_REJECTION_FEEDBACK,
+	PLAN_SUBMIT_DESCRIPTION,
+	PLAN_SUBMIT_LABEL,
+	PLAN_SUBMIT_SUMMARY_DESCRIPTION,
+	REVIEW_CANCELLED_TEXT,
+	REVIEW_ERROR_FALLBACK_TEXT,
+	REVIEW_ERROR_PREFIX,
+	REVIEW_ERROR_TURN_BOUNDARY,
+	REVIEW_UNAVAILABLE_CLI_WARNING,
+	REVIEW_UNAVAILABLE_UI_WARNING,
+	TEMPLATE_REVIEW,
+} from "./src/config/review.definitions.ts";
 
 type SubmitPlanToolRuntime = {
 	isPlanning: () => boolean;
@@ -124,13 +137,12 @@ function makeToolResult(
 }
 
 function formatReviewError(message: string): string {
-	const text = message.trim() || "Unknown review error.";
-	const prefixed = text.startsWith("Error:") ? text : `Error: ${text}`;
-	if (prefixed.includes("Wait for the next user turn.")) {
-		return prefixed;
-	}
-
-	return `${prefixed} Wait for the next user turn.`;
+	return TEMPLATE_REVIEW.reviewError({
+		message,
+		errorPrefix: REVIEW_ERROR_PREFIX,
+		fallbackText: REVIEW_ERROR_FALLBACK_TEXT,
+		turnBoundary: REVIEW_ERROR_TURN_BOUNDARY,
+	});
 }
 
 function validatePlanFile(fullPath: string, planFilePath: string): PlanSubmitResult | undefined {
@@ -161,7 +173,7 @@ async function runSubmitPlanTool(
 	const planFilePath = runtime.getPlanFilePath();
 	if (!runtime.isPlanning()) {
 		return makeToolResult(
-			"Error: Not in plan mode. Use /plan to enter planning mode first.",
+			TEMPLATE_REVIEW.notInPlanMode({ commandName: "plan" }),
 			{ status: "error", planFilePath },
 		);
 	}
@@ -200,7 +212,7 @@ async function runSubmitPlanTool(
 		});
 	}
 
-	const feedbackText = result.feedback || "Plan rejected. Please revise.";
+	const feedbackText = result.feedback || PLAN_REVIEW_DEFAULT_REJECTION_FEEDBACK;
 	return makeToolResult(
 		planDenyFeedback(feedbackText, PLAN_SUBMIT_TOOL, { planFilePath }),
 		{ status: "rejected", planFilePath, feedback: feedbackText },
@@ -208,7 +220,7 @@ async function runSubmitPlanTool(
 }
 
 export function getImplementationHandoffText(planFilePath: string): string {
-	return `Implement the plan @${planFilePath}`;
+	return TEMPLATE_REVIEW.implementationHandoff({ planFilePath });
 }
 
 export function resetPlannotatorCliAvailabilityCache(): void {
@@ -230,13 +242,13 @@ export function hasPlannotatorCli(): boolean {
 
 export function getPlanReviewAvailabilityWarning(options: { hasUI: boolean }): string | null {
 	if (!options.hasUI) {
-		return "Plan mode: interactive plan review is unavailable in this session (no UI support). Plans will auto-approve on submit.";
+		return REVIEW_UNAVAILABLE_UI_WARNING;
 	}
 	if (hasPlannotatorCli()) {
 		return null;
 	}
 
-	return "Plan mode: CLI plan review is unavailable in this session (missing `plannotator` on PATH). Plans will auto-approve on submit.";
+	return REVIEW_UNAVAILABLE_CLI_WARNING;
 }
 
 export async function runPlanReviewCli(input: {
@@ -256,14 +268,14 @@ export async function runPlanReviewCli(input: {
 	}
 	if (signal.aborted) {
 		job.cancel();
-		throw new Error("Plannotator review was cancelled before a decision was captured.");
+		throw new Error(REVIEW_CANCELLED_TEXT);
 	}
 
 	return await new Promise((resolve, reject) => {
 		const onAbort = () => {
 			job.cancel();
 			cleanup();
-			reject(new Error("Plannotator review was cancelled before a decision was captured."));
+			reject(new Error(REVIEW_CANCELLED_TEXT));
 		};
 		const cleanup = () => {
 			signal.removeEventListener("abort", onAbort);
@@ -285,15 +297,12 @@ export async function runPlanReviewCli(input: {
 export function createPlanSubmitTool(runtime: SubmitPlanToolRuntime) {
 	return defineTool({
 		name: PLAN_SUBMIT_TOOL,
-		label: "Submit Plan",
-		description: "Submit your plan for user review. "
-			+ "Call this only while plan mode is active, after drafting or revising your plan file. "
-			+ "The user will review the plan through the `plannotator` CLI and can approve or deny with feedback. "
-			+ "If denied, continue in plan mode and follow the user's feedback before calling this again.",
+		label: PLAN_SUBMIT_LABEL,
+		description: PLAN_SUBMIT_DESCRIPTION,
 		parameters: Type.Object({
 			summary: Type.Optional(
 				Type.String({
-					description: "Brief summary of the plan for the user's review",
+					description: PLAN_SUBMIT_SUMMARY_DESCRIPTION,
 				}),
 			),
 		}),

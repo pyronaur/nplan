@@ -70,7 +70,7 @@ Planning prompt resolution is file-backed and follows the same project-over-glob
 2. `.pi/nplan/planning-prompt.md`
 3. `phases.planning.planningPromptFile` in `~/.pi/agent/plan.json`
 4. `~/.pi/agent/nplan/planning-prompt.md`
-5. bundled `prompts/planning-prompt.md`
+5. bundled `src/config/prompts/planning-prompt.md`
 
 Plan scaffold resolution is also file-backed and follows the same precedence:
 
@@ -78,7 +78,7 @@ Plan scaffold resolution is also file-backed and follows the same precedence:
 2. `.pi/nplan/plan-template.md`
 3. `planTemplateFile` in `~/.pi/agent/plan.json`
 4. `~/.pi/agent/nplan/plan-template.md`
-5. bundled `prompts/plan-template.md`
+5. bundled `src/config/prompts/plan-template.md`
 
 When a selected plan file does not exist yet, `nplan` creates it from that scaffold immediately before the first real planning prompt is submitted.
 

@@ -1,4 +1,5 @@
 import { readTextFile, resolvePathFromBase } from "./nplan-files.ts";
+import { TEMPLATE_CONFIG } from "./src/config/config.definitions.ts";
 
 export function normalizeTextFile(
 	value: string | null | undefined,
@@ -16,11 +17,19 @@ export function normalizeTextFile(
 	const path = resolvePathFromBase(value, options.baseDir);
 	const file = readTextFile(path);
 	if (file.error) {
-		options.warnings.push(`${options.keyPath}: ${file.error}`);
+		options.warnings.push(
+			TEMPLATE_CONFIG.configTextFileError({ keyPath: options.keyPath, error: file.error }),
+		);
 		return undefined;
 	}
 	if (file.text === undefined) {
-		options.warnings.push(`${options.keyPath}: ${options.missingLabel}: ${path}`);
+		options.warnings.push(
+			TEMPLATE_CONFIG.configTextFileMissing({
+				keyPath: options.keyPath,
+				missingLabel: options.missingLabel,
+				path,
+			}),
+		);
 		return undefined;
 	}
 	return file.text;
@@ -37,7 +46,7 @@ export function loadDefaultText(
 
 	const prompt = readTextFile(path);
 	if (prompt.error) {
-		warnings.push(`${sourceName}: ${prompt.error}`);
+		warnings.push(TEMPLATE_CONFIG.defaultTextFileError({ sourceName, error: prompt.error }));
 		return undefined;
 	}
 	return prompt.text;

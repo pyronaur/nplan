@@ -1,4 +1,5 @@
 import { isRecord } from "../nplan-guards.ts";
+import { TEMPLATE_PLAN } from "../src/config/plan.definitions.ts";
 
 export type PlanEventKind = "started" | "ended";
 
@@ -14,11 +15,7 @@ export class PlanEventMessage {
 	}
 
 	get title(): string {
-		if (this.kind === "started") {
-			return `Plan Started ${this.planFilePath}`;
-		}
-
-		return `Plan Ended ${this.planFilePath}`;
+		return TEMPLATE_PLAN.planEventTitle({ kind: this.kind, planFilePath: this.planFilePath });
 	}
 
 	static fromUnknown(value: unknown): PlanEventMessage | undefined {

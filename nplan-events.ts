@@ -1,6 +1,10 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Box, Text } from "@mariozechner/pi-tui";
 import { type PlanEventKind, PlanEventMessage } from "./models/plan-event-message.ts";
+import {
+	PLAN_EVENT_EXPAND_HINT,
+	PLAN_EVENT_FALLBACK_TITLE,
+} from "./src/config/plan.definitions.ts";
 
 function getHeaderColor(kind: PlanEventKind): "accent" | "warning" | "success" | "muted" {
 	if (kind === "started") {
@@ -14,10 +18,10 @@ export function registerPlanEventRenderer(pi: ExtensionAPI): void {
 	pi.registerMessageRenderer("plan-event", (message, { expanded }, theme) => {
 		const details = PlanEventMessage.fromUnknown(message.details);
 		const title = details?.title
-			?? (typeof message.content === "string" ? message.content : "Plan event");
+			?? (typeof message.content === "string" ? message.content : PLAN_EVENT_FALLBACK_TITLE);
 		let text = theme.fg(getHeaderColor(details?.kind ?? "started"), theme.bold(title));
 		if (!expanded && details?.body) {
-			text += `\n${theme.fg("muted", "Ctrl+O to expand")}`;
+			text += `\n${theme.fg("muted", PLAN_EVENT_EXPAND_HINT)}`;
 		}
 		if (expanded && details?.body) {
 			text += `\n\n${details.body}`;

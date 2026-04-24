@@ -4,6 +4,7 @@ import { resolvePlanMarker, resolvePlanTemplate } from "./nplan-config.ts";
 import { createPlanEventMessage } from "./nplan-events.ts";
 import { ensureTextFile } from "./nplan-files.ts";
 import { commitPlanState, renderPlanningPrompt, type Runtime } from "./nplan-phase.ts";
+import { PLAN_TEMPLATE_FALLBACK_TEXT } from "./src/config/plan.definitions.ts";
 
 function isCompactionEntry(entry: SessionEntry): entry is SessionEntry & {
 	type: "compaction";
@@ -110,7 +111,7 @@ function ensureCommittedPlanningFile(runtime: Runtime): void {
 
 	ensureTextFile(
 		runtime.planState.attachedPlanPath,
-		resolvePlanTemplate(runtime.planConfig) ?? "# Plan\n",
+		resolvePlanTemplate(runtime.planConfig) ?? PLAN_TEMPLATE_FALLBACK_TEXT,
 	);
 	runtime.planState = runtime.planState.with({ bootstrapPending: false });
 }

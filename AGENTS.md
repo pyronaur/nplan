@@ -14,7 +14,7 @@ Do not reintroduce vendored upstream extension code, git submodules, or a fork-s
 - nplan policy and restrictions: `nplan-policy.ts`
 - CLI review transport: `nplan-review.ts`
 - Planning tool scoping: `nplan-tool-scope.ts`
-- Plan denial template: `nplan-feedback.ts`
+- User-facing text definitions: `src/config/*.definitions.ts`, `src/config/prompts/`
 
 ## Required Approach
 

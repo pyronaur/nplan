@@ -42,10 +42,25 @@ import {
 } from "./nplan-review.ts";
 import { getPlanStatusLines } from "./nplan-status.ts";
 import { emitPlanTurnMessages } from "./nplan-turn-messages.ts";
+import { TEMPLATE_CONFIG } from "./src/config/config.definitions.ts";
+import {
+	PLAN_CLEAR_COMMAND_DESCRIPTION,
+	PLAN_COMMAND_DESCRIPTION,
+	PLAN_FLAG_DESCRIPTION,
+	PLAN_LEADER_DISABLE_LABEL,
+	PLAN_LEADER_ENABLE_LABEL,
+	PLAN_LEADER_RESUME_LABEL,
+	PLAN_NAME_INPUT_LABEL,
+	PLAN_REPLACE_CONFIRM_TITLE,
+	PLAN_RESUME_CONFIRM_TITLE,
+	PLAN_STATUS_COMMAND_DESCRIPTION,
+	TEMPLATE_PLAN,
+} from "./src/config/plan.definitions.ts";
+import { TEMPLATE_POLICY } from "./src/config/policy.definitions.ts";
 
 function registerFlags(pi: ExtensionAPI): void {
 	pi.registerFlag("plan", {
-		description: "Start in plan mode (restricted exploration and planning)",
+		description: PLAN_FLAG_DESCRIPTION,
 		type: "boolean",
 		default: false,
 	});
@@ -121,7 +136,7 @@ async function promptForPlanTarget(
 		return getDefaultPlanPath();
 	}
 
-	const input = await ctx.ui.input("Plan name", getCurrentPlanPath(runtime));
+	const input = await ctx.ui.input(PLAN_NAME_INPUT_LABEL, getCurrentPlanPath(runtime));
 	if (input === undefined) {
 		return null;
 	}
@@ -134,7 +149,10 @@ async function confirmResumePlan(ctx: ExtensionContext, planFilePath: string): P
 		return true;
 	}
 
-	return await ctx.ui.confirm("Resume planning", `Resume planning in ${planFilePath}?`);
+	return await ctx.ui.confirm(
+		PLAN_RESUME_CONFIRM_TITLE,
+		TEMPLATE_PLAN.planResumeConfirm({ planFilePath }),
+	);
 }
 
 async function confirmReplacePlan(ctx: ExtensionContext, planFilePath: string): Promise<boolean> {
@@ -142,7 +160,10 @@ async function confirmReplacePlan(ctx: ExtensionContext, planFilePath: string): 
 		return true;
 	}
 
-	return await ctx.ui.confirm("Replace plan", `Replace the current plan ${planFilePath}?`);
+	return await ctx.ui.confirm(
+		PLAN_REPLACE_CONFIRM_TITLE,
+		TEMPLATE_PLAN.planReplaceConfirm({ planFilePath }),
+	);
 }
 
 async function attachRequestedPlan(
@@ -259,23 +280,23 @@ async function handlePlanClearCommand(runtime: Runtime, ctx: ExtensionContext): 
 
 function getPlanLeaderLabel(runtime: Runtime): string {
 	if (runtime.planState.phase === "planning") {
-		return "Disable plan mode";
+		return PLAN_LEADER_DISABLE_LABEL;
 	}
 	if (runtime.planState.attachedPlanPath) {
-		return "Resume plan mode";
+		return PLAN_LEADER_RESUME_LABEL;
 	}
-	return "Enable plan mode";
+	return PLAN_LEADER_ENABLE_LABEL;
 }
 
 function registerCommands(runtime: Runtime): void {
 	runtime.pi.registerCommand("plan", {
-		description: "Enter or exit plan mode",
+		description: PLAN_COMMAND_DESCRIPTION,
 		handler: async (args, ctx) => {
 			await handlePlanCommand(runtime, args, ctx);
 		},
 	});
 	runtime.pi.registerCommand("plan-status", {
-		description: "Show current plan status",
+		description: PLAN_STATUS_COMMAND_DESCRIPTION,
 		handler: async (_args, ctx) => {
 			ctx.ui.notify(
 				getPlanStatusLines({
@@ -287,7 +308,7 @@ function registerCommands(runtime: Runtime): void {
 		},
 	});
 	runtime.pi.registerCommand("plan-clear", {
-		description: "Detach the current plan",
+		description: PLAN_CLEAR_COMMAND_DESCRIPTION,
 		handler: async (_args, ctx) => {
 			await handlePlanClearCommand(runtime, ctx);
 		},
@@ -325,8 +346,11 @@ function registerToolCallHandler(runtime: Runtime): void {
 				const kind = event.toolName === "write" ? "writes" : "edits";
 				return {
 					block: true,
-					reason:
-						`Plan mode: ${kind} are restricted to ${planFilePath} during planning. Blocked: ${event.input.path}`,
+					reason: TEMPLATE_POLICY.planningToolPathBlocked({
+						kind,
+						planFilePath,
+						blockedPath: event.input.path,
+					}),
 				};
 			}
 		}
@@ -364,7 +388,7 @@ async function handleSessionStart(
 	const loadedConfig = loadPlanConfig(ctx.cwd);
 	runtime.planConfig = loadedConfig.config;
 	for (const warning of loadedConfig.warnings) {
-		ctx.ui.notify(`Plan config: ${warning}`, "warning");
+		ctx.ui.notify(TEMPLATE_CONFIG.planConfigWarning({ warning }), "warning");
 	}
 
 	const persistedState = PlanState.load(getSessionEntries(ctx));

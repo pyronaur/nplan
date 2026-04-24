@@ -3,6 +3,10 @@ import {
 	spawn,
 } from "node:child_process";
 import type { NplanReviewResult } from "./nplan-plannotator.ts";
+import {
+	REVIEW_CANCELLED_TEXT,
+	TEMPLATE_REVIEW,
+} from "./src/config/review.definitions.ts";
 
 interface StartupLatch {
 	started: Promise<void>;
@@ -78,7 +82,7 @@ function tryWriteReviewPayload(input: {
 		return true;
 	} catch (error) {
 		const reason = error instanceof Error ? error.message : String(error);
-		input.fail(`Failed to send plan content to Plannotator CLI: ${reason}`);
+		input.fail(TEMPLATE_REVIEW.reviewSendFailed({ reason }));
 		return false;
 	}
 }
@@ -112,9 +116,9 @@ function handleReviewClose(input: {
 		});
 		input.settleStarted({
 			ok: false,
-			error: new Error(`Plannotator CLI review failed: ${reason}`),
+			error: new Error(TEMPLATE_REVIEW.reviewProcessFailed({ reason })),
 		});
-		input.reject(new Error(`Plannotator CLI review failed: ${reason}`));
+		input.reject(new Error(TEMPLATE_REVIEW.reviewProcessFailed({ reason })));
 		return;
 	}
 
@@ -123,7 +127,7 @@ function handleReviewClose(input: {
 		input.resolve(input.parseResult(input.stdout));
 	} catch (error) {
 		const reason = error instanceof Error ? error.message : String(error);
-		input.reject(new Error(`Plannotator review returned an invalid decision: ${reason}`));
+		input.reject(new Error(TEMPLATE_REVIEW.reviewInvalidDecision({ reason })));
 	}
 }
 
@@ -154,7 +158,7 @@ function connectReviewProcess(input: {
 	};
 	const cancel = () => {
 		input.child.kill("SIGTERM");
-		fail("Plannotator review was cancelled before a decision was captured.");
+		fail(REVIEW_CANCELLED_TEXT);
 	};
 	if (typeof input.child.pid === "number" && input.readReviewUrl) {
 		void streamReviewUrl({
@@ -178,7 +182,7 @@ function connectReviewProcess(input: {
 		input.startup.settle({ ok: true });
 	});
 	input.child.on("error", (error) => {
-		fail(`Failed to start Plannotator CLI: ${error.message}`);
+		fail(TEMPLATE_REVIEW.reviewStartFailed({ reason: error.message }));
 	});
 	input.child.on("close", (code, signal) => {
 		finish(() => {

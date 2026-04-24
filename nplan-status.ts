@@ -1,8 +1,16 @@
 import { type Phase } from "./nplan-tool-scope.ts";
+import {
+	PLAN_STATUS_ATTACHED_NONE,
+	TEMPLATE_PLAN,
+} from "./src/config/plan.definitions.ts";
+import {
+	PLAN_REVIEW_STARTING_TEXT,
+	TEMPLATE_REVIEW,
+} from "./src/config/review.definitions.ts";
 
 export function getPhaseNotification(phase: Phase, planFilePath: string): string | undefined {
 	if (phase === "planning") {
-		return `Plan mode enabled. Plan file: ${planFilePath}`;
+		return TEMPLATE_PLAN.phaseNotification({ planFilePath });
 	}
 	return undefined;
 }
@@ -12,40 +20,34 @@ export function getPlanStatusLines(input: {
 	attachedPlanPath: string | null;
 }): string[] {
 	return [
-		`Phase: ${input.phase}`,
-		`Attached plan: ${input.attachedPlanPath ?? "none"}`,
+		TEMPLATE_PLAN.planStatusPhase({ phase: input.phase }),
+		TEMPLATE_PLAN.planStatusAttached({
+			attachedPlanPath: input.attachedPlanPath,
+			noneText: PLAN_STATUS_ATTACHED_NONE,
+		}),
 	];
 }
 
 export function getMissingPlanMessage(planFilePath: string, toolName: string): string {
-	return `Error: ${planFilePath} does not exist. Stop here. Do not write or recreate the plan in this turn. Wait for the next user turn before calling ${toolName} again.`;
+	return TEMPLATE_REVIEW.missingPlan({ planFilePath, toolName });
 }
 
 export function getEmptyPlanMessage(planFilePath: string, toolName: string): string {
-	return `Error: ${planFilePath} is empty. Stop here. Do not revise the plan in this turn. Wait for the next user turn before calling ${toolName} again.`;
+	return TEMPLATE_REVIEW.emptyPlan({ planFilePath, toolName });
 }
 
 export function getAutoApprovePlanMessage(hasUI: boolean): string {
-	if (hasUI) {
-		return "Plan auto-approved (review unavailable). Planning session ended. Wait for the next user turn.";
-	}
-
-	return "Plan auto-approved (non-interactive mode). Planning session ended. Wait for the next user turn.";
+	return TEMPLATE_REVIEW.autoApprovedPlan({ hasUI });
 }
 
 export function getPendingReviewMessage(reviewUrl?: string): string {
 	if (reviewUrl?.trim()) {
-		return `Open this URL to review:\n${reviewUrl.trim()}`;
+		return TEMPLATE_REVIEW.reviewUrl({ reviewUrl: reviewUrl.trim() });
 	}
 
-	return "Starting Plannotator review server...";
+	return PLAN_REVIEW_STARTING_TEXT;
 }
 
 export function getApprovedPlanMessage(planFilePath: string, feedback: string | null): string {
-	if (!feedback) {
-		return `Plan approved for ${planFilePath}. Planning session ended. Wait for the next user turn.`;
-	}
-
-	return `Plan approved for ${planFilePath} with implementation notes. Planning session ended. Wait for the next user turn.`
-		+ `\n\n## Implementation Notes\n\n${feedback}`;
+	return TEMPLATE_REVIEW.approvedPlan({ planFilePath, feedback });
 }

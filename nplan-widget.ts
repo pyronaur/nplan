@@ -1,8 +1,9 @@
 import type { Phase } from "./nplan-tool-scope.ts";
+import { PLAN_STATUS_LABEL_PLANNING } from "./src/config/plan.definitions.ts";
 
 function getPhaseLabel(phase: Phase): string | undefined {
 	if (phase === "planning") {
-		return "⏸ plan";
+		return PLAN_STATUS_LABEL_PLANNING;
 	}
 	return undefined;
 }

@@ -2,6 +2,12 @@ import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import { Box, Markdown, type MarkdownTheme, Text } from "@mariozechner/pi-tui";
 import { getPendingReviewMessage } from "./nplan-status.ts";
 import { PLAN_SUBMIT_TOOL } from "./nplan-tool-scope.ts";
+import {
+	PLAN_REVIEW_APPROVED_SENTINEL,
+	PLAN_REVIEW_CALL_TITLE,
+	PLAN_REVIEW_REJECTED_SENTINEL,
+	TEMPLATE_REVIEW,
+} from "./src/config/review.definitions.ts";
 
 type PendingPlanSubmitDetails = {
 	status: "pending";
@@ -80,17 +86,10 @@ function toPendingPlanSubmitDetails(details: PlanSubmitDetails): PendingPlanSubm
 }
 
 function getPlanSubmitHeader(details: PlanSubmitDetails): string {
-	if (details.status === "pending") {
-		return `Plan Review Pending ${details.planFilePath}`;
-	}
-	if (details.status === "approved") {
-		return `Plan Approved ${details.planFilePath}`;
-	}
-	if (details.status === "rejected") {
-		return `Plan Rejected ${details.planFilePath}`;
-	}
-
-	return `Plan Error ${details.planFilePath}`;
+	return TEMPLATE_REVIEW.reviewHeader({
+		status: details.status,
+		planFilePath: details.planFilePath,
+	});
 }
 
 function getPendingBodyText(input: {
@@ -115,7 +114,7 @@ function getResultBodyText(input: {
 	content: Array<{ type: string; text?: string }>;
 }): string {
 	const text = getToolResultText({ content: input.content }).trim();
-	if (!text || text === "Plan approved." || text === "Plan rejected.") {
+	if (!text || text === PLAN_REVIEW_APPROVED_SENTINEL || text === PLAN_REVIEW_REJECTED_SENTINEL) {
 		return input.details.feedback?.trim() ?? "";
 	}
 
@@ -222,10 +221,7 @@ export function isPlanSubmitDetails(value: unknown): value is PlanSubmitDetails 
 }
 
 export function getPlanSubmitCallText(summary: string | undefined): string {
-	if (!summary?.trim()) {
-		return "Plan Review";
-	}
-	return `Plan Review ${summary.trim()}`;
+	return TEMPLATE_REVIEW.reviewCallText({ title: PLAN_REVIEW_CALL_TITLE, summary });
 }
 
 export function getPlanSubmitResultText(input: {
@@ -284,7 +280,7 @@ export function patchPlanSubmitResult(event: {
 }
 
 export function renderPlanSubmitCall(args: { summary?: string }, theme: ReviewTheme) {
-	const title = theme.fg("toolTitle", theme.bold("Plan Review"));
+	const title = theme.fg("toolTitle", theme.bold(PLAN_REVIEW_CALL_TITLE));
 	if (!args.summary?.trim()) {
 		return new Text(title, 0, 0);
 	}

@@ -89,7 +89,7 @@ void test("getPlanningToolBlockResult blocks mutating bash commands during plann
 		{
 			block: true,
 			reason:
-				"Plan mode: bash commands that can modify files or system state are blocked during planning. Plan mode is for planning; edit only the active plan file. Blocked: npm install",
+				"Plan mode: bash commands that can modify files or system state are blocked during planning. Plan mode is for planning; do not mutate files outside the active plan file. Blocked: npm install",
 		},
 	);
 });
@@ -106,7 +106,7 @@ void test("getPlanningToolBlockResult blocks mutating bash command positions dur
 		{
 			block: true,
 			reason:
-				"Plan mode: bash commands that can modify files or system state are blocked during planning. Plan mode is for planning; edit only the active plan file. Blocked: rg TODO -0 | xargs -0 rm",
+				"Plan mode: bash commands that can modify files or system state are blocked during planning. Plan mode is for planning; do not mutate files outside the active plan file. Blocked: rg TODO -0 | xargs -0 rm",
 		},
 	);
 });
@@ -123,7 +123,7 @@ void test("getPlanningToolBlockResult blocks file redirection during planning", 
 		{
 			block: true,
 			reason:
-				"Plan mode: bash commands that can modify files or system state are blocked during planning. Plan mode is for planning; edit only the active plan file. Blocked: echo todo > TODO.md",
+				"Plan mode: bash commands that can modify files or system state are blocked during planning. Plan mode is for planning; do not mutate files outside the active plan file. Blocked: echo todo > TODO.md",
 		},
 	);
 });

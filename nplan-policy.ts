@@ -5,6 +5,7 @@ import { getEditorPaddingX } from "./nplan-editor-padding.ts";
 import { expandHome } from "./nplan-files.ts";
 import { type Phase } from "./nplan-tool-scope.ts";
 import { formatPhaseWidgetLines, renderColoredPhaseWidgetLine } from "./nplan-widget.ts";
+import { TEMPLATE_POLICY } from "./src/config/policy.definitions.ts";
 
 export const DEFAULT_PLAN_NAME = "plan";
 
@@ -148,7 +149,7 @@ function getBashBlockResult(input: Record<string, unknown>): PlanningBlockResult
 	const command = typeof input.command === "string" ? input.command : "";
 	const trimmed = command.trim();
 	if (!trimmed) {
-		return block("Plan mode: empty bash commands are not allowed during planning.");
+		return block(TEMPLATE_POLICY.planningBashEmptyBlocked());
 	}
 
 	if (
@@ -156,7 +157,7 @@ function getBashBlockResult(input: Record<string, unknown>): PlanningBlockResult
 		|| hasMutatingBashText(trimmed)
 	) {
 		return block(
-			`Plan mode: bash commands that can modify files or system state are blocked during planning. Plan mode is for planning; edit only the active plan file. Blocked: ${command}`,
+			TEMPLATE_POLICY.planningBashMutatingBlocked({ command }),
 		);
 	}
 
@@ -170,14 +171,14 @@ function readApplyPatchActions(
 	const patch = typeof input.patch === "string" ? input.patch : "";
 	const trimmed = patch.trim();
 	if (!trimmed) {
-		return block("Plan mode: empty apply_patch payloads are not allowed during planning.");
+		return block(TEMPLATE_POLICY.planningApplyPatchEmptyBlocked());
 	}
 
 	const actions: ApplyPatchAction[] = [];
 	for (const line of trimmed.split(/\r?\n/)) {
 		if (line.startsWith("*** Move to: ")) {
 			return block(
-				`Plan mode: apply_patch cannot move files during planning. Patch only ${planFilePath}.`,
+				TEMPLATE_POLICY.planningApplyPatchMoveBlocked({ planFilePath }),
 			);
 		}
 		if (line.startsWith("*** Update File: ")) {
@@ -195,7 +196,7 @@ function readApplyPatchActions(
 
 	if (actions.length === 0) {
 		return block(
-			"Plan mode: apply_patch is allowed during planning only for patches that target the active plan file.",
+			TEMPLATE_POLICY.planningApplyPatchMissingTargetBlocked(),
 		);
 	}
 
@@ -207,12 +208,12 @@ function validateApplyPatchAction(
 	check: PlanningToolCheck,
 ): PlanningBlockResult | undefined {
 	if (!action.path) {
-		return block("Plan mode: malformed apply_patch path during planning.");
+		return block(TEMPLATE_POLICY.planningApplyPatchMalformedPathBlocked());
 	}
 
 	if (action.kind === "delete") {
 		return block(
-			`Plan mode: apply_patch cannot delete files during planning. Patch only ${check.planFilePath}.`,
+			TEMPLATE_POLICY.planningApplyPatchDeleteBlocked({ planFilePath: check.planFilePath }),
 		);
 	}
 
@@ -222,7 +223,10 @@ function validateApplyPatchAction(
 	}
 
 	return block(
-		`Plan mode: apply_patch is restricted to ${check.planFilePath} during planning. Blocked: ${action.path}`,
+		TEMPLATE_POLICY.planningApplyPatchPathBlocked({
+			planFilePath: check.planFilePath,
+			blockedPath: action.path,
+		}),
 	);
 }
 

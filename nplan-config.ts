@@ -13,6 +13,15 @@ import {
 	type PlanMarkersConfig,
 	resolvePlanMarkerTemplate,
 } from "./nplan-marker-config.ts";
+import {
+	GLOBAL_PLAN_CONFIG_SOURCE_NAME,
+	PLAN_PROMPT_FILE_MISSING_LABEL,
+	PLAN_TEMPLATE_FILE_MISSING_LABEL,
+	PROJECT_PLAN_CONFIG_SOURCE_NAME,
+	TEMPLATE_CONFIG,
+} from "./src/config/config.definitions.ts";
+import { PLAN_STATUS_LABEL_PLANNING } from "./src/config/plan.definitions.ts";
+
 export type PhaseName = "planning" | "reviewing";
 export interface PhaseModelRef {
 	provider: string;
@@ -50,11 +59,15 @@ const PLANNING_PROMPT_FILE = "planning-prompt.md";
 const PLAN_TEMPLATE_FILE = "plan-template.md";
 const BUNDLED_PLANNING_PROMPT_PATH = join(
 	dirname(fileURLToPath(import.meta.url)),
+	"src",
+	"config",
 	"prompts",
 	PLANNING_PROMPT_FILE,
 );
 const BUNDLED_PLAN_TEMPLATE_PATH = join(
 	dirname(fileURLToPath(import.meta.url)),
+	"src",
+	"config",
 	"prompts",
 	PLAN_TEMPLATE_FILE,
 );
@@ -65,7 +78,7 @@ const INTERNAL_CONFIG: PlanConfig = {
 	phases: {
 		planning: {
 			activeTools: ["grep", "find", "ls", "plan_submit"],
-			statusLabel: "⏸ plan",
+			statusLabel: PLAN_STATUS_LABEL_PLANNING,
 			planningPrompt: readFileSync(BUNDLED_PLANNING_PROMPT_PATH, "utf-8"),
 		},
 	},
@@ -156,7 +169,7 @@ function normalizePlanningPromptFile(
 	value: unknown,
 	options: { baseDir: string; warnings: string[]; keyPath: string },
 ): string | null | undefined {
-	return normalizeConfigTextFile(value, options, "prompt file not found");
+	return normalizeConfigTextFile(value, options, PLAN_PROMPT_FILE_MISSING_LABEL);
 }
 
 function normalizeConfigTextFile(
@@ -202,12 +215,12 @@ function normalizeProfile(
 	}
 	if ("planningPrompt" in raw) {
 		options.warnings.push(
-			`${options.keyPath}: inline planningPrompt is not supported; use planningPromptFile instead.`,
+			TEMPLATE_CONFIG.planningPromptInlineUnsupported({ keyPath: options.keyPath }),
 		);
 	}
 	if ("systemPrompt" in raw) {
 		options.warnings.push(
-			`${options.keyPath}: systemPrompt is no longer supported; use planningPromptFile instead.`,
+			TEMPLATE_CONFIG.systemPromptUnsupported({ keyPath: options.keyPath }),
 		);
 	}
 	return profile;
@@ -217,7 +230,7 @@ function normalizePlanTemplateFile(
 	value: unknown,
 	options: { baseDir: string; warnings: string[]; keyPath: string },
 ): string | null | undefined {
-	return normalizeConfigTextFile(value, options, "plan template file not found");
+	return normalizeConfigTextFile(value, options, PLAN_TEMPLATE_FILE_MISSING_LABEL);
 }
 
 function cloneProfile(profile: PhaseProfile | null | undefined): PhaseProfile | null | undefined {
@@ -319,7 +332,7 @@ function applyTopLevelConfig(input: {
 	}
 	if (input.raw?.planTemplate !== undefined) {
 		input.warnings.push(
-			`${input.options.sourceName}.planTemplate: inline planTemplate is not supported; use planTemplateFile instead.`,
+			TEMPLATE_CONFIG.planTemplateInlineUnsupported({ sourceName: input.options.sourceName }),
 		);
 	}
 	if (input.raw?.markers !== undefined) {
@@ -432,7 +445,7 @@ export function loadPlanConfig(cwd: string): LoadedPlanConfig {
 		baseDir: agentDir,
 		defaultPlanningPromptPath: join(agentDir, "nplan", PLANNING_PROMPT_FILE),
 		defaultPlanTemplatePath: join(agentDir, "nplan", PLAN_TEMPLATE_FILE),
-		sourceName: "global plan config",
+		sourceName: GLOBAL_PLAN_CONFIG_SOURCE_NAME,
 	});
 	warnings.push(...globalConfig.warnings);
 
@@ -441,7 +454,7 @@ export function loadPlanConfig(cwd: string): LoadedPlanConfig {
 		baseDir: join(cwd, ".pi"),
 		defaultPlanningPromptPath: join(cwd, ".pi", "nplan", PLANNING_PROMPT_FILE),
 		defaultPlanTemplatePath: join(cwd, ".pi", "nplan", PLAN_TEMPLATE_FILE),
-		sourceName: "project plan config",
+		sourceName: PROJECT_PLAN_CONFIG_SOURCE_NAME,
 	});
 	warnings.push(...projectConfig.warnings);
 
