@@ -1,9 +1,9 @@
 ---
 title: nplan Manual Testing Runbook
-summary: Durable live-testing runbook for `nplan` in `piux`, including session/tree/compaction handling, review testing strategy, and token-efficient operator habits.
+summary: Durable live-testing runbook for `nplan` in Playground Mode, including session/tree/compaction handling, review testing strategy, and token-efficient operator habits.
 short: Live `nplan` test runbook.
 read_when:
-  - Running live `nplan` tests in `piux`.
+  - Running live `nplan` tests in Playground Mode.
   - Need to recover testing context after compaction or a long pause.
   - Need the exact manual process for review, tree, compaction, and transcript verification.
 ---
@@ -26,7 +26,7 @@ When context gets fuzzy, prefer this file over conversation memory.
 
 ## Goal
 
-Test `nplan` live in `piux` until every visible and persisted planning artifact matches the contract.
+Test `nplan` live in Playground Mode until every visible and persisted planning artifact matches the contract.
 
 Log every confirmed bug and every confirmed-good invariant in `./manual-testing-results.md`.
 
@@ -82,7 +82,7 @@ Relative paths below are relative to this file.
 - Duplicate start/end rows: `./prompts.md`, `./mermaid-planning-message-lifecycle.md`
 - Draft vs committed confusion: `./prompts.md`, `./mermaid-plan-state-information-architecture.md`
 - Review pending / approve / reject: `../README.md`, `./prompts.md`, `./plannotator-review-url.md`, `/Users/n14/.agents/skills/n/agent-browser/SKILL.md`
-- Tree navigation around planning: `../../docs/piux.md`, Pi `tree.md`, Pi `session.md`
+- Tree navigation around planning: `../../docs/playground-mode.md`, Pi `tree.md`, Pi `session.md`
 - Compaction resend behavior: `./prompts.md`, `./mermaid-planning-message-lifecycle.md`, Pi `compaction.md`
 - Resume / restore behavior: `./mermaid-plan-state-information-architecture.md`, Pi `session.md`
 
@@ -99,17 +99,17 @@ Useful path anchors:
 
 - `../README.md` = `nplan/README.md`
 - `./prompts.md` = `nplan/docs/prompts.md`
-- `./manual-testing-piux-client.md` = `nplan/docs/manual-testing-piux-client.md`
+- `./manual-testing-pp.md` = `nplan/docs/manual-testing-pp.md`
 - `./mermaid-planning-message-lifecycle.md` = `nplan/docs/mermaid-planning-message-lifecycle.md`
 - `./mermaid-plan-state-information-architecture.md` = `nplan/docs/mermaid-plan-state-information-architecture.md`
 - `./plannotator-review-url.md` = `nplan/docs/plannotator-review-url.md`
 - `./manual-testing-results.md` = `nplan/docs/manual-testing-results.md`
-- `../../docs/piux.md` = repo-level `docs/piux.md`
+- `../../docs/playground-mode.md` = repo-level `docs/playground-mode.md`
 - `/Users/n14/.agents/skills/n/agent-browser/SKILL.md` = real agent-browser skill source on this machine
 
 ## What Matters Most During Testing
 
-The live `piux` screen is the main source of truth.
+The live Playground Mode screen is the main source of truth.
 
 Optimize for what a user sees:
 
@@ -128,11 +128,11 @@ Use JSONL when:
 - you need to confirm what was persisted after a weird turn
 - branch / compaction behavior is confusing
 
-If `piux_client` looks broken, read `./manual-testing-piux-client.md` before blaming the tool.
+If `pp` looks broken, read `./manual-testing-pp.md` before blaming the tool.
 
 Good default loop:
 
-1. drive the flow in `piux`
+1. drive the flow in Playground Mode
 2. watch the screen
 3. only open JSONL when the screen creates a question
 
@@ -151,9 +151,9 @@ The parts that matter most in manual testing:
 - approval must not append an extra `Plan Ended <path>` on the same submit turn
 - review failures render as `Error: ...`
 
-## `piux` And The Inner Agent
+## Playground Mode And The Inner Agent
 
-`piux_client` is usually the best way to drive the session.
+`pp` is usually the best way to drive the session.
 
 Useful inner-session habits:
 
@@ -267,11 +267,11 @@ Add JSONL notes only when they helped debug or confirm a suspicious case.
 
 ## Current Working Notes
 
-- `piux_client look diff` is the fastest default observation tool
+- `pp look diff` is the fastest default observation tool
 - `/session` is the fastest way to confirm the active JSONL file
 - draft-only plan changes can be real runtime state without being committed session state yet
 - when the screen looks wrong, JSONL becomes useful
 - after `/tree` lands on a user-turn selection, inspect or clear the editor before sending slash commands
-- if an `nplan` slash command suddenly becomes `Unknown command ...`, first check `/tmp/piux/.pi/settings.json`; if `"extensions"` no longer includes `/Users/n14/Projects/Tools/Pi/nplan`, the inner test setup drifted and the result is invalid until you restore the extension and `/reload`
+- if an `nplan` slash command suddenly becomes `Unknown command ...`, first check the active Pi settings file; if `"extensions"` no longer includes `/Users/n14/Projects/Tools/Pi/nplan`, the inner test setup drifted and the result is invalid until you restore the extension and `/reload`
 - bare file names in a runbook are sloppy; anchor docs by exact relative or absolute path
 - the real agent-browser skill source on this machine is `/Users/n14/.agents/skills/n/agent-browser/SKILL.md`

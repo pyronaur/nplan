@@ -12,10 +12,10 @@ read_when:
 
 ## Session Under Test
 
-- inner base: `/tmp/piux`
+- inner base: `<old-playground-root>`
 - extension path: `/Users/n14/Projects/Tools/Pi/nplan`
-- latest live session: `/tmp/piux/.pi/agent/sessions/--private-tmp-piux--/2026-04-12T22-20-04-183Z_67daed20-a748-4f34-86bd-c46f4739c163.jsonl`
-- earlier live session in same campaign: `/tmp/piux/.pi/agent/sessions/--private-tmp-piux--/2026-04-12T20-59-37-307Z_3fa94313-e933-49cd-a873-a0b3b4688722.jsonl`
+- latest live session: `<old-playground-root>/.pi/agent/sessions/--old-playground-root--/2026-04-12T22-20-04-183Z_67daed20-a748-4f34-86bd-c46f4739c163.jsonl`
+- earlier live session in same campaign: `<old-playground-root>/.pi/agent/sessions/--old-playground-root--/2026-04-12T20-59-37-307Z_3fa94313-e933-49cd-a873-a0b3b4688722.jsonl`
 
 ## Confirmed Good So Far
 
@@ -63,7 +63,7 @@ read_when:
 
 - Early false read: `/plan-clear` looked swallowed at first. It was not. Draft state changed immediately, committed state changed only on the next real user turn. `/plan-status` helped confirm the staged-vs-committed distinction.
 
-### MT-006 — `Shift+Return` newline does not submit in live `piux`
+### MT-006 — `Shift+Return` newline does not submit in live Playground Mode
 
 - setup: while planning, typed draft text, sent `Shift+Return`, then inspected the screen before any submit
 - expected visible: editor keeps draft text and inserts a newline; no new user turn; no new lifecycle row
@@ -284,11 +284,11 @@ read_when:
 - audit note: this case only proved picker narrowing and resume selection; the old claim that slash commands then needed an editor clear was too strong and is superseded by `MT-036`
 - result: pass
 
-### MT-034 — `/plan-status` unknown-command report was a broken `piux` extension setup, not an `nplan` bug
+### MT-034 — `/plan-status` unknown-command report was a broken Playground Mode extension setup, not an `nplan` bug
 
-- setup: observed live `Status: Unknown command /plan-status`, then inspected `/tmp/piux/.pi/settings.json`
-- expected if setup is correct: `/tmp/piux/.pi/settings.json` should keep `"extensions": ["/Users/n14/Projects/Tools/Pi/nplan"]` and `/plan-status` should work
-- actual broken setup: `/tmp/piux/.pi/settings.json` had `"extensions": []`, so `nplan` was not loaded in the inner Pi at all
+- setup: observed live `Status: Unknown command /plan-status`, then inspected `<old-playground-root>/.pi/settings.json`
+- expected if setup is correct: `<old-playground-root>/.pi/settings.json` should keep `"extensions": ["/Users/n14/Projects/Tools/Pi/nplan"]` and `/plan-status` should work
+- actual broken setup: `<old-playground-root>/.pi/settings.json` had `"extensions": []`, so `nplan` was not loaded in the inner Pi at all
 - fix/proof: restored `"extensions": ["/Users/n14/Projects/Tools/Pi/nplan"]`, ran `/reload`, then re-ran `/plan-status`
 - actual after restore: `/plan-status` returned `Phase: idle / Attached plan: none`, and even the intentional immediate `/new` -> `/plan-status` race still worked
 - result: pass; prior `Unknown command /plan-status` report was invalid because the test base had drifted out of the intended extension setup
@@ -317,7 +317,7 @@ read_when:
 
 ### MT-037 — approval stays on tool-row flow with no same-turn `Plan Ended ...`
 
-- setup: relaunched inner Pi with fake approve CLI on `PATH` (`/tmp/piux/nplan-test-bin-approve/plannotator`), then in `nplan-final-review-approve` started `qa-final-review-approve` and used one real planning turn that wrote `RA1` and called `plan_submit` with summary `final approve`
+- setup: relaunched inner Pi with fake approve CLI on `PATH` (`<old-playground-root>/nplan-test-bin-approve/plannotator`), then in `nplan-final-review-approve` started `qa-final-review-approve` and used one real planning turn that wrote `RA1` and called `plan_submit` with summary `final approve`
 - expected visible:
   - `Plan Review final approve`
   - `Plan Approved /Users/n14/.n/pi/plans/qa-final-review-approve.md`
@@ -330,7 +330,7 @@ read_when:
 
 ### MT-038 — rejection stays on tool-row flow, keeps planning active, and does not append `Plan Ended ...`
 
-- setup: relaunched inner Pi with fake reject CLI on `PATH` (`/tmp/piux/nplan-test-bin-reject/plannotator`), then in `nplan-final-review-reject` started `qa-final-review-reject` and used one real planning turn that wrote `RR1` and called `plan_submit` with summary `final reject`
+- setup: relaunched inner Pi with fake reject CLI on `PATH` (`<old-playground-root>/nplan-test-bin-reject/plannotator`), then in `nplan-final-review-reject` started `qa-final-review-reject` and used one real planning turn that wrote `RR1` and called `plan_submit` with summary `final reject`
 - expected visible:
   - `Plan Review final reject`
   - `Plan Rejected /Users/n14/.n/pi/plans/qa-final-review-reject.md`
@@ -343,7 +343,7 @@ read_when:
 
 ### MT-039 — invalid plannotator output renders one `Error: ...` tool result and keeps planning active
 
-- setup: relaunched inner Pi with invalid-output CLI on `PATH` (`/tmp/piux/nplan-test-bin-invalid/plannotator`), then in `nplan-final-review-invalid` started `qa-final-review-invalid` and used one real planning turn that wrote `RI1` and called `plan_submit` with summary `final invalid`
+- setup: relaunched inner Pi with invalid-output CLI on `PATH` (`<old-playground-root>/nplan-test-bin-invalid/plannotator`), then in `nplan-final-review-invalid` started `qa-final-review-invalid` and used one real planning turn that wrote `RI1` and called `plan_submit` with summary `final invalid`
 - expected visible:
   - `Plan Review final invalid`
   - `Error: Plannotator review returned an invalid decision: Plannotator review output was not valid JSON. Wait for the next user turn.`
@@ -356,7 +356,7 @@ read_when:
 
 ### MT-040 — missing `plannotator` PATH warns and then auto-approves on submit
 
-- setup: relaunched inner Pi with `PATH` that omitted `plannotator` (`/tmp/piux/nplan-test-bin-noplannotator`), then in `nplan-final-review-autoapprove` started `qa-final-review-autoapprove` and used one real planning turn that wrote `RF1` and called `plan_submit` with summary `final fallback`
+- setup: relaunched inner Pi with `PATH` that omitted `plannotator` (`<old-playground-root>/nplan-test-bin-noplannotator`), then in `nplan-final-review-autoapprove` started `qa-final-review-autoapprove` and used one real planning turn that wrote `RF1` and called `plan_submit` with summary `final fallback`
 - expected visible:
   - planning start shows `Warning: Plan mode: CLI plan review is unavailable in this session (missing \`plannotator\` on PATH). Plans will auto-approve on submit.`
   - `Plan Review final fallback`
@@ -378,7 +378,7 @@ read_when:
 
 ### MT-042 — no-summary review call shows live pending URL before final approval
 
-- setup: relaunched inner Pi with fake pending-review CLI on `PATH` (`/tmp/piux/nplan-test-bin-pending/plannotator`) that wrote a real `~/.plannotator/sessions/<pid>.json` URL, slept, then approved; in `nplan-final-pending-capture` started `qa-final-pending-capture` and used one real planning turn that wrote `RP2.` and called `plan_submit` with no summary
+- setup: relaunched inner Pi with fake pending-review CLI on `PATH` (`<old-playground-root>/nplan-test-bin-pending/plannotator`) that wrote a real `~/.plannotator/sessions/<pid>.json` URL, slept, then approved; in `nplan-final-pending-capture` started `qa-final-pending-capture` and used one real planning turn that wrote `RP2.` and called `plan_submit` with no summary
 - expected visible while pending:
   - `Plan Review`
   - `Plan Review Pending /Users/n14/.n/pi/plans/qa-final-pending-capture.md`
@@ -433,7 +433,7 @@ read_when:
 
 ### MT-046 — idle-attached resume before compaction does not resend full planning prompt body
 
-- setup: relaunched inner Pi with fake approve CLI on `PATH` (`/tmp/piux/nplan-test-bin-approve/plannotator`), then in `nplan-final-idle-attached-resume-window` started `qa-final-idle-attached-resume-window`, used one real planning turn that wrote `IR1` and auto-approved to idle-attached, cleared the handoff prefill with `Ctrl+C`, ran bare `/plan`, and sent one more planning prompt in the same compaction window
+- setup: relaunched inner Pi with fake approve CLI on `PATH` (`<old-playground-root>/nplan-test-bin-approve/plannotator`), then in `nplan-final-idle-attached-resume-window` started `qa-final-idle-attached-resume-window`, used one real planning turn that wrote `IR1` and auto-approved to idle-attached, cleared the handoff prefill with `Ctrl+C`, ran bare `/plan`, and sent one more planning prompt in the same compaction window
 - expected visible:
   - first planning turn emits `Plan Started /Users/n14/.n/pi/plans/qa-final-idle-attached-resume-window.md`
   - approval ends planning without `Plan Ended ...`
@@ -447,7 +447,7 @@ read_when:
 
 ### MT-047 — rejection does not trigger another planning prompt message on the next planning turn in the same window
 
-- setup: relaunched inner Pi with fake reject CLI on `PATH` (`/tmp/piux/nplan-test-bin-reject/plannotator`), then in `nplan-final-reject-no-reprompt` started `qa-final-reject-no-reprompt`, used one real planning turn that wrote `RJ1` and called `plan_submit` with summary `reject no reprompt`, then sent one more planning turn in the same compaction window that wrote `RJ2`
+- setup: relaunched inner Pi with fake reject CLI on `PATH` (`<old-playground-root>/nplan-test-bin-reject/plannotator`), then in `nplan-final-reject-no-reprompt` started `qa-final-reject-no-reprompt`, used one real planning turn that wrote `RJ1` and called `plan_submit` with summary `reject no reprompt`, then sent one more planning turn in the same compaction window that wrote `RJ2`
 - expected visible:
   - first turn shows `Plan Started /Users/n14/.n/pi/plans/qa-final-reject-no-reprompt.md`, then `Plan Review reject no reprompt`, then `Plan Rejected /Users/n14/.n/pi/plans/qa-final-reject-no-reprompt.md`
   - follow-up planning turn shows no new `Plan Started /Users/n14/.n/pi/plans/qa-final-reject-no-reprompt.md`
@@ -460,7 +460,7 @@ read_when:
 
 ### MT-048 — idle-attached ordinary turns before bare `/plan` resume still do not resend full planning prompt body
 
-- setup: relaunched inner Pi with fake approve CLI on `PATH` (`/tmp/piux/nplan-test-bin-approve/plannotator`), then in `nplan-final-pause-ordinary-resume-window-2` started `qa-final-pause-ordinary-resume-window-2`, used one real planning turn that wrote `PR1` and auto-approved to idle-attached, cleared the handoff prefill with `Ctrl+C`, sent one ordinary non-planning turn `Reply exactly: ordinary-ok`, then ran bare `/plan` and sent one resumed planning turn that wrote `PR2`
+- setup: relaunched inner Pi with fake approve CLI on `PATH` (`<old-playground-root>/nplan-test-bin-approve/plannotator`), then in `nplan-final-pause-ordinary-resume-window-2` started `qa-final-pause-ordinary-resume-window-2`, used one real planning turn that wrote `PR1` and auto-approved to idle-attached, cleared the handoff prefill with `Ctrl+C`, sent one ordinary non-planning turn `Reply exactly: ordinary-ok`, then ran bare `/plan` and sent one resumed planning turn that wrote `PR2`
 - expected visible:
   - first planning turn emits `Plan Started /Users/n14/.n/pi/plans/qa-final-pause-ordinary-resume-window-2.md`
   - approval ends planning without `Plan Ended ...`
@@ -475,7 +475,7 @@ read_when:
 
 ### MT-049 — `/resume` preserves prompt-window state for later bare `/plan` resume
 
-- setup: relaunched inner Pi with fake approve CLI on `PATH` (`/tmp/piux/nplan-test-bin-approve/plannotator`), then in `nplan-final-idle-resume-restore-window` started `qa-final-idle-resume-restore-window`, used one real planning turn that wrote `RRW1` and auto-approved to idle-attached, cleared the handoff prefill with `Ctrl+C`, ran `/new`, used `/resume` to return to `nplan-final-idle-resume-restore-window`, then ran bare `/plan` and sent one resumed planning turn that wrote `RRW2`
+- setup: relaunched inner Pi with fake approve CLI on `PATH` (`<old-playground-root>/nplan-test-bin-approve/plannotator`), then in `nplan-final-idle-resume-restore-window` started `qa-final-idle-resume-restore-window`, used one real planning turn that wrote `RRW1` and auto-approved to idle-attached, cleared the handoff prefill with `Ctrl+C`, ran `/new`, used `/resume` to return to `nplan-final-idle-resume-restore-window`, then ran bare `/plan` and sent one resumed planning turn that wrote `RRW2`
 - expected visible:
   - first planning turn emits `Plan Started /Users/n14/.n/pi/plans/qa-final-idle-resume-restore-window.md`
   - approval ends planning without `Plan Ended ...`
@@ -490,7 +490,7 @@ read_when:
 
 ### MT-050 — `/reload` preserves prompt-window state for later bare `/plan` resume
 
-- setup: relaunched inner Pi with fake approve CLI on `PATH` (`/tmp/piux/nplan-test-bin-approve/plannotator`), then in `nplan-final-reload-restore-window` started `qa-final-reload-restore-window`, used one real planning turn that wrote `RL1` and auto-approved to idle-attached, cleared the handoff prefill with `Ctrl+C`, ran `/reload`, then ran bare `/plan` and sent one resumed planning turn that wrote `RL2`
+- setup: relaunched inner Pi with fake approve CLI on `PATH` (`<old-playground-root>/nplan-test-bin-approve/plannotator`), then in `nplan-final-reload-restore-window` started `qa-final-reload-restore-window`, used one real planning turn that wrote `RL1` and auto-approved to idle-attached, cleared the handoff prefill with `Ctrl+C`, ran `/reload`, then ran bare `/plan` and sent one resumed planning turn that wrote `RL2`
 - expected visible:
   - first planning turn emits `Plan Started /Users/n14/.n/pi/plans/qa-final-reload-restore-window.md`
   - approval ends planning without `Plan Ended ...`
@@ -527,7 +527,7 @@ read_when:
 
 ### MT-055 — clearing the remembered plan while already idle stays fully silent
 
-- setup: relaunched inner Pi with fake approve CLI on `PATH` (`/tmp/piux/nplan-test-bin-approve/plannotator`); in `nplan-final-idle-clear-silent` started `qa-final-idle-clear-silent`, used one real planning turn that wrote `IC1` and auto-approved to idle-attached, cleared the handoff prefill with `Ctrl+C`, ran `/plan-clear`, then sent one ordinary non-planning turn `Reply exactly: idle-clear-ok`
+- setup: relaunched inner Pi with fake approve CLI on `PATH` (`<old-playground-root>/nplan-test-bin-approve/plannotator`); in `nplan-final-idle-clear-silent` started `qa-final-idle-clear-silent`, used one real planning turn that wrote `IC1` and auto-approved to idle-attached, cleared the handoff prefill with `Ctrl+C`, ran `/plan-clear`, then sent one ordinary non-planning turn `Reply exactly: idle-clear-ok`
 - expected visible:
   - approval ends planning without `Plan Ended /Users/n14/.n/pi/plans/qa-final-idle-clear-silent.md`
   - `/plan-clear` while idle-attached emits no lifecycle row
@@ -542,7 +542,7 @@ read_when:
 
 ### MT-056 — auto-approve fallback stays on ordinary `plan_submit` tool flow with no extra review transcript row
 
-- setup: relaunched inner Pi with `PATH` that omitted `plannotator` (`/tmp/piux/nplan-test-bin-noplannotator`); in `nplan-final-fallback-toolflow` started `qa-final-fallback-toolflow`, used one real planning turn that wrote `FB1` and called `plan_submit` with summary `fallback toolflow`
+- setup: relaunched inner Pi with `PATH` that omitted `plannotator` (`<old-playground-root>/nplan-test-bin-noplannotator`); in `nplan-final-fallback-toolflow` started `qa-final-fallback-toolflow`, used one real planning turn that wrote `FB1` and called `plan_submit` with summary `fallback toolflow`
 - expected visible:
   - planning start shows `Warning: Plan mode: CLI plan review is unavailable in this session (missing \`plannotator\` on PATH). Plans will auto-approve on submit.`
   - then `Plan Review fallback toolflow`
@@ -558,7 +558,7 @@ read_when:
 
 ### MT-054 — non-zero review failure does not trigger another planning prompt message on the next planning turn
 
-- setup: relaunched inner Pi with fake failing CLI on `PATH` (`/tmp/piux/nplan-test-bin-exit/plannotator`) that writes `review exploded` to stderr and exits `1`; in `nplan-final-exit-error-followup` started `qa-final-exit-error-followup`, used one real planning turn that wrote `EX1` and called `plan_submit` with summary `exit error`, then sent one more planning turn in the same compaction window that wrote `EX2`
+- setup: relaunched inner Pi with fake failing CLI on `PATH` (`<old-playground-root>/nplan-test-bin-exit/plannotator`) that writes `review exploded` to stderr and exits `1`; in `nplan-final-exit-error-followup` started `qa-final-exit-error-followup`, used one real planning turn that wrote `EX1` and called `plan_submit` with summary `exit error`, then sent one more planning turn in the same compaction window that wrote `EX2`
 - expected visible:
   - first turn shows `Plan Started /Users/n14/.n/pi/plans/qa-final-exit-error-followup.md`, then `Plan Review exit error`, then `Error: Plannotator CLI review failed: review exploded Wait for the next user turn.`
   - follow-up planning turn shows no new `Plan Started /Users/n14/.n/pi/plans/qa-final-exit-error-followup.md`
@@ -600,7 +600,7 @@ read_when:
 
 ## Fresh Regression Sweep After Fixes
 
-- fresh `piux` pass re-confirmed:
+- fresh Playground Mode pass re-confirmed:
   - bare `/plan` while planning stays in planning
   - `/reload` preserves active planning
   - `/resume` preserves active planning
@@ -610,7 +610,7 @@ read_when:
   - `/tree` selecting the visible `[branch summary]` row also keeps `plan-event` count flat and planning active
   - `/resume` exact-phrase picker search also returns the expected named session
   - exact-phrase resume into the branch-summary session still accepts `/plan-status` immediately; no editor-clear key was required in the rerun
-  - `/plan-status` unknown-command suspicion was disproven; the failure came from `piux` settings drift (`extensions: []`), and the command works again after restoring the `nplan` extension and reloading
+  - `/plan-status` unknown-command suspicion was disproven; the failure came from Playground Mode settings drift (`extensions: []`), and the command works again after restoring the `nplan` extension and reloading
   - full planning prompt body now has direct proof: one visible/persisted full prompt on the first planning turn of each compaction window, none on ordinary later turns in the same window, no hidden `plan-context`
   - approval now has direct JSONL proof: `Plan Approved ...` is the `plan_submit` tool result path, with no extra custom review message artifact and no same-turn `Plan Ended ...`
   - rejection now has direct JSONL proof: `Plan Rejected ...` is the `plan_submit` tool result path, with no extra custom review message artifact and no same-turn `Plan Ended ...`
